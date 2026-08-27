@@ -170,5 +170,5 @@ cd backend
 npm run test:pg
 ```
 
-See `backend_status.md` for the endpoint matrix and `docs/PRODUCTION_READINESS.md`
-for the broader operational checklist.
+The retained files under `docs/` document the client formats, approved UI design,
+and form-field requirements.

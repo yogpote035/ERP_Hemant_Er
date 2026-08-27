@@ -33,10 +33,8 @@ export async function loginViaApi(loginId: string, password: string): Promise<Ap
 }
 
 /**
- * Restore an API session on app boot/reload. The session itself is in-memory (lost
- * on reload), but the bearer token persists — so re-validate it via /auth/me, then
- * re-hydrate + reopen the session. Returns false (and clears a dead token) when API
- * mode is off, there's no token, or the token is expired/invalid.
+ * Restore an API session when a token exists in the current page session. Tokens
+ * are intentionally not browser-persisted, so a full reload requires login.
  */
 export async function restoreApiSession(): Promise<boolean> {
   if (!apiEnabled() || !getToken()) return false

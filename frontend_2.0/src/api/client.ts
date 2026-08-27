@@ -8,18 +8,17 @@
 import { setStateVersion } from './stateVersion'
 
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ?? ''
-const TOKEN_KEY = 'hew_api_token'
+let sessionToken: string | null = null
 
 export function apiEnabled(): boolean {
   return BASE !== ''
 }
 
 export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY)
+  return sessionToken
 }
 export function setToken(token: string | null): void {
-  if (token) localStorage.setItem(TOKEN_KEY, token)
-  else localStorage.removeItem(TOKEN_KEY)
+  sessionToken = token
 }
 
 export class ApiError extends Error {

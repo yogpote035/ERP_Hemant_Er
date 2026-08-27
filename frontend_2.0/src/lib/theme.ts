@@ -1,20 +1,11 @@
 /**
  * Theme — light/dark via a `.dark` class on <html> (Tailwind `darkMode: 'class'`).
- * Persisted to its own localStorage key (separate from the data store) and
- * applied before first paint to avoid a flash.
+ * Kept in memory for the current page only and applied before first paint.
  */
 export type ThemeMode = 'light' | 'dark'
 
-const THEME_KEY = 'hew-erp-theme'
-
 export function getStoredTheme(): ThemeMode | null {
-  try {
-    const v = localStorage.getItem(THEME_KEY)
-    return v === 'dark' || v === 'light' ? v : null
-  } catch {
-    // Storage can throw in some privacy modes — degrade to "no preference".
-    return null
-  }
+  return null
 }
 
 export function systemPrefersDark(): boolean {
@@ -33,11 +24,6 @@ export function applyTheme(mode: ThemeMode): void {
 }
 
 export function setTheme(mode: ThemeMode): void {
-  try {
-    localStorage.setItem(THEME_KEY, mode)
-  } catch {
-    // ignore — apply the theme for this session even if it can't be persisted
-  }
   applyTheme(mode)
 }
 

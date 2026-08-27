@@ -37,7 +37,6 @@ export const COMMAND_NAMES = [
   'saveShiftAttendance',
   'deleteProductionAttendance',
   'deleteShiftAttendance',
-  'resetDemoData',
   'importBackup',
   'undo',
   'redo',
