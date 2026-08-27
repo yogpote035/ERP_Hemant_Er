@@ -1,7 +1,7 @@
 /**
  * Repository — the single persistence boundary. Keeps the whole RootState in
  * memory (so the ported selectors run unchanged) and delegates durability to a
- * PersistenceDriver chosen by config: Postgres (DATABASE_URL set) or a JSON file.
+ * PersistenceDriver chosen by config: MySQL/TiDB (DB_HOST set) or a JSON file.
  * Routes call getDb() (read) and mutate() (write); writes are serialized so the
  * driver never sees interleaved transactions.
  */
@@ -12,7 +12,7 @@ import { createEmptyState, type RootState } from './state.js'
 import { seedState, bootstrapState } from './seed.js'
 import { setRoleResolver } from '../types/rbac.js'
 import { FileDriver, COLLECTIONS, type PageQuery, type PageResult, type PersistenceDriver } from './persistence.js'
-import { PgDriver } from './pgDriver.js'
+import { MysqlDriver } from './mysqlDriver.js'
 import { genericSearchText } from '../lib/list.js'
 import { log } from '../lib/logging.js'
 
@@ -29,7 +29,14 @@ export function getVersion(): number {
 }
 
 function makeDriver(): PersistenceDriver {
-  return config.databaseUrl ? new PgDriver(config.databaseUrl) : new FileDriver(resolve(config.dataFile))
+  return config.dbHost ? new MysqlDriver({
+    host: config.dbHost,
+    port: config.dbPort,
+    user: config.dbUser,
+    password: config.dbPassword,
+    database: config.dbName,
+    ssl: config.dbSsl,
+  }) : new FileDriver(resolve(config.dataFile))
 }
 
 /** Resolve roles through the live (possibly edited) role matrices. */

@@ -321,8 +321,8 @@ describe('security', () => {
   })
 
   it('prod config guard rejects unsafe settings and accepts safe ones', () => {
-    assert.throws(() => assertProdConfig({ isProd: true, databaseUrl: '', jwtSecret: 'dev-secret-change-me', corsOrigins: [] }))
-    assert.doesNotThrow(() => assertProdConfig({ isProd: true, databaseUrl: 'postgres://x', jwtSecret: 'x'.repeat(40), corsOrigins: ['https://app'] }))
-    assert.doesNotThrow(() => assertProdConfig({ isProd: false, databaseUrl: '', jwtSecret: 'dev-secret-change-me', corsOrigins: [] }))
+    assert.throws(() => assertProdConfig({ isProd: true, dbHost: '', dbUser: '', dbPassword: '', dbName: '', jwtSecret: 'dev-secret-change-me', corsOrigins: [] }))
+    assert.doesNotThrow(() => assertProdConfig({ isProd: true, dbHost: 'mysql', dbUser: 'user', dbPassword: 'secret', dbName: 'app', jwtSecret: 'x'.repeat(40), corsOrigins: ['https://app'] }))
+    assert.doesNotThrow(() => assertProdConfig({ isProd: false, dbHost: '', dbUser: '', dbPassword: '', dbName: '', jwtSecret: 'dev-secret-change-me', corsOrigins: [] }))
   })
 })

@@ -11,7 +11,7 @@ assertProdConfig() // fail fast on unsafe prod settings
 await initRepository()
 const app = createApp()
 const server = app.listen(config.port, () => {
-  log.info('listening', { url: `http://localhost:${config.port}/api`, persistence: config.databaseUrl ? 'postgres' : 'file', env: config.nodeEnv })
+  log.info('listening', { url: `http://localhost:${config.port}/api`, persistence: config.dbHost ? 'mysql' : 'file', env: config.nodeEnv })
 })
 
 // Graceful shutdown: stop accepting connections, drain, close the DB pool, then exit.

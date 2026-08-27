@@ -7,8 +7,13 @@ export const config = {
   isProd: env.NODE_ENV === 'production',
   jwtSecret: env.JWT_SECRET ?? 'dev-secret-change-me',
   jwtExpiresIn: env.JWT_EXPIRES_IN ?? '12h',
-  /** Postgres connection string. When set, persistence uses Postgres; otherwise a JSON file. */
-  databaseUrl: env.DATABASE_URL ?? '',
+  /** MySQL/TiDB connection. DB_HOST selects SQL persistence; otherwise a JSON file. */
+  dbHost: (env.DB_HOST ?? '').trim(),
+  dbPort: Number(env.DB_PORT ?? 3306),
+  dbUser: env.DB_USER ?? '',
+  dbPassword: env.DB_PASSWORD ?? '',
+  dbName: env.DB_NAME ?? '',
+  dbSsl: env.DB_SSL === 'true',
   dataFile: env.DATA_FILE ?? './data/db.json',
   corsOrigins: (env.CORS_ORIGIN ?? 'http://localhost:5173,http://localhost:5174')
     .split(',')
@@ -26,7 +31,10 @@ export const config = {
 
 interface SafetyConfig {
   isProd: boolean
-  databaseUrl: string
+  dbHost: string
+  dbUser: string
+  dbPassword: string
+  dbName: string
   jwtSecret: string
   corsOrigins: string[]
 }
@@ -35,7 +43,8 @@ interface SafetyConfig {
 export function assertProdConfig(cfg: SafetyConfig = config): void {
   if (!cfg.isProd) return
   const problems: string[] = []
-  if (!cfg.databaseUrl) problems.push('DATABASE_URL must be set (the file store is dev-only)')
+  if (!cfg.dbHost || !cfg.dbUser || !cfg.dbPassword || !cfg.dbName)
+    problems.push('DB_HOST, DB_USER, DB_PASSWORD and DB_NAME must be set')
   if (!cfg.jwtSecret || cfg.jwtSecret === 'dev-secret-change-me' || cfg.jwtSecret.length < 32)
     problems.push('JWT_SECRET must be a strong value (≥ 32 chars), not the dev default')
   if (cfg.corsOrigins.length === 0) problems.push('CORS_ORIGIN must list the allowed web origins')
