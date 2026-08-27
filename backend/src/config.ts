@@ -17,7 +17,9 @@ export const config = {
   dataFile: env.DATA_FILE ?? './data/db.json',
   corsOrigins: (env.CORS_ORIGIN ?? 'http://localhost:5173,http://localhost:5174')
     .split(',')
-    .map((s) => s.trim())
+    // Browser Origin headers never contain a trailing slash. Normalize values
+    // copied from hosting dashboards so an otherwise valid origin still matches.
+    .map((s) => s.trim().replace(/\/+$/, ''))
     .filter(Boolean),
   authRateMax: Number(env.AUTH_RATE_MAX ?? 30),
   apiRateMax: Number(env.API_RATE_MAX ?? 1000),
