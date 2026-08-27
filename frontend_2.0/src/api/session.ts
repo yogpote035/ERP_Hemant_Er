@@ -33,8 +33,8 @@ export async function loginViaApi(loginId: string, password: string): Promise<Ap
 }
 
 /**
- * Restore an API session when a token exists in the current page session. Tokens
- * are intentionally not browser-persisted, so a full reload requires login.
+ * Restore an API session when a persisted token exists. The token is validated
+ * with the backend before the local user session and authorized data are rebuilt.
  */
 export async function restoreApiSession(): Promise<boolean> {
   if (!apiEnabled() || !getToken()) return false

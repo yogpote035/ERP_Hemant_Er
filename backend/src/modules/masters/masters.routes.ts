@@ -71,6 +71,7 @@ const REGISTRY: Record<string, MasterCfg> = {
     collection: (s) => s.masters.parts as unknown as Normalized<Entity>,
     schema: z.object({
       partNo: z.string().min(1), materialCode: z.string().min(1), description: z.string().optional(),
+      defaultPoNo: z.string().optional(), defaultPoDate: z.string().optional(),
       category: z.string().optional(), editionNo: z.string().optional(), unitId: z.string().min(1),
       uom: z.string().default('NOS'), hsnSac: z.string().default('84829900'),
       gstPct: z.number().min(0).max(28).default(12),

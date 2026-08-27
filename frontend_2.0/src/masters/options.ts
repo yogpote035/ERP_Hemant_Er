@@ -18,7 +18,11 @@ export const partOptions = (s: RootState): SelectOption[] => {
   const writable = writableUnitIds(s)
   return values(s.masters.parts)
     .filter((p) => p.active && writable.has(p.unitId))
-    .map((p) => ({ value: p.id, label: p.partNo, subtitle: `${p.materialCode} · ${s.masters.units.byId[p.unitId]?.code ?? ''}`.trim() }))
+    .map((p) => ({
+      value: p.id,
+      label: p.partNo,
+      subtitle: `${p.description ?? p.editionNo ?? p.materialCode} · ${p.rmRatePaise != null ? `₹${(p.rmRatePaise / 100).toFixed(2)}/pc` : 'rate not set'}`,
+    }))
 }
 
 const vendorOpt = (v: { id: string; name: string; code: string; type: string }): SelectOption => ({

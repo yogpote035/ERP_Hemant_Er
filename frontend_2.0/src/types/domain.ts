@@ -115,6 +115,9 @@ export interface Part {
   avgQtyPerBox: number
   /** Packing-mode code printed on the invoice (e.g. "GSP-2"). */
   packingMode?: string
+  /** Default purchase-order reference copied into new inward entries. */
+  defaultPoNo?: string
+  defaultPoDate?: ISODate
   active: boolean
 }
 

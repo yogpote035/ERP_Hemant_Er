@@ -1,4 +1,4 @@
-import { useEffect, useId } from 'react'
+import { useEffect, useId, type ReactNode } from 'react'
 import { FormProvider, useForm, type FieldValues, type UseFormSetValue } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import type { ZodType } from 'zod'
@@ -22,6 +22,7 @@ export function RecordFormModal({
   submitLabel = 'Save',
   onValid,
   deriveOnChange,
+  beforeFields,
 }: {
   onClose: () => void
   title: string
@@ -33,6 +34,7 @@ export function RecordFormModal({
   /** Called when a field changes — lets the caller auto-fill OTHER fields (e.g. fill
    *  RM rate/weight when a part is picked). Guard on `changed` to avoid feedback loops. */
   deriveOnChange?: (changed: string, values: FieldValues, setValue: UseFormSetValue<FieldValues>) => void
+  beforeFields?: ReactNode
 }) {
   const formId = useId()
   const methods = useForm<FieldValues>({ resolver: zodResolver(schema), defaultValues })
@@ -72,6 +74,7 @@ export function RecordFormModal({
     >
       <FormProvider {...methods}>
         <form id={formId} onSubmit={methods.handleSubmit(submit)} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {beforeFields ? <div className="sm:col-span-2">{beforeFields}</div> : null}
           {fields.map((f) => (
             <AutoField key={f.name} field={f} />
           ))}

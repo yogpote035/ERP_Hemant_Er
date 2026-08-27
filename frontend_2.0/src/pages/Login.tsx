@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { ShieldCheck, Factory, ArrowRight, Lock, Mail, AlertCircle, Eye, EyeOff } from 'lucide-react'
+import { ShieldCheck, Factory, ArrowRight, Lock, Mail, AlertCircle } from 'lucide-react'
 import { useStore, currentUser } from '@/store'
 import { ApiError } from '@/api/client'
 import { loginViaApi } from '@/api/session'
@@ -14,7 +14,7 @@ const HERO_STATS = [
 
 /**
  * API-backed sign-in: a two-panel layout — branded hero on the left, a
- * **Login ID + Password** card on the right. The backend validates credentials and
+ * **Email + Password** card on the right. The backend validates credentials and
  * hydrates the user's authorized data before the app opens the
  * access that user's role + assigned units allow (enforced by `can()` + unit scope).
  */
@@ -24,9 +24,8 @@ export default function Login() {
   const location = useLocation()
   const from = (location.state as { from?: string } | null)?.from ?? '/'
 
-  const [loginId, setLoginId] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [showPw, setShowPw] = useState(false)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -38,10 +37,10 @@ export default function Login() {
     setSubmitting(true)
     setError('')
     try {
-      await loginViaApi(loginId, password)
+      await loginViaApi(email.trim(), password)
       navigate(from, { replace: true })
     } catch (err) {
-      setError(err instanceof ApiError && err.status === 401 ? 'Incorrect Login ID or password.' : 'Unable to reach the server.')
+      setError(err instanceof ApiError && err.status === 401 ? 'Incorrect email or password.' : 'Unable to reach the server.')
       setSubmitting(false)
     }
   }
@@ -96,21 +95,22 @@ export default function Login() {
               <Factory size={16} className="text-primary" />
               <h2 className="text-sm font-semibold">Sign in to ERP</h2>
             </div>
-            <p className="mt-1 text-[12px] text-muted">Enter your Login ID and password to continue.</p>
+            <p className="mt-1 text-[12px] text-muted">Enter your email and password to continue.</p>
 
-            <form className="mt-5 space-y-3.5" onSubmit={onSubmit} noValidate>
+            <form className="mt-5 space-y-3.5" onSubmit={onSubmit}>
               <label className="flex flex-col gap-1.5">
-                <span className="text-[11.5px] font-medium text-muted-fg">Login ID</span>
+                <span className="text-[11.5px] font-medium text-muted-fg">Email</span>
                 <span className="relative">
                   <Mail size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-fg" aria-hidden />
                   <input
-                    type="text"
+                    type="email"
                     autoComplete="username"
                     className="input h-10 pl-9"
                     placeholder="you@hew.in"
-                    value={loginId}
-                    onChange={(e) => { setLoginId(e.target.value); setError('') }}
+                    value={email}
+                    onChange={(e) => { setEmail(e.target.value); setError('') }}
                     aria-invalid={!!error}
+                    required
                     autoFocus
                   />
                 </span>
@@ -121,22 +121,15 @@ export default function Login() {
                 <span className="relative">
                   <Lock size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-fg" aria-hidden />
                   <input
-                    type={showPw ? 'text' : 'password'}
+                    type="password"
                     autoComplete="current-password"
                     className="input h-10 pl-9 pr-9"
                     placeholder="••••••"
                     value={password}
                     onChange={(e) => { setPassword(e.target.value); setError('') }}
                     aria-invalid={!!error}
+                    required
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPw((v) => !v)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-fg hover:text-fg"
-                    aria-label={showPw ? 'Hide password' : 'Show password'}
-                  >
-                    {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
-                  </button>
                 </span>
               </label>
 
@@ -147,7 +140,7 @@ export default function Login() {
                 </div>
               ) : null}
 
-              <button type="submit" className="btn btn-primary h-10 w-full" disabled={submitting || !loginId || !password}>
+              <button type="submit" className="btn btn-primary h-10 w-full" disabled={submitting || !email || !password}>
                 {submitting ? 'Signing in…' : 'Sign in'}
                 {!submitting ? <ArrowRight size={15} /> : null}
               </button>

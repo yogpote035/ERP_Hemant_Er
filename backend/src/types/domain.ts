@@ -99,6 +99,8 @@ export interface Part {
   rmWtMg?: number
   avgQtyPerBox: number
   packingMode?: string
+  defaultPoNo?: string
+  defaultPoDate?: ISODate
   active: boolean
 }
 

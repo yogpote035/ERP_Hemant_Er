@@ -3,18 +3,16 @@ import type { Id } from '@/types/domain'
 import type { Module } from '@/types/rbac'
 import { useCan } from '@/hooks/useCan'
 import { Tabs } from '@/components/ui'
-import Materials from './Materials'
 import InwardRegister from './InwardRegister'
 import OutwardEntry from './OutwardEntry'
 import Stock from './Stock'
 
-type TabKey = 'materials' | 'inward' | 'stock'
+type TabKey = 'inward' | 'stock'
 
 /** The Inventory sections, in the client's order, each gated by its module. The
  *  manual Outward Entry tab was removed — billing is now invoice-primary: a dispatch
  *  is created in the background when an invoice is created from an inward challan. */
 const SECTIONS: { value: TabKey; label: string; module: Module }[] = [
-  { value: 'materials', label: 'Raw Material Master', module: 'masters' },
   { value: 'inward', label: 'Inward Entry', module: 'inward' },
   { value: 'stock', label: 'Stock View', module: 'stock' },
 ]
@@ -59,9 +57,7 @@ export default function Inventory() {
         <Tabs items={tabs.map(({ value, label }) => ({ value, label }))} value={active} onChange={setTab} ariaLabel="Inventory section" />
       ) : null}
 
-      {active === 'materials' ? (
-        <Materials embedded />
-      ) : active === 'inward' ? (
+      {active === 'inward' ? (
         <InwardRegister embedded onOpenOutward={canInvoice ? setInvoiceInwardId : undefined} />
       ) : (
         <Stock embedded />

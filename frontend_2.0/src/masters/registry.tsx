@@ -144,6 +144,8 @@ const partSchema = z.object({
   packingMode: z.string().optional(),
   category: z.string().optional(),
   editionNo: z.string().optional(),
+  defaultPoNo: z.string().optional(),
+  defaultPoDate: z.string().optional(),
 })
 type PartForm = z.infer<typeof partSchema>
 
@@ -183,6 +185,8 @@ const partMaster = defineMaster<Part, PartForm>({
     { kind: 'text', name: 'packingMode', label: 'Packing Mode', placeholder: 'GSP-2' },
     { kind: 'text', name: 'category', label: 'Category' },
     { kind: 'text', name: 'editionNo', label: 'Edition no.' },
+    { kind: 'text', name: 'defaultPoNo', label: 'Default PO no.' },
+    { kind: 'date', name: 'defaultPoDate', label: 'PO date' },
     { kind: 'textarea', name: 'description', label: 'Description', colSpan: 2 },
   ],
   emptyForm: () => ({ gstPct: '12', uom: 'NOS', avgQtyPerBox: 1 }),
@@ -193,6 +197,7 @@ const partMaster = defineMaster<Part, PartForm>({
     rmRate: p.rmRatePaise != null ? fromPaise(p.rmRatePaise) : undefined,
     rmWtG: p.rmWtMg != null ? p.rmWtMg / 1000 : undefined,
     packingMode: p.packingMode ?? '', category: p.category ?? '', editionNo: p.editionNo ?? '',
+    defaultPoNo: p.defaultPoNo ?? '', defaultPoDate: p.defaultPoDate ?? '',
   }),
   toEntity: (v, ctx) => ({
     id: ctx.id, partNo: v.partNo.trim(), materialCode: v.materialCode.trim(),
@@ -202,6 +207,7 @@ const partMaster = defineMaster<Part, PartForm>({
     rmRatePaise: v.rmRate != null ? toPaise(v.rmRate) : undefined,
     rmWtMg: v.rmWtG != null ? Math.round(v.rmWtG * 1000) : undefined,
     avgQtyPerBox: v.avgQtyPerBox, packingMode: opt(v.packingMode), active: ctx.existing?.active ?? true,
+    defaultPoNo: opt(v.defaultPoNo), defaultPoDate: opt(v.defaultPoDate),
   }),
   extraValidate: (v, s, existingId) => {
     // Part no. is unique within its unit — a dup silently mis-binds Excel imports.

@@ -55,7 +55,8 @@ export interface NavItem {
  */
 export const SIDEBAR_ITEMS: NavItem[] = [
   { module: 'dashboard', to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, section: 'Operations', blurb: 'KPIs, reconcile health, recent inward & invoices.' },
-  { module: 'stock', to: '/inventory', label: 'Inventory', icon: Boxes, section: 'Operations', blurb: 'Raw Material Master, Inward, Outward and live Stock — one workspace.' },
+  { module: 'masters', to: '/materials', label: 'Raw Material Master', icon: Package, section: 'Masters', blurb: 'Priced part catalogue with HSN, weights, packing and PO defaults.' },
+  { module: 'stock', to: '/inventory', label: 'Inventory', icon: Boxes, section: 'Operations', blurb: 'Material inward and live stock using controlled catalogue parts.' },
   { module: 'masters', to: '/vendors', label: 'Vendor Management', icon: Truck, section: 'Masters', blurb: 'Suppliers, GST profiles, banking and outstanding ledgers.' },
   { module: 'masters', to: '/customers', label: 'Customer Management', icon: Building2, section: 'Masters', blurb: 'Customers, GSTINs, billing states and payment terms.' },
   { module: 'masters', to: '/machines', label: 'Machine Management', icon: Cpu, section: 'Masters', blurb: 'Add and manage machines by unit.' },
@@ -76,7 +77,6 @@ export const SIDEBAR_ITEMS: NavItem[] = [
 export const EXTRA_ROUTES: NavItem[] = [
   // The Inventory module's tabs as deep-linkable standalone routes (Global search
   // sends challan/heat hits to /inward?q=, so these must keep resolving).
-  { module: 'masters', to: '/materials', label: 'Raw Material Master', icon: Package, section: 'Inventory', blurb: 'Part numbers, HSN codes and GST rates across the catalogue.' },
   { module: 'inward', to: '/inward', label: 'Material Inward', icon: ArrowDownToLine, section: 'Inventory', blurb: 'Challan-wise material receipt with heat number and supplier.' },
   { module: 'dispatch', to: '/outward', label: 'Material Outward', icon: ArrowUpFromLine, section: 'Inventory', blurb: 'Challan-cum-invoice dispatch with auto-GST and stock sync.' },
   { module: 'masters', to: '/masters', label: 'Masters', icon: Database, section: 'Masters', blurb: 'Units, customers, machines, operations, employees, opening stock.' },

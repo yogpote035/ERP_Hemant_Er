@@ -402,6 +402,14 @@ export default function InwardRegister({
           schema={inwardSchema}
           defaultValues={inwardModal.inward ? inwardToValues(inwardModal.inward) : inwardDefaults()}
           submitLabel={inwardModal.inward ? 'Save changes' : 'Save inward'}
+          beforeFields={!inwardModal.inward ? (
+            <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs">
+              <span className="text-muted-fg">Part not in the catalogue?</span>
+              <a href="/materials" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
+                <Plus size={13} /> Add new catalogue part
+              </a>
+            </div>
+          ) : null}
           onValid={(v) => onInwardValid(v as InwardFormValues)}
           deriveOnChange={(changed, values, setValue) => {
             // Auto-fill RM rate / RM wt / finish wt from the selected part (editable).
@@ -411,6 +419,7 @@ export default function InwardRegister({
             if (part.rmRatePaise != null) setValue('rmRate', fromPaise(part.rmRatePaise))
             if (part.rmWtMg != null) setValue('rmWtG', part.rmWtMg / 1000)
             setValue('finishWtG', part.finishWtMg / 1000)
+            if (part.defaultPoNo) setValue('poNo', part.defaultPoNo)
           }}
           onClose={() => { setInwardModal(null); bumpRefresh() }}
         />

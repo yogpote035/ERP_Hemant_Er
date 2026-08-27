@@ -17,7 +17,7 @@ export function publicUser(u: User) {
 }
 
 const loginSchema = z.object({
-  email: z.string().min(1),
+  email: z.string().trim().email('A valid email address is required'),
   password: z.string().min(1),
 })
 

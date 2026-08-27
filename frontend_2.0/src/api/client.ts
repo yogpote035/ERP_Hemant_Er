@@ -8,7 +8,13 @@
 import { setStateVersion } from './stateVersion'
 
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ?? ''
-let sessionToken: string | null = null
+const TOKEN_KEY = 'hew_api_token'
+
+/**
+ * Keep the bearer token across page reloads so App can validate it with /auth/me
+ * and rebuild the in-memory user session before rendering protected routes.
+ */
+let sessionToken: string | null = localStorage.getItem(TOKEN_KEY)
 
 export function apiEnabled(): boolean {
   return BASE !== ''
@@ -19,6 +25,8 @@ export function getToken(): string | null {
 }
 export function setToken(token: string | null): void {
   sessionToken = token
+  if (token) localStorage.setItem(TOKEN_KEY, token)
+  else localStorage.removeItem(TOKEN_KEY)
 }
 
 export class ApiError extends Error {
