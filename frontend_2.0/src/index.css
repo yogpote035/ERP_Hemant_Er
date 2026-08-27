@@ -1,0 +1,214 @@
+@import './styles/tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    @apply h-full;
+  }
+  /* Compact density: scale the rem grid down ~6% so more fits on screen without
+     browser zoom-out. Tailwind breakpoints are px-based, so this doesn't shift
+     responsive behaviour — only spacing/sizing/typography tighten. */
+  html {
+    font-size: 15px;
+  }
+  body {
+    @apply bg-bg text-fg font-sans antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  /* Keyboard focus ring everywhere, consistent with --ring token. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-bg;
+  }
+}
+
+@layer components {
+  /* Shared component classes so reused/adapted primitives have one source of
+     truth for look-and-feel. Built on the semantic tokens (theme-agnostic). */
+  .card {
+    @apply bg-card text-card-fg border border-border rounded-xl shadow-sm p-4;
+  }
+
+  /* The one button. Enterprise-grade CTA: 40px default height, 8px radius, soft
+     shadow with hover elevation, a crisp active press, and a 150ms ease-out
+     transition limited to paint properties (never width/height — no jank).
+     Icons inside never shrink and align to the optical centre. */
+  .btn {
+    @apply relative inline-flex h-10 select-none items-center justify-center gap-2 whitespace-nowrap
+           rounded-lg px-4 text-sm font-medium leading-none tracking-[-0.01em]
+           transition-[color,background-color,border-color,box-shadow,transform,opacity] duration-150 ease-out
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg
+           active:scale-[0.97]
+           disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none disabled:active:scale-100
+           [&_svg]:shrink-0;
+  }
+  /* Primary — strong emphasis: solid accent, tinted soft shadow that lifts on
+     hover, a faint glow, and a darken on press. */
+  .btn-primary {
+    @apply bg-primary text-primary-fg shadow-sm shadow-primary/20
+           hover:shadow-md hover:shadow-primary/30 hover:brightness-[1.06]
+           active:brightness-95;
+  }
+  /* Secondary — subtle surface button with a hairline border (Linear/Notion). */
+  .btn-secondary {
+    @apply bg-card text-fg border border-border shadow-sm
+           hover:bg-muted hover:border-border/80 hover:shadow-md
+           active:bg-muted;
+  }
+  /* Ghost — chromeless until hovered; for icon actions and toolbars. */
+  .btn-ghost {
+    @apply text-fg shadow-none hover:bg-muted active:bg-border/60;
+  }
+  /* Destructive — clear warning colour with the same elevation language. */
+  .btn-danger {
+    @apply bg-danger text-danger-fg shadow-sm shadow-danger/20
+           hover:shadow-md hover:shadow-danger/30 hover:brightness-[1.06]
+           active:brightness-95;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-fg
+           placeholder:text-muted-fg focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-primary
+           disabled:opacity-60;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium;
+  }
+
+  /* Compact in-table editable cell (outward-entry line grid). */
+  .cell-input {
+    @apply h-[30px] w-full rounded-md border border-border bg-card px-2 text-[12px] text-fg
+           focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring
+           disabled:bg-muted disabled:opacity-60;
+  }
+
+  /* Monospace codes — challan / invoice / heat numbers. */
+  .mono {
+    @apply font-mono tabular-nums;
+  }
+}
+
+/* Accessibility: honour reduced-motion — drop the button press/elevation motion
+   (kept outside @layer so it wins the cascade over the component transitions). */
+@media (prefers-reduced-motion: reduce) {
+  .btn {
+    transition-duration: 0.01ms;
+  }
+  .btn:active {
+    transform: none;
+  }
+}
+
+@layer utilities {
+  /* Slim, themed scrollbar for in-app scroll areas (sidebar nav, content,
+     drawers, dropdown lists) — replaces the chunky native OS scrollbar.
+     Slate-500 translucent reads on both the light content and the dark rail. */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(100 116 139 / 0.5) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: rgb(100 116 139 / 0.45);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(100 116 139 / 0.7);
+  }
+}
+
+/*
+ * Text-color helpers, emitted OUTSIDE @layer so they come after Tailwind's
+ * utilities in source order and WIN the cascade. Tailwind auto-generates a
+ * `.text-muted` / `.text-default` color utility from the `muted` surface token;
+ * without these overrides every `text-muted` would paint the muted SURFACE
+ * colour (slate-50 light, slate-800 dark = invisible on cards). These map the
+ * names to the readable foreground tokens instead.
+ */
+.text-default {
+  color: rgb(var(--fg));
+}
+.text-muted {
+  color: rgb(var(--muted-fg));
+}
+
+/*
+ * The left rail is a DARK navy in BOTH themes (matches the client mock). Set its
+ * background + base text explicitly here (plain rules, post-utilities) so it can
+ * never depend on the generated bg-sidebar / text-sidebar-fg utilities. Vite does
+ * NOT hot-reload tailwind.config.js changes, so a long-running dev server can drop
+ * those custom utilities and render the rail light with invisible white text — this
+ * guarantees the dark rail regardless. Active/hover states are reinforced too.
+ */
+.sidebar-rail {
+  background-color: rgb(var(--sidebar));
+  color: rgb(var(--sidebar-fg));
+}
+.sidebar-rail .nav-active {
+  background-color: rgb(var(--sidebar-active));
+  color: #fff;
+}
+
+/* Print: a report's "Print / PDF" should output ONLY the report region (#report-print),
+   not the app chrome / drawer backdrop / toolbar. Without this, window.print() printed the
+   whole viewport. The report markup tags chrome with `print:hidden` and wraps the table in
+   #report-print. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #report-print,
+  #report-print * {
+    visibility: visible;
+  }
+  #report-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  /* Let the table flow across pages instead of being clipped to the drawer's scroll box. */
+  #report-print .overflow-x-auto {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+}
+
+/* Print: the invoice Preview modal's "Print" should output ONLY the invoice sheet
+   (#invoice-print). It lives inside a centered Modal (a positioned ancestor with
+   max-height/overflow), so use position:fixed to escape that clip and pin to the page. */
+@media print {
+  body:has(#invoice-print) * {
+    visibility: hidden;
+  }
+  /* !important is required: `body:has(#invoice-print) *` has specificity (1,0,1)
+     because the #id inside :has() counts, which would otherwise outrank this rule
+     (1,0,0) and keep the sheet hidden → a blank print. */
+  #invoice-print,
+  #invoice-print * {
+    visibility: visible !important;
+  }
+  #invoice-print {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-height: none !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

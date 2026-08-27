@@ -1,0 +1,4 @@
+# Shell scripts and container/nginx config MUST use LF — CRLF breaks them in Linux images.
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+*.conf      text eol=lf

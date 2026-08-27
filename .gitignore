@@ -1,0 +1,24 @@
+# dependencies & build artifacts (frontend has its own .gitignore too)
+node_modules/
+frontend/node_modules/
+frontend/dist/
+dist/
+*.tsbuildinfo
+
+# logs
+*.log
+
+# os / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# env
+.env
+.env.*
+!.env.example
+
+# database backups (pg_dump output)
+backups/
+*.sql.gz

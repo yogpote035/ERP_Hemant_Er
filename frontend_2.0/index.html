@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#2563eb" />
+    <title>Hemant Engineering Works · ERP v4.2</title>
+    <!-- Apply the saved/system theme before first paint to avoid a flash.
+         Mirrors src/lib/theme.ts (key 'hew-erp-theme'); the bundle re-applies it idempotently. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('hew-erp-theme')
+          if (t !== 'dark' && t !== 'light') {
+            t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+          }
+          if (t === 'dark') document.documentElement.classList.add('dark')
+        } catch (e) {}
+      })()
+    </script>
+  </head>
+  <body class="h-full">
+    <div id="root" class="h-full"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

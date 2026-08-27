@@ -1,0 +1,384 @@
+import { useState, type ReactNode } from 'react'
+import { useShallow } from 'zustand/react/shallow'
+import { Banknote, Plus, IndianRupee, Pencil, Trash2 } from 'lucide-react'
+import { formatINRSymbol, formatINRCompact, fromPaise, toPaise, type Paise } from '@/lib/money'
+import { formatDMY, todayISO } from '@/lib/date'
+import type { Expense, PaymentMode } from '@/types/domain'
+import { useStore } from '@/store'
+import { unitOptions, serviceVendorOptions } from '@/masters/options'
+import { runSaveExpense, runRecordExpensePayment, runDeleteExpense } from '@/store/expenseCommands'
+import { selectExpenseRows, selectVendorOutstanding, type ExpenseRow, type ExpenseStatus } from '@/selectors/finance'
+import { useCan } from '@/hooks/useCan'
+import { toastCommandError, toastCommandSuccess } from '@/lib/commandToast'
+import { ActionMenu, Badge, Button, Card, ConfirmDialog, Drawer, EmptyState, Kpi, KpiGrid, SearchableDropdown, TablePager, type ActionMenuItem, type BadgeTone } from '@/components/ui'
+import { usePagedSource } from '@/hooks/usePagedSource'
+
+const numOf = (v: string) => {
+  const n = Number(v)
+  return Number.isFinite(n) && n > 0 ? n : 0
+}
+const STATUS_TONE: Record<ExpenseStatus, BadgeTone> = { unpaid: 'primary', partial: 'warning', overdue: 'danger', paid: 'success' }
+const MODES: PaymentMode[] = ['rtgs', 'neft', 'cheque', 'upi', 'cash', 'bank']
+
+export default function Expenses() {
+  const can = useCan()
+  const units = useStore(unitOptions)
+  const vendors = useStore(serviceVendorOptions)
+  const rows = useStore(useShallow(selectExpenseRows))
+  const vendorOut = useStore(useShallow(selectVendorOutstanding))
+  const totalPaid = rows.reduce((a, r) => a + r.paid, 0)
+  const outstanding = rows.reduce((a, r) => a + r.balance, 0)
+  const overdueAmt = rows.reduce((a, r) => a + (r.status === 'overdue' ? r.balance : 0), 0)
+  const [creating, setCreating] = useState(false)
+  const [editing, setEditing] = useState<Expense | null>(null)
+  const [paying, setPaying] = useState<ExpenseRow | null>(null)
+  const [deleting, setDeleting] = useState<Expense | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  // Server-driven table in API mode; bump after a write so the fetched page reflects it.
+  const [refreshKey, setRefreshKey] = useState(0)
+  const bumpRefresh = () => setTimeout(() => setRefreshKey((k) => k + 1), 500)
+  const paged = usePagedSource({
+    localRows: rows,
+    endpoint: '/expenses',
+    searchText: (r) => `${r.expense.category ?? ''} ${r.expense.description ?? ''} ${r.vendorName ?? ''}`,
+    pageSize: 25,
+    refreshKey,
+    // GET /expenses returns a FLAT row ({ ...expense, vendorName, paidPaise, ... }); the
+    // table renders the nested selector shape, so re-nest it here.
+    mapApiRow: (raw): ExpenseRow => {
+      const e = raw as Expense & { vendorName?: string; paidPaise: Paise; balancePaise: Paise; status: ExpenseStatus }
+      return { expense: e, vendorName: e.vendorName ?? '—', paid: e.paidPaise, balance: e.balancePaise, status: e.status }
+    },
+  })
+
+  function onDelete() {
+    if (!deleting) return
+    setDeleteBusy(true)
+    try {
+      const res = runDeleteExpense(deleting.id)
+      toastCommandSuccess('Expense deleted', res.cascade)
+      setDeleting(null)
+      bumpRefresh()
+    } catch (e) {
+      toastCommandError(e)
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-start gap-3">
+        <div>
+          <h1 className="text-[22px] font-bold tracking-tight">Expense Tracker</h1>
+          <p className="mt-0.5 text-[13px] text-muted-fg">Outstanding balances, payment schedules and vendor-wise dues.</p>
+        </div>
+        <input
+          className="input h-9 w-56 ml-auto"
+          placeholder="Search…"
+          aria-label="Search"
+          value={paged.search}
+          onChange={(e) => paged.setSearch(e.target.value)}
+        />
+        {can('expenses', 'create') ? (
+          <Button leftIcon={<Plus size={15} />} onClick={() => setCreating(true)}>Record Expense</Button>
+        ) : null}
+      </div>
+
+      <KpiGrid>
+        <Kpi tone="green" label="Total Paid" value={formatINRCompact(totalPaid as Paise)} sub="across expenses" />
+        <Kpi tone="amber" label="Outstanding Dues" value={formatINRCompact(outstanding as Paise)} sub="to pay" />
+        <Kpi tone="red" label="Overdue" value={formatINRCompact(overdueAmt as Paise)} sub="past due date" />
+        <Kpi tone="blue" label="Suppliers w/ Dues" value={vendorOut.length} sub="with a balance" />
+      </KpiGrid>
+
+      {vendorOut.length > 0 ? (
+        <Card className="p-0">
+          <div className="border-b border-border px-4 py-3 text-[13px] font-semibold">Vendor-wise outstanding</div>
+          <ul className="divide-y divide-border text-[13px]">
+            {vendorOut.map((v) => (
+              <li key={v.vendorName} className="flex items-center justify-between px-4 py-2">
+                <span>{v.vendorName} <span className="text-faint">· {v.count} bill{v.count === 1 ? '' : 's'}</span></span>
+                <span className="mono font-semibold text-warning">{formatINRSymbol(v.outstanding)}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+
+      {rows.length === 0 ? (
+        <Card><EmptyState icon={Banknote} title="No expenses" description="Record an overhead expense to track payments." action={can('expenses', 'create') ? <Button leftIcon={<Plus size={15} />} onClick={() => setCreating(true)}>New expense</Button> : undefined} /></Card>
+      ) : (
+        <Card className="overflow-x-auto p-0">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-border bg-muted text-left text-[10.5px] uppercase tracking-wide text-muted-fg">
+                <th scope="col" className="px-3 py-2.5 font-semibold">Date</th>
+                <th scope="col" className="px-3 py-2.5 font-semibold">Description</th>
+                <th scope="col" className="px-3 py-2.5 font-semibold">Vendor</th>
+                <th scope="col" className="px-3 py-2.5 text-right font-semibold">Total</th>
+                <th scope="col" className="px-3 py-2.5 text-right font-semibold">Paid</th>
+                <th scope="col" className="px-3 py-2.5 text-right font-semibold">Balance</th>
+                <th scope="col" className="px-3 py-2.5 font-semibold">Status</th>
+                <th scope="col" className="px-3 py-2.5 text-right"><span className="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {paged.pageRows.map((r) => (
+                <tr key={r.expense.id} className="border-b border-border/60 hover:bg-muted/40">
+                  <td className="px-3 py-2.5 mono text-muted-fg">{formatDMY(r.expense.date)}</td>
+                  <td className="px-3 py-2.5">{r.expense.category}</td>
+                  <td className="px-3 py-2.5">{r.vendorName}</td>
+                  <td className="px-3 py-2.5 text-right mono">{formatINRSymbol(r.expense.totalPaise)}</td>
+                  <td className="px-3 py-2.5 text-right mono text-muted-fg">{formatINRSymbol(r.paid)}</td>
+                  <td className="px-3 py-2.5 text-right mono font-semibold">{formatINRSymbol(r.balance)}</td>
+                  <td className="px-3 py-2.5"><Badge tone={STATUS_TONE[r.status]} className="capitalize">{r.status}</Badge></td>
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-center justify-end">
+                      <ActionMenu
+                        label={`Actions for ${r.expense.category}`}
+                        items={[
+                          ...(can('expenses', 'edit') && r.balance > 0 ? [{ key: 'pay', label: 'Record payment', icon: <IndianRupee />, onClick: () => setPaying(r) }] : []),
+                          ...(can('expenses', 'edit') ? [{ key: 'edit', label: 'Edit expense', icon: <Pencil />, onClick: () => setEditing(r.expense) }] : []),
+                          ...(can('expenses', 'delete') ? [{ key: 'delete', label: 'Delete expense', icon: <Trash2 />, onClick: () => setDeleting(r.expense), danger: true }] : []),
+                        ] as ActionMenuItem[]}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <TablePager page={paged.page} pageCount={paged.pageCount} total={paged.total} pageSize={paged.pageSize} onPage={paged.setPage} onPageSize={paged.setPageSize} />
+        </Card>
+      )}
+
+      {creating ? <ExpenseForm units={units} vendors={vendors} onClose={() => { setCreating(false); bumpRefresh() }} /> : null}
+      {editing ? <ExpenseForm units={units} vendors={vendors} existing={editing} onClose={() => { setEditing(null); bumpRefresh() }} /> : null}
+      {paying ? <PayModal row={paying} onClose={() => { setPaying(null); bumpRefresh() }} /> : null}
+      <ConfirmDialog
+        open={deleting != null}
+        onClose={() => setDeleting(null)}
+        onConfirm={onDelete}
+        loading={deleteBusy}
+        tone="danger"
+        title="Delete expense?"
+        confirmLabel="Delete"
+        message={
+          deleting ? (
+            <>Delete <b>{deleting.category}</b> ({formatINRSymbol(deleting.totalPaise)})? This also removes its recorded payments and can be undone from the toast.</>
+          ) : null
+        }
+      />
+    </div>
+  )
+}
+
+function ExpenseForm({
+  units,
+  vendors,
+  existing,
+  onClose,
+}: {
+  units: { value: string; label: string }[]
+  vendors: { value: string; label: string }[]
+  existing?: Expense
+  onClose: () => void
+}) {
+  const [unitId, setUnitId] = useState(existing?.unitId ?? '')
+  const [vendorId, setVendorId] = useState(existing?.vendorId ?? '')
+  // "Description" is the renamed Category field — stored on expense.category.
+  const [description, setDescription] = useState(existing?.category ?? '')
+  const [hsnSac, setHsnSac] = useState(existing?.hsnSac ?? '')
+  // Legacy expenses carry only a total → seed qty 1 × rate(total) so they round-trip.
+  const [quantity, setQuantity] = useState(
+    existing?.quantity != null ? String(existing.quantity) : existing ? '1' : ''
+  )
+  const [rate, setRate] = useState(
+    existing?.ratePaise != null
+      ? String(fromPaise(existing.ratePaise))
+      : existing
+        ? String(fromPaise(existing.totalPaise))
+        : ''
+  )
+  const [igstPct, setIgstPct] = useState(existing?.igstPct != null ? String(existing.igstPct) : '')
+  const [cgstPct, setCgstPct] = useState(existing?.cgstPct != null ? String(existing.cgstPct) : '')
+  const [sgstPct, setSgstPct] = useState(existing?.sgstPct != null ? String(existing.sgstPct) : '')
+  const [tcsPct, setTcsPct] = useState(existing?.tcsPct != null ? String(existing.tcsPct) : '')
+  const [supplierInvoiceNo, setSupplierInvoiceNo] = useState(existing?.supplierInvoiceNo ?? '')
+  const [date, setDate] = useState(existing?.date ?? todayISO())
+  const [dueDate, setDueDate] = useState(existing?.dueDate ?? '')
+  const [submitting, setSubmitting] = useState(false)
+
+  // Live math: Sub Total = Qty × Rate; each GST/TCS % applies to the sub total;
+  // Total Amount = Sub Total + all taxes. Sub Total and Total are read-only.
+  const qtyNum = numOf(quantity)
+  const ratePaise = toPaise(numOf(rate))
+  const subTotalPaise = Math.round(qtyNum * ratePaise) as Paise
+  const pctAmt = (p: string) => Math.round(subTotalPaise * (numOf(p) / 100)) as Paise
+  const igstAmt = pctAmt(igstPct)
+  const cgstAmt = pctAmt(cgstPct)
+  const sgstAmt = pctAmt(sgstPct)
+  const tcsAmt = pctAmt(tcsPct)
+  const gstTotal = (igstAmt + cgstAmt + sgstAmt + tcsAmt) as Paise
+  const totalPaise = (subTotalPaise + gstTotal) as Paise
+
+  function onSave() {
+    setSubmitting(true)
+    try {
+      const res = runSaveExpense({
+        id: existing?.id,
+        unitId,
+        vendorId: vendorId || undefined,
+        category: description.trim(),
+        date,
+        dueDate: dueDate || undefined,
+        hsnSac: hsnSac.trim() || undefined,
+        quantity: qtyNum > 0 ? qtyNum : undefined,
+        ratePaise: ratePaise > 0 ? ratePaise : undefined,
+        subTotalPaise: subTotalPaise > 0 ? subTotalPaise : undefined,
+        igstPct: numOf(igstPct) || undefined,
+        cgstPct: numOf(cgstPct) || undefined,
+        sgstPct: numOf(sgstPct) || undefined,
+        tcsPct: numOf(tcsPct) || undefined,
+        supplierInvoiceNo: supplierInvoiceNo.trim() || undefined,
+        totalPaise,
+      })
+      toastCommandSuccess(existing ? 'Expense updated' : 'Expense saved', res.cascade)
+      onClose()
+    } catch (e) {
+      toastCommandError(e)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Drawer
+      open
+      onClose={onClose}
+      size="lg"
+      title={existing ? 'Edit expense' : 'New expense'}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button onClick={onSave} loading={submitting} disabled={!unitId || !description.trim() || totalPaise <= 0}>{existing ? 'Save changes' : 'Save expense'}</Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Fld label="Unit">
+            <SearchableDropdown aria-label="Unit" value={unitId} onChange={(v) => setUnitId(v)} options={units} placeholder="Select unit…" />
+          </Fld>
+          <Fld label="Vendor (optional)">
+            <SearchableDropdown aria-label="Vendor" value={vendorId} onChange={(v) => setVendorId(v)} options={vendors} placeholder="— none —" />
+          </Fld>
+          <Fld label="Description"><input className="input h-9" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Item / service description" /></Fld>
+          <Fld label="HSN Code"><input className="input h-9 mono" value={hsnSac} onChange={(e) => setHsnSac(e.target.value)} placeholder="e.g. 27101990" /></Fld>
+          <Fld label="Quantity"><input type="number" min={0} step="any" className="input h-9" value={quantity} onChange={(e) => setQuantity(e.target.value)} /></Fld>
+          <Fld label="Rate (₹)"><input type="number" min={0} step="0.01" className="input h-9" value={rate} onChange={(e) => setRate(e.target.value)} /></Fld>
+          <Fld label="Sub Total (Qty × Rate)"><Computed value={subTotalPaise} /></Fld>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Fld label="IGST %"><input type="number" min={0} step="0.01" className="input h-9" value={igstPct} onChange={(e) => setIgstPct(e.target.value)} /></Fld>
+          <Fld label="CGST %"><input type="number" min={0} step="0.01" className="input h-9" value={cgstPct} onChange={(e) => setCgstPct(e.target.value)} /></Fld>
+          <Fld label="SGST %"><input type="number" min={0} step="0.01" className="input h-9" value={sgstPct} onChange={(e) => setSgstPct(e.target.value)} /></Fld>
+          <Fld label="TCS %"><input type="number" min={0} step="0.01" className="input h-9" value={tcsPct} onChange={(e) => setTcsPct(e.target.value)} /></Fld>
+        </div>
+        {gstTotal > 0 ? (
+          <p className="text-[12px] text-muted-fg" aria-live="polite">
+            IGST {formatINRSymbol(igstAmt)} · CGST {formatINRSymbol(cgstAmt)} · SGST {formatINRSymbol(sgstAmt)} · TCS {formatINRSymbol(tcsAmt)}
+            {' '}= <b className="text-fg">GST {formatINRSymbol(gstTotal)}</b>
+          </p>
+        ) : null}
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Fld label="Total Amount (Sub Total + GST)"><Computed value={totalPaise} strong /></Fld>
+          <Fld label="Supplier Invoice No"><input className="input h-9 mono" value={supplierInvoiceNo} onChange={(e) => setSupplierInvoiceNo(e.target.value)} placeholder="Supplier's bill no." /></Fld>
+          <Fld label="Date"><input type="date" className="input h-9" value={date} onChange={(e) => setDate(e.target.value)} /></Fld>
+          <Fld label="Due date (optional)"><input type="date" className="input h-9" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></Fld>
+        </div>
+      </div>
+    </Drawer>
+  )
+}
+
+/** Read-only derived amount (Sub Total / Total Amount) — muted, right-aligned, mono. */
+function Computed({ value, strong }: { value: Paise; strong?: boolean }) {
+  return (
+    <div
+      className={`flex h-9 items-center justify-end rounded-md border border-border bg-muted px-3 mono text-[13px] ${strong ? 'font-semibold text-fg' : 'text-muted-fg'}`}
+      aria-live="polite"
+    >
+      {formatINRSymbol(value)}
+    </div>
+  )
+}
+
+function PayModal({ row, onClose }: { row: ExpenseRow; onClose: () => void }) {
+  const [amount, setAmount] = useState('')
+  const [mode, setMode] = useState<PaymentMode>('rtgs')
+  const [ref, setRef] = useState('')
+  const [date, setDate] = useState(todayISO())
+  const [submitting, setSubmitting] = useState(false)
+
+  function onSave() {
+    setSubmitting(true)
+    try {
+      const res = runRecordExpensePayment({
+        expenseId: row.expense.id,
+        date,
+        amountPaise: toPaise(numOf(amount)),
+        mode,
+        ref: ref.trim() || undefined,
+      })
+      toastCommandSuccess('Payment recorded', res.cascade)
+      onClose()
+    } catch (e) {
+      toastCommandError(e)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Drawer
+      open
+      onClose={onClose}
+      size="sm"
+      title={`Pay ${row.expense.category}`}
+      description={`Balance ${formatINRSymbol(row.balance)}`}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button onClick={onSave} loading={submitting} disabled={numOf(amount) <= 0}>Record payment</Button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Fld label="Amount (₹)"><input type="number" min={0} step="0.01" className="input h-9" value={amount} onChange={(e) => setAmount(e.target.value)} /></Fld>
+        <Fld label="Mode">
+          <SearchableDropdown
+            aria-label="Mode"
+            value={mode}
+            onChange={(v) => setMode(v as PaymentMode)}
+            options={MODES.map((m) => ({ value: m, label: m.toUpperCase() }))}
+          />
+        </Fld>
+        <Fld label="Ref"><input className="input h-9" value={ref} onChange={(e) => setRef(e.target.value)} /></Fld>
+        <Fld label="Date"><input type="date" className="input h-9" value={date} onChange={(e) => setDate(e.target.value)} /></Fld>
+      </div>
+    </Drawer>
+  )
+}
+
+function Fld({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="text-[11.5px] font-medium text-muted-fg">{label}</span>
+      {children}
+    </label>
+  )
+}

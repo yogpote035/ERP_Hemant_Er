@@ -1,0 +1,36 @@
+# dependencies
+node_modules
+.pnp
+.pnp.js
+
+# build
+dist
+dist-ssr
+*.local
+
+# logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# editor / os
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+Thumbs.db
+
+# test / coverage
+coverage
+.vitest
+
+# playwright visual-check screenshots (harness in scripts/shoot.mjs is tracked)
+scripts/shots
+
+# env
+.env
+.env.*
+!.env.example
