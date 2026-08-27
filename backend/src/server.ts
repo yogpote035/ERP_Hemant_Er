@@ -11,6 +11,10 @@ assertProdConfig() // fail fast on unsafe prod settings
 
 async function start(): Promise<void> {
   await initRepository()
+  log.info('database connected', {
+    persistence: config.dbHost ? 'mysql' : 'file',
+    database: config.dbHost ? config.dbName : config.dataFile,
+  })
   const app = createApp()
   const server = app.listen(config.port, () => {
     log.info('listening', { url: `http://localhost:${config.port}/api`, persistence: config.dbHost ? 'mysql' : 'file', env: config.nodeEnv })
