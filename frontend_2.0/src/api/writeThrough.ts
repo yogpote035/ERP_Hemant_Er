@@ -21,6 +21,7 @@ import {
 import { ApiError } from './client'
 import { getStateVersion } from './stateVersion'
 import { hydrateViaModules } from './hydrate'
+import { refreshAllData } from './refresh'
 
 let installed = false
 
@@ -149,8 +150,14 @@ const MODULE_SYNC: Partial<Record<CommandName, Handler>> = {
     return skip('This change')
   },
   saveMaster: (i, r) => syncMaster(i, r),
-  finalizeInvoice: (i) => invoicesApi.finalize(i),
-  editDraftInvoice: (i) => invoicesApi.editDraft(i.invoiceId, { customerId: i.customerId, issuerKind: i.issuerKind, issuerVendorId: i.issuerVendorId, invoiceDate: i.invoiceDate, paymentTerms: i.paymentTerms, ewayBillNo: i.ewayBillNo, vehicleNo: i.vehicleNo, transporter: i.transporter, dispatchedThrough: i.dispatchedThrough, destination: i.destination }),
+  finalizeInvoice: (i) => {
+    const inv = storedInvoice(i.invoiceId)
+    return invoicesApi.finalize({ ...i, unitId: inv?.unitId, billNo: inv?.billNo })
+  },
+  editDraftInvoice: (i) => {
+    const inv = storedInvoice(i.invoiceId)
+    return invoicesApi.editDraft(i.invoiceId, { customerId: i.customerId, issuerKind: i.issuerKind, issuerVendorId: i.issuerVendorId, invoiceDate: i.invoiceDate, paymentTerms: i.paymentTerms, ewayBillNo: i.ewayBillNo, vehicleNo: i.vehicleNo, transporter: i.transporter, dispatchedThrough: i.dispatchedThrough, destination: i.destination, unitId: inv?.unitId, billNo: inv?.billNo })
+  },
   voidInvoice: (i, r) => invoicesApi.void(idOf(i, r)),
   recordPayment: (i, r) => paymentsApi.record(withId(i, r)),
   reversePayment: (i, r) => paymentsApi.reverse(idOf(i, r)),
@@ -214,6 +221,7 @@ async function sync(name: CommandName, input: unknown, result: unknown, module: 
   if (handler) {
     try {
       await handler(input, result, module)
+      if (isCreateCommand(name, input)) await refreshAllData()
     } catch {
       toast.warning('Backend sync failed — changes saved locally.')
     }
@@ -226,5 +234,28 @@ async function sync(name: CommandName, input: unknown, result: unknown, module: 
     return
   }
   toast.warning('Saved locally — sign in as admin to persist this change to the server.')
+}
+
+function storedInvoice(id: string): any { // eslint-disable-line @typescript-eslint/no-explicit-any
+  return useStore.getState().billing.invoices.byId[id]
+}
+
+/** Commands that add records and therefore need an immediate server-authoritative reload. */
+function isCreateCommand(name: CommandName, input: unknown): boolean {
+  const value = input as { id?: string; existingId?: string | null } | null
+  if (name === 'saveInward' || name === 'saveScrapBill' || name === 'saveExpense' || name === 'saveRejectionAdvice') {
+    return !value?.id
+  }
+  if (name === 'saveMaster') return !value?.existingId && !value?.id
+  return [
+    'saveOutwardDispatch',
+    'finalizeInvoice',
+    'recordPayment',
+    'recordExpensePayment',
+    'saveProductionAttendance',
+    'saveShiftAttendance',
+    'createUser',
+    'createRole',
+  ].includes(name)
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

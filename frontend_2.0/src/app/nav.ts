@@ -56,7 +56,7 @@ export interface NavItem {
 export const SIDEBAR_ITEMS: NavItem[] = [
   { module: 'dashboard', to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, section: 'Operations', blurb: 'KPIs, reconcile health, recent inward & invoices.' },
   { module: 'masters', to: '/materials', label: 'Raw Material Master', icon: Package, section: 'Masters', blurb: 'Priced part catalogue with HSN, weights, packing and PO defaults.' },
-  { module: 'stock', to: '/inventory', label: 'Inventory', icon: Boxes, section: 'Operations', blurb: 'Material inward and live stock using controlled catalogue parts.' },
+  { module: 'stock', to: '/inventory', label: 'Inventory Management', icon: Boxes, section: 'Operations', blurb: 'Material inward and live stock using controlled catalogue parts.' },
   { module: 'masters', to: '/vendors', label: 'Vendor Management', icon: Truck, section: 'Masters', blurb: 'Suppliers, GST profiles, banking and outstanding ledgers.' },
   { module: 'masters', to: '/customers', label: 'Customer Management', icon: Building2, section: 'Masters', blurb: 'Customers, GSTINs, billing states and payment terms.' },
   { module: 'masters', to: '/machines', label: 'Machine Management', icon: Cpu, section: 'Masters', blurb: 'Add and manage machines by unit.' },

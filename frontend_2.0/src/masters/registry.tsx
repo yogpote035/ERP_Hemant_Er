@@ -57,12 +57,26 @@ const gstinStateMismatch = (gstin?: string, stateCode?: string): boolean =>
   !!gstin && !!stateCode && gstin.trim().toUpperCase().slice(0, 2) !== stateCode
 
 // ── Units ─────────────────────────────────────────────────────────────────────
+const invoiceFormatSchema = z.string()
+  .trim()
+  .min(1, 'Required')
+  .refine((value) => value.includes('{seq}'), 'Include {seq} for the invoice sequence')
+  .refine((value) => value.includes('{FY}'), 'Include {FY} for the financial year')
+  .refine(
+    (value) => !/[{}]/.test(value.replace(/\{seq\}/g, '').replace(/\{FY\}/g, '')),
+    'Only {seq} and {FY} placeholders are supported',
+  )
+  .refine(
+    (value) => /^[A-Za-z0-9/-]+$/.test(value.replace(/\{seq\}/g, '1').replace(/\{FY\}/g, '24-25')),
+    'Use only letters, numbers, / and -',
+  )
+
 const unitSchema = z.object({
   name: z.string().min(1, 'Required'),
   code: z.string().min(1, 'Required'),
   gstin: z.string().regex(GSTIN_RE, GSTIN_MSG),
   stateCode: z.string().regex(/^\d{2}$/, 'Two digits'),
-  invoiceFormat: z.string().min(1, 'Required'),
+  invoiceFormat: invoiceFormatSchema,
   seqPad: z.number({ invalid_type_error: 'Number' }).int().min(1).max(8),
   addressLines: z.string().optional(),
   bankName: z.string().optional(),
@@ -92,11 +106,11 @@ const unitMaster = defineMaster<Unit, UnitForm>({
   ],
   fields: [
     { kind: 'text', name: 'name', label: 'Unit name', required: true, colSpan: 2 },
-    { kind: 'text', name: 'code', label: 'Short code', required: true },
+    { kind: 'text', name: 'code', label: 'Short code', required: true, placeholder: 'HEW', hint: 'Example: HEW for Hemant Engineering Works' },
     { kind: 'text', name: 'gstin', label: 'GSTIN', required: true },
     { kind: 'text', name: 'stateCode', label: 'State code', required: true, hint: STATE_HINT },
-    { kind: 'number', name: 'seqPad', label: 'Invoice seq padding', required: true, min: 1, max: 8 },
-    { kind: 'text', name: 'invoiceFormat', label: 'Invoice format', required: true, hint: 'e.g. HEW/{FY}/{seq}', colSpan: 2 },
+    { kind: 'number', name: 'seqPad', label: 'Invoice seq padding', required: true, min: 1, max: 8, hint: 'Example: padding 3 turns invoice sequence 7 into 007' },
+    { kind: 'text', name: 'invoiceFormat', label: 'Invoice format', required: true, lockable: true, hint: 'Default: {seq}/{FY}. Unlock only if you need a custom format, e.g. HEW/{FY}/{seq} becomes HEW/2026-27/007', colSpan: 2 },
     { kind: 'textarea', name: 'addressLines', label: 'Address (one line each)', colSpan: 2 },
     { kind: 'text', name: 'bankName', label: 'Bank name' },
     { kind: 'text', name: 'accountNo', label: 'Account no.' },

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { apiEnabled, api } from '@/api/client'
+import { useDataRefreshRevision } from '@/api/refresh'
 import { usePagedRows, type PagedRows } from './usePagedRows'
 
 export interface PagedSource<T> extends PagedRows<T> {
@@ -33,6 +34,7 @@ export function usePagedSource<T>(args: {
   const { localRows, endpoint, searchText, extraParams, pageSize = 25, refreshKey, mapApiRow } = args
   // Server-driven only when API mode is on AND an endpoint is given.
   const isApi = apiEnabled() && !!endpoint
+  const dataRefreshRevision = useDataRefreshRevision()
 
   // Always call both hooks (rules of hooks); pick the active one by mode.
   const local = usePagedRows(localRows, { pageSize, searchText })
@@ -94,7 +96,7 @@ export function usePagedSource<T>(args: {
       })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isApi, endpoint, page, size, debouncedSearch, extraKey, refreshKey])
+  }, [isApi, endpoint, page, size, debouncedSearch, extraKey, refreshKey, dataRefreshRevision])
 
   // prev/next only (what TablePager offers) — next consumes the keyset cursor.
   const setPage = (p: number) => {

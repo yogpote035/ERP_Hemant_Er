@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { Lock, Unlock } from 'lucide-react'
 import { useController, useFormContext, type FieldErrors } from 'react-hook-form'
 import { useStore } from '@/store'
 import { cn } from '@/lib/cn'
@@ -38,6 +40,7 @@ export function AutoField({ field }: { field: FieldSpec }) {
 }
 
 function TextLike({ field }: { field: Extract<FieldSpec, { kind: 'text' | 'textarea' }> }) {
+  const [locked, setLocked] = useState(field.kind === 'text' && field.lockable === true)
   const { register, formState } = useFormContext()
   const msg = errMsg(formState.errors, field.name)
   const desc = describedBy(field.name, msg, field.hint)
@@ -60,13 +63,29 @@ function TextLike({ field }: { field: Extract<FieldSpec, { kind: 'text' | 'texta
           {...register(field.name)}
         />
       ) : (
-        <Input
-          id={field.name}
-          placeholder={field.placeholder}
-          aria-required={field.required || undefined} aria-invalid={msg ? true : undefined}
-          aria-describedby={desc}
-          {...register(field.name)}
-        />
+        <div className="flex gap-2">
+          <Input
+            id={field.name}
+            placeholder={field.placeholder}
+            readOnly={locked}
+            aria-readonly={locked || undefined}
+            aria-required={field.required || undefined} aria-invalid={msg ? true : undefined}
+            aria-describedby={desc}
+            className={locked ? 'cursor-not-allowed bg-muted/40 text-muted-fg' : undefined}
+            {...register(field.name)}
+          />
+          {field.lockable ? (
+            <button
+              type="button"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-medium text-fg hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => setLocked((value) => !value)}
+              aria-label={locked ? `Unlock ${field.label}` : `Lock ${field.label}`}
+            >
+              {locked ? <Unlock size={14} /> : <Lock size={14} />}
+              {locked ? 'Unlock' : 'Lock'}
+            </button>
+          ) : null}
+        </div>
       )}
     </Field>
   )

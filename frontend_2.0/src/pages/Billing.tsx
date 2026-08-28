@@ -452,6 +452,7 @@ function InvoiceBuilder({ invoice, onClose, onDone }: { invoice: Invoice; onClos
     setAddChallanId(id)
     const r = openChallans.find((x) => x.inward.id === id)
     const rp = r ? latestProductionRatePaise(useStore.getState(), r.inward.partId) : undefined
+    setAddQty(r ? String(r.available) : '')
     setAddRate(rp != null ? String(fromPaise(rp)) : '')
   }
   function addLine() {

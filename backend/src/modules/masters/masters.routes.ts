@@ -34,13 +34,27 @@ interface MasterCfg {
 
 const addressLines = z.array(z.string()).default([])
 
+const invoiceFormat = z.string()
+  .trim()
+  .min(1, 'Invoice format is required')
+  .refine((value) => value.includes('{seq}'), 'Invoice format must include {seq}')
+  .refine((value) => value.includes('{FY}'), 'Invoice format must include {FY}')
+  .refine(
+    (value) => !/[{}]/.test(value.replace(/\{seq\}/g, '').replace(/\{FY\}/g, '')),
+    'Only {seq} and {FY} placeholders are supported',
+  )
+  .refine(
+    (value) => /^[A-Za-z0-9/-]+$/.test(value.replace(/\{seq\}/g, '1').replace(/\{FY\}/g, '24-25')),
+    'Invoice format may contain only letters, numbers, / and -',
+  )
+
 const REGISTRY: Record<string, MasterCfg> = {
   units: {
     idPrefix: 'unit', module: 'masters', unitScoped: false, softDelete: true,
     collection: (s) => s.masters.units as unknown as Normalized<Entity>,
     schema: z.object({
       name: z.string().min(1), code: z.string().min(1), gstin: z.string().default(''),
-      stateCode: z.string().min(1), addressLines, invoiceFormat: z.string().default('{seq}/{FY}'),
+      stateCode: z.string().min(1), addressLines, invoiceFormat: invoiceFormat.default('{seq}/{FY}'),
       seqPad: z.number().int().min(0).default(0),
       bankName: z.string().optional(), accountNo: z.string().optional(), ifsc: z.string().optional(),
       logoDataUrl: z.string().optional(),

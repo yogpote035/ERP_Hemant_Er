@@ -1,6 +1,9 @@
+import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Menu, Settings } from 'lucide-react'
+import { Menu, RefreshCw, Settings } from 'lucide-react'
+import { toast } from 'sonner'
 import { breadcrumbForPath } from '@/app/nav'
+import { refreshAllData } from '@/api/refresh'
 import { GlobalSearch } from './GlobalSearch'
 import { UnitSwitcher } from './UnitSwitcher'
 import { UserMenu } from './UserMenu'
@@ -11,6 +14,19 @@ import { ThemeToggle } from './ThemeToggle'
 export function Topbar({ onMenu }: { onMenu: () => void }) {
   const { pathname } = useLocation()
   const { section, label } = breadcrumbForPath(pathname)
+  const [refreshing, setRefreshing] = useState(false)
+
+  const refresh = async () => {
+    setRefreshing(true)
+    try {
+      await refreshAllData()
+      toast.success('Data refreshed')
+    } catch {
+      toast.error('Could not refresh data')
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   return (
     <header className="sticky top-0 z-30 flex h-[52px] items-center gap-3 border-b border-border bg-card px-3 sm:px-5">
@@ -34,6 +50,16 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
         <div className="hidden sm:block">
           <UndoRedo />
         </div>
+        <button
+          type="button"
+          onClick={() => void refresh()}
+          disabled={refreshing}
+          className="btn btn-ghost h-9 w-9 p-0"
+          aria-label="Refresh all data"
+          title="Refresh all data"
+        >
+          <RefreshCw size={18} className={refreshing ? 'animate-spin' : undefined} />
+        </button>
         <UnitSwitcher />
         <ThemeToggle />
         <Link

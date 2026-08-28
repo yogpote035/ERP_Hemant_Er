@@ -11,6 +11,8 @@ import { seedState } from '../../db/seed.js'
 import type { RootState } from '../../db/state.js'
 import { authenticate } from '../../auth/middleware.js'
 import { asyncHandler, badRequest, conflict, forbidden } from '../../lib/http.js'
+import { buildSqlBackup, parseSqlBackup } from './sqlBackup.js'
+import { config } from '../../config.js'
 
 /** The top-level slices every valid RootState backup must carry. */
 const REQUIRED_SLICES = [
@@ -56,6 +58,32 @@ function preservePasswordHashes(current: RootState, next: RootState): void {
 export const systemRouter = Router()
 
 systemRouter.use(authenticate)
+
+/** User-facing database backup. The JSON endpoint below remains an internal sync API. */
+systemRouter.get(
+  '/backup.sql',
+  asyncHandler(async (req, res) => {
+    assertAdmin(req)
+    res.json({ data: buildSqlBackup(getDb(), config.dbName || 'hemant_erp') })
+  })
+)
+
+systemRouter.post(
+  '/restore.sql',
+  asyncHandler(async (req, res) => {
+    assertAdmin(req)
+    const sql = (req.body as { sql?: unknown } | undefined)?.sql
+    if (typeof sql !== 'string' || sql.length === 0) throw badRequest('SQL backup is empty')
+    if (Buffer.byteLength(sql, 'utf8') > 20 * 1024 * 1024) throw badRequest('SQL backup is too large')
+    let next: RootState
+    try { next = parseSqlBackup(sql) } catch (error) {
+      throw badRequest(error instanceof Error ? error.message : 'Invalid SQL backup')
+    }
+    preservePasswordHashes(getDb(), next)
+    await replaceState(next)
+    res.json({ data: { restored: true }, version: getVersion(), cascade: ['database restored from SQL backup'] })
+  })
+)
 
 /** GET /backup — admin only — full state JSON + the current state version. */
 systemRouter.get(

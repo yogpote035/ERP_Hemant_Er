@@ -235,6 +235,26 @@ const bodySchema = z.union([
 export const dispatchRouter = Router()
 dispatchRouter.use(authenticate)
 
+/** Reserve the next company D/C number for an outward-entry batch. */
+dispatchRouter.post(
+  '/next-dc',
+  requirePermission('dispatch', 'create'),
+  asyncHandler(async (_req, res) => {
+    const dcNo = await mutate((state) => {
+      const key = 'dispatch:dc'
+      const stored = state.system.sequences[key] ?? 0
+      const existingMax = values(state.inventory.dispatches).reduce((max, dispatch) => {
+        const match = /^DC-(\d+)$/.exec(dispatch.billNo ?? '')
+        return match ? Math.max(max, Number(match[1])) : max
+      }, 0)
+      const next = Math.max(stored, existingMax) + 1
+      state.system.sequences[key] = next
+      return `DC-${String(next).padStart(6, '0')}`
+    })
+    res.status(201).json({ data: { dcNo } })
+  })
+)
+
 /** GET / — list dispatches; scoped via parent inward's unit. Optional ?inwardId=. */
 dispatchRouter.get(
   '/',

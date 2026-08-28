@@ -138,6 +138,8 @@ const dispatchMeta = (b: Record<string, unknown>) => ({
 })
 const finalizeSchema = z.object({
   invoiceId: z.string().min(1),
+  unitId: z.string().optional(),
+  billNo: z.string().optional(),
   customerId: z.string().min(1),
   issuerKind: z.enum(['unit', 'supplier']),
   issuerVendorId: z.string().optional(),
@@ -145,6 +147,15 @@ const finalizeSchema = z.object({
   paymentTerms: z.string().optional(),
   ...dispatchMetaShape,
 })
+
+/** A just-created browser draft can temporarily have a different id from the
+ * server draft. Resolve the same draft by its unique unit + D/C bill number. */
+function resolveDraftInvoice(s: RootState, id: string, unitId?: string, billNo?: string): Invoice | undefined {
+  return getById(s.billing.invoices, id) ??
+    (unitId && billNo
+      ? values(s.billing.invoices).find((inv) => inv.lifecycle === 'draft' && inv.unitId === unitId && inv.billNo === billNo)
+      : undefined)
+}
 
 /** Issuer state code: supplier vendor's, else the invoice's unit. */
 function issuerStateOf(s: RootState, inv: Invoice, issuerKind: string, issuerVendorId?: string): string | undefined {
@@ -174,7 +185,7 @@ invoicesRouter.post(
     const input = finalizeSchema.parse(req.body)
     const s = getDb()
 
-    const inv = getById(s.billing.invoices, input.invoiceId)
+    const inv = resolveDraftInvoice(s, input.invoiceId, input.unitId, input.billNo)
     if (!inv) throw notFound('Invoice not found')
     assertUnit(req, inv.unitId)
     if (inv.lifecycle !== 'draft') throw conflict(`Bill ${inv.billNo} is already ${inv.lifecycle}`)
@@ -194,7 +205,7 @@ invoicesRouter.post(
     }
 
     const result = await mutate((draft) => {
-      const d = getById(draft.billing.invoices, input.invoiceId) as Invoice
+      const d = getById(draft.billing.invoices, inv.id) as Invoice
       const c = getById(draft.masters.customers, input.customerId)
       const issuerState = issuerStateOf(draft, d, input.issuerKind, input.issuerVendorId)
       const taxKind = deriveTaxKind(issuerState, c?.stateCode)
@@ -292,6 +303,8 @@ invoicesRouter.post(
 // Edit a DRAFT invoice's header (consignee, issuer, date, terms) before it's issued.
 // Issued/void invoices are immutable legal documents, so this rejects non-drafts.
 const editDraftSchema = z.object({
+  unitId: z.string().optional(),
+  billNo: z.string().optional(),
   customerId: z.string().optional(),
   issuerKind: z.enum(['unit', 'supplier']),
   issuerVendorId: z.string().optional(),
@@ -305,7 +318,7 @@ invoicesRouter.post(
   asyncHandler(async (req, res) => {
     const input = editDraftSchema.parse(req.body)
     const s = getDb()
-    const inv = getById(s.billing.invoices, req.params.id)
+    const inv = resolveDraftInvoice(s, req.params.id, input.unitId, input.billNo)
     if (!inv) throw notFound('Invoice not found')
     assertUnit(req, inv.unitId)
     if (inv.lifecycle !== 'draft') throw conflict(`Bill ${inv.billNo} is ${inv.lifecycle} — only a draft can be edited`)

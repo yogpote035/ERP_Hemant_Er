@@ -14,7 +14,8 @@ import { toast } from 'sonner'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '@/store'
 import { values } from '@/store/normalized'
-import { downloadBackup, importBackup } from '@/store/persistence'
+import { systemApi } from '@/api/modules'
+import { refreshAllData } from '@/api/refresh'
 import { MASTER_SPECS } from '@/masters/registry'
 import { EntityManager } from '@/masters/EntityManager'
 import { Button, Card, Tabs } from '@/components/ui'
@@ -154,24 +155,35 @@ function LinkTab({ icon: Icon, title, desc, to, cta }: { icon: typeof Building2;
   )
 }
 
-/** Backup — export the full data store to JSON, restore from a backup, or reset
- *  to the demo seed. All run through the versioned, validated persistence layer. */
+/** Admin database backup and restore using a MySQL/TiDB-compatible SQL dump. */
 function BackupTab() {
   const fileRef = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState(false)
 
-  function onImportFile(file: File) {
-    const reader = new FileReader()
-    reader.onload = () => {
-      try {
-        const json = JSON.parse(String(reader.result))
-        importBackup(json)
-        toast.success('Backup restored — undo history cleared.')
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Could not read that backup file')
-      }
-    }
-    reader.onerror = () => toast.error('Could not read that file')
-    reader.readAsText(file)
+  async function downloadSql() {
+    setBusy(true)
+    try {
+      const sql = await systemApi.downloadSql()
+      const url = URL.createObjectURL(new Blob([sql], { type: 'application/sql' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `hew-erp-backup-${new Date().toISOString().slice(0, 10)}.sql`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success('SQL backup downloaded')
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not export SQL backup') }
+    finally { setBusy(false) }
+  }
+
+  async function onImportFile(file: File) {
+    setBusy(true)
+    try {
+      await systemApi.restoreSql(await file.text())
+      await refreshAllData()
+      useStore.setState({ _undo: [], _redo: [] })
+      toast.success('SQL backup restored')
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not restore SQL backup') }
+    finally { setBusy(false) }
   }
 
   return (
@@ -180,23 +192,23 @@ function BackupTab() {
         <SectionHead
           icon={DatabaseBackup}
           title="Backup & restore"
-          desc="Export the currently loaded ERP data as JSON, or restore a compatible backup."
+          desc="Export or restore the complete MySQL/TiDB database as a compatible SQL file."
         />
         <div className="mt-4 flex flex-wrap gap-2">
-          <Button leftIcon={<Download size={15} />} onClick={() => { downloadBackup(); toast.success('Backup downloaded') }}>
-            Export backup
+          <Button leftIcon={<Download size={15} />} onClick={() => void downloadSql()} loading={busy}>
+            Export SQL
           </Button>
           <Button variant="secondary" leftIcon={<Upload size={15} />} onClick={() => fileRef.current?.click()}>
-            Restore backup
+            Restore SQL
           </Button>
           <input
             ref={fileRef}
             type="file"
-            accept="application/json,.json"
+            accept="application/sql,text/sql,.sql"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0]
-              if (f) onImportFile(f)
+              if (f) void onImportFile(f)
               e.target.value = ''
             }}
           />

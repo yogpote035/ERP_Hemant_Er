@@ -22,6 +22,7 @@ export const inwardApi = {
   attachmentUrl: (id: string) => api.objectUrl(`/inward/${id}/attachment`),
 }
 export const dispatchApi = {
+  nextDc: () => api.post<{ dcNo: string }>('/dispatch/next-dc'),
   create: (body: unknown) => api.post('/dispatch', body),
   remove: (id: string) => api.del(`/dispatch/${id}`),
 }
@@ -77,6 +78,8 @@ export const importApi = {
   apply: (body: unknown) => api.post('/import/apply', body),
 }
 export const systemApi = {
+  downloadSql: () => api.get<string>('/system/backup.sql'),
+  restoreSql: (sql: string) => api.post('/system/restore.sql', { sql }),
   backup: () => api.get('/system/backup'),
   // baseVersion lets the server 409 when another session has advanced the state.
   restore: (state: unknown, baseVersion?: number) => api.post('/system/backup', { state, baseVersion }),

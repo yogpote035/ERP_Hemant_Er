@@ -29,7 +29,7 @@ export interface SelectOption {
 
 /** A form control. `name` is the form-value key (not necessarily an entity key). */
 export type FieldSpec =
-  | { kind: 'text'; name: string; label: string; required?: boolean; placeholder?: string; hint?: string; colSpan?: 1 | 2 }
+  | { kind: 'text'; name: string; label: string; required?: boolean; placeholder?: string; hint?: string; lockable?: boolean; colSpan?: 1 | 2 }
   | { kind: 'textarea'; name: string; label: string; required?: boolean; rows?: number; hint?: string; colSpan?: 1 | 2 }
   | { kind: 'number'; name: string; label: string; required?: boolean; min?: number; max?: number; step?: number; hint?: string; colSpan?: 1 | 2 }
   | { kind: 'money'; name: string; label: string; required?: boolean; hint?: string; colSpan?: 1 | 2 } // entered in rupees

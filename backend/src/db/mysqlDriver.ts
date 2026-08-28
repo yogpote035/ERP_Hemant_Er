@@ -10,6 +10,7 @@ import {
   type SystemMeta,
 } from './persistence.js'
 import type { ActivityLogEntry } from '../types/domain.js'
+import { log } from '../lib/logging.js'
 
 interface MysqlConfig {
   host: string
@@ -47,27 +48,42 @@ export class MysqlDriver implements PersistenceDriver {
       database: config.database,
       ssl: config.ssl ? { minVersion: 'TLSv1.2' } : undefined,
       connectionLimit: 8,
+      connectTimeout: 20_000,
       enableKeepAlive: true,
     })
   }
 
   async init(): Promise<void> {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await this.createSchema()
+        return
+      } catch (error) {
+        if (attempt === 3) throw error
+        const err = error as { code?: string; message?: string }
+        log.warn('database connection retry', { attempt, code: err.code, error: err.message })
+        await new Promise((resolve) => setTimeout(resolve, attempt * 1_500))
+      }
+    }
+  }
+
+  private async createSchema(): Promise<void> {
     await this.pool.execute(`create table if not exists documents (
-      collection varchar(100) not null,
-      id varchar(191) not null,
-      data json not null,
-      updated_at timestamp not null default current_timestamp on update current_timestamp,
-      primary key (collection, id)
-    )`)
+        collection varchar(100) not null,
+        id varchar(191) not null,
+        data json not null,
+        updated_at timestamp not null default current_timestamp on update current_timestamp,
+        primary key (collection, id)
+      )`)
     await this.pool.execute(`create table if not exists activity_log (
-      id varchar(191) primary key,
-      ts varchar(64) not null,
-      data json not null
-    )`)
+        id varchar(191) primary key,
+        ts varchar(64) not null,
+        data json not null
+      )`)
     await this.pool.execute(`create table if not exists kv (
-      k varchar(191) primary key,
-      v json not null
-    )`)
+        k varchar(191) primary key,
+        v json not null
+      )`)
   }
 
   async loadState(): Promise<RootState | null> {

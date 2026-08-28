@@ -7,6 +7,7 @@ import { useStore } from '@/store'
 import { latestProductionRatePaise, selectOpenInwardRows } from '@/selectors/register'
 import { runSaveDispatchBatch, type DispatchBatchLine } from '@/store/registerCommands'
 import { useCan } from '@/hooks/useCan'
+import { dispatchApi } from '@/api/modules'
 import { toastCommandError, toastCommandSuccess } from '@/lib/commandToast'
 import { Button, Card, EmptyState, MultiSelectDropdown } from '@/components/ui'
 
@@ -58,6 +59,8 @@ export default function OutwardEntry({
 
   const [lines, setLines] = useState<LineState[]>([])
   const [submitting, setSubmitting] = useState(false)
+  const [dcNo, setDcNo] = useState('')
+  const [dcLoading, setDcLoading] = useState(false)
   const selectedIds = useMemo(() => lines.map((l) => l.challanId), [lines])
 
   // First selected challan drives the reference card's auto-fields.
@@ -67,8 +70,8 @@ export default function OutwardEntry({
   const lineForChallan = useCallback((challanId: string): LineState => {
     const partId = challanById.get(challanId)?.inward.partId ?? ''
     const ratePaise = partId ? latestProductionRatePaise(useStore.getState(), partId) : undefined
-    return { key: `ln-${_seq++}`, challanId, bill: '', dcDate: todayISO(), ok: '', mc: '', mf: '', rate: ratePaise != null ? String(fromPaise(ratePaise)) : '', remark: '' }
-  }, [challanById])
+    return { key: `ln-${_seq++}`, challanId, bill: dcNo, dcDate: todayISO(), ok: '', mc: '', mf: '', rate: ratePaise != null ? String(fromPaise(ratePaise)) : '', remark: '' }
+  }, [challanById, dcNo])
 
   // Reconcile the line list to the multi-select: keep existing, add new, drop un-ticked.
   const setSelected = useCallback((ids: string[]) => {
@@ -88,6 +91,24 @@ export default function OutwardEntry({
       setSelected([initialChallanId])
     }
   }, [initialChallanId, challanById, setSelected])
+
+  // Reserve one server-controlled D/C number for the whole selected batch and
+  // copy it to every challan line. The field is intentionally read-only.
+  useEffect(() => {
+    if (lines.length === 0) {
+      setDcNo('')
+      return
+    }
+    if (dcNo || dcLoading) return
+    setDcLoading(true)
+    dispatchApi.nextDc()
+      .then(({ dcNo: next }) => {
+        setDcNo(next)
+        setLines((current) => current.map((line) => ({ ...line, bill: next })))
+      })
+      .catch((error) => toastCommandError(error))
+      .finally(() => setDcLoading(false))
+  }, [lines.length, dcNo, dcLoading])
 
   const challanOptions = useMemo(
     () => openRows.map((r) => ({ value: r.inward.id, label: r.inward.challanNo, subtitle: `${r.partNo} · heat ${r.inward.batchHeatNo} · avail ${intFmt(r.available)}` })),
@@ -280,7 +301,7 @@ export default function OutwardEntry({
                       <div className="mono font-medium">{r?.inward.challanNo ?? '—'}</div>
                       <div className={`text-[10px] ${c.over ? 'text-danger' : 'text-faint'}`}>{r?.partNo ?? ''} · {intFmt(c.total)}/{intFmt(c.avail)} avail{c.over ? ' ⚠' : ''}</div>
                     </td>
-                    <td className="px-2 py-1.5"><input value={ln.bill} onChange={(e) => setLine(ln.key, { bill: e.target.value })} placeholder="Our D/C" aria-label={`Line ${i + 1} our D/C no`} className="cell-input text-left" /></td>
+                    <td className="px-2 py-1.5"><input value={ln.bill} readOnly placeholder={dcLoading ? 'Generating…' : 'Auto'} aria-label={`Line ${i + 1} our D/C no`} className="cell-input cursor-not-allowed bg-muted text-left" /></td>
                     <td className="px-2 py-1.5"><input type="date" value={ln.dcDate} onChange={(e) => setLine(ln.key, { dcDate: e.target.value })} aria-label={`Line ${i + 1} our D.C date`} className="cell-input text-left" /></td>
                     <td className="px-2 py-1.5"><CellNum value={ln.ok} onChange={(v) => setLine(ln.key, { ok: v })} label={`Line ${i + 1} OK qty`} /></td>
                     <td className="px-2 py-1.5"><CellNum value={ln.mc} onChange={(v) => setLine(ln.key, { mc: v })} label={`Line ${i + 1} machine reject`} /></td>
@@ -322,7 +343,7 @@ export default function OutwardEntry({
       {/* Form bar */}
       <div className="flex flex-wrap items-center gap-2.5">
         {canCreate ? (
-          <Button leftIcon={<ReceiptText size={15} />} onClick={onSave} loading={submitting} disabled={over || computed.totals.total <= 0}>
+          <Button leftIcon={<ReceiptText size={15} />} onClick={onSave} loading={submitting || dcLoading} disabled={over || computed.totals.total <= 0 || !dcNo}>
             Create draft invoice
           </Button>
         ) : null}

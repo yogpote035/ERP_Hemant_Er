@@ -412,14 +412,18 @@ export default function InwardRegister({
           ) : null}
           onValid={(v) => onInwardValid(v as InwardFormValues)}
           deriveOnChange={(changed, values, setValue) => {
-            // Auto-fill RM rate / RM wt / finish wt from the selected part (editable).
+            // Auto-fill every inward value controlled by the selected catalogue
+            // part. Missing master values become blank so the operator can enter
+            // them manually and never accidentally retain another part's value.
             if (changed !== 'partId' || !values.partId) return
             const part = getById(useStore.getState().masters.parts, values.partId as string)
             if (!part) return
-            if (part.rmRatePaise != null) setValue('rmRate', fromPaise(part.rmRatePaise))
-            if (part.rmWtMg != null) setValue('rmWtG', part.rmWtMg / 1000)
-            setValue('finishWtG', part.finishWtMg / 1000)
-            if (part.defaultPoNo) setValue('poNo', part.defaultPoNo)
+            const options = { shouldDirty: true, shouldValidate: true }
+            setValue('unitId', part.unitId, options)
+            setValue('poNo', part.defaultPoNo ?? '', options)
+            setValue('rmRate', part.rmRatePaise != null ? fromPaise(part.rmRatePaise) : undefined, options)
+            setValue('rmWtG', part.rmWtMg != null ? part.rmWtMg / 1000 : undefined, options)
+            setValue('finishWtG', part.finishWtMg > 0 ? part.finishWtMg / 1000 : undefined, options)
           }}
           onClose={() => { setInwardModal(null); bumpRefresh() }}
         />

@@ -59,6 +59,7 @@ async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
   try {
     res = await fetch(BASE + path, {
       method: opts.method ?? 'GET',
+      cache: 'no-store',
       headers: {
         'content-type': 'application/json',
         ...(token ? { authorization: `Bearer ${token}` } : {}),

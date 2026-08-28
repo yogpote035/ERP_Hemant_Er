@@ -33,7 +33,7 @@ export const inwardFields: FieldSpec[] = [
   { kind: 'select', name: 'unitId', label: 'Assigned Unit', required: true, options: unitOptions },
   { kind: 'text', name: 'challanNo', label: 'Challan no.', required: true },
   { kind: 'date', name: 'challanDate', label: 'Challan date', required: true },
-  { kind: 'select', name: 'partId', label: 'Catalogue part', required: true, options: partOptions, hint: 'Selecting a master part prefills controlled rate and weight fields.' },
+  { kind: 'select', name: 'partId', label: 'Catalogue part', required: true, options: partOptions, hint: 'Prefills assigned unit, PO, RM rate and weights when present; missing values remain editable.' },
   { kind: 'text', name: 'poNo', label: 'PO no.' },
   { kind: 'text', name: 'dieNo', label: 'Die no.' },
   { kind: 'text', name: 'batchHeatNo', label: 'Batch / heat no.', required: true },

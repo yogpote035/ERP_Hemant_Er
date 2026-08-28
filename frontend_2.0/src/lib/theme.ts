@@ -4,8 +4,11 @@
  */
 export type ThemeMode = 'light' | 'dark'
 
+const THEME_KEY = 'hew-erp-theme'
+
 export function getStoredTheme(): ThemeMode | null {
-  return null
+  const value = localStorage.getItem(THEME_KEY)
+  return value === 'light' || value === 'dark' ? value : null
 }
 
 export function systemPrefersDark(): boolean {
@@ -24,6 +27,7 @@ export function applyTheme(mode: ThemeMode): void {
 }
 
 export function setTheme(mode: ThemeMode): void {
+  localStorage.setItem(THEME_KEY, mode)
   applyTheme(mode)
 }
 
