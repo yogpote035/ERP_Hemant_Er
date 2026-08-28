@@ -5,11 +5,23 @@
  * Dynamic-imported from the Billing page so the heavy renderer never lands in the
  * main bundle. Takes a plain `InvoiceDocModel` (built by selectors) — no store access.
  */
-import { Document, Page, View, Text, StyleSheet, pdf } from '@react-pdf/renderer'
+import { Document, Page, View, Text, StyleSheet, Svg, Path, pdf } from '@react-pdf/renderer'
 import { formatINR, type Paise } from './money'
 import { packingLineLabel, packingTotal, type InvoiceDocModel } from '@/selectors/invoiceCompute'
 
-const R = (p: Paise) => `₹ ${formatINR(p)}`
+/** Vector rupee mark: PDF-safe because it does not depend on font glyph support. */
+function RupeeAmount({ value, grand = false }: { value: Paise; grand?: boolean }) {
+  const color = grand ? '#ffffff' : '#0f172a'
+  const size = grand ? 10 : 7
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Path d="M6 3h12M6 8h12M6 13h3c6.667 0 6.667-10 0-10M6 13l8.5 8" stroke={color} strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
+      <Text style={grand ? s.grandT : undefined}> {formatINR(value)}</Text>
+    </View>
+  )
+}
 
 const C = { line: '#94a3b8', soft: '#cbd5e1', head: '#f1f5f9', ink: '#0f172a', sub: '#475569', faint: '#64748b', brand: '#1e3a8a' }
 
@@ -185,17 +197,17 @@ function InvoicePage({ m, copyLabel }: { m: InvoiceDocModel; copyLabel: typeof C
             ) : <Text>—</Text>}
           </View>
           <View style={{ width: '42%', padding: 5 }}>
-            <View style={s.totRow}><Text>Assessable Value</Text><Text>{R(m.totals.assessable)}</Text></View>
+            <View style={s.totRow}><Text>Assessable Value</Text><RupeeAmount value={m.totals.assessable} /></View>
             {intra ? (
               <>
-                <View style={s.totRow}><Text>CGST{half != null ? ` @ ${half}%` : ''}</Text><Text>{R(m.totals.cgst)}</Text></View>
-                <View style={s.totRow}><Text>SGST{half != null ? ` @ ${half}%` : ''}</Text><Text>{R(m.totals.sgst)}</Text></View>
+                <View style={s.totRow}><Text>CGST{half != null ? ` @ ${half}%` : ''}</Text><RupeeAmount value={m.totals.cgst} /></View>
+                <View style={s.totRow}><Text>SGST{half != null ? ` @ ${half}%` : ''}</Text><RupeeAmount value={m.totals.sgst} /></View>
               </>
             ) : (
-              <View style={s.totRow}><Text>IGST{m.uniformGstPct != null ? ` @ ${m.uniformGstPct}%` : ''}</Text><Text>{R(m.totals.igst)}</Text></View>
+              <View style={s.totRow}><Text>IGST{m.uniformGstPct != null ? ` @ ${m.uniformGstPct}%` : ''}</Text><RupeeAmount value={m.totals.igst} /></View>
             )}
             <View style={s.totRow}><Text>Rounding off (+/-)</Text><Text>{formatINR(m.totals.roundOff)}</Text></View>
-            <View style={s.grand}><Text style={s.grandT}>Grand Total</Text><Text style={s.grandT}>{R(m.totals.grand)}</Text></View>
+            <View style={s.grand}><Text style={s.grandT}>Grand Total</Text><RupeeAmount value={m.totals.grand} grand /></View>
           </View>
         </View>
 

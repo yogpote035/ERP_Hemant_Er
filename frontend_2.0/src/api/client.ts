@@ -47,6 +47,7 @@ interface RequestOpts {
 }
 
 const DEFAULT_TIMEOUT = 20_000
+const WRITE_TIMEOUT = 60_000
 
 async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
   if (!apiEnabled()) throw new ApiError(0, 'API mode is disabled (VITE_API_BASE not set)')
@@ -112,8 +113,8 @@ export const api = {
   data: requestData,
   objectUrl,
   get: <T>(path: string) => requestData<T>(path),
-  post: <T>(path: string, body?: unknown) => requestData<T>(path, { method: 'POST', body }),
-  put: <T>(path: string, body?: unknown) => requestData<T>(path, { method: 'PUT', body }),
-  patch: <T>(path: string, body?: unknown) => requestData<T>(path, { method: 'PATCH', body }),
-  del: <T>(path: string) => requestData<T>(path, { method: 'DELETE' }),
+  post: <T>(path: string, body?: unknown) => requestData<T>(path, { method: 'POST', body, timeoutMs: WRITE_TIMEOUT }),
+  put: <T>(path: string, body?: unknown) => requestData<T>(path, { method: 'PUT', body, timeoutMs: WRITE_TIMEOUT }),
+  patch: <T>(path: string, body?: unknown) => requestData<T>(path, { method: 'PATCH', body, timeoutMs: WRITE_TIMEOUT }),
+  del: <T>(path: string) => requestData<T>(path, { method: 'DELETE', timeoutMs: WRITE_TIMEOUT }),
 }

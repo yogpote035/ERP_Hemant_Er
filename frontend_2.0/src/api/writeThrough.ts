@@ -221,7 +221,9 @@ async function sync(name: CommandName, input: unknown, result: unknown, module: 
   if (handler) {
     try {
       await handler(input, result, module)
-      if (isCreateCommand(name, input)) await refreshAllData()
+      // Reload only after the server confirms the write. This prevents an edit
+      // drawer's list refresh from racing the PUT and restoring stale values.
+      await refreshAllData()
     } catch {
       toast.warning('Backend sync failed — changes saved locally.')
     }
@@ -240,22 +242,4 @@ function storedInvoice(id: string): any { // eslint-disable-line @typescript-esl
   return useStore.getState().billing.invoices.byId[id]
 }
 
-/** Commands that add records and therefore need an immediate server-authoritative reload. */
-function isCreateCommand(name: CommandName, input: unknown): boolean {
-  const value = input as { id?: string; existingId?: string | null } | null
-  if (name === 'saveInward' || name === 'saveScrapBill' || name === 'saveExpense' || name === 'saveRejectionAdvice') {
-    return !value?.id
-  }
-  if (name === 'saveMaster') return !value?.existingId && !value?.id
-  return [
-    'saveOutwardDispatch',
-    'finalizeInvoice',
-    'recordPayment',
-    'recordExpensePayment',
-    'saveProductionAttendance',
-    'saveShiftAttendance',
-    'createUser',
-    'createRole',
-  ].includes(name)
-}
 /* eslint-enable @typescript-eslint/no-explicit-any */

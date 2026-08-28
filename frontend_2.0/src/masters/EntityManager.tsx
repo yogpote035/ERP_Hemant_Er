@@ -36,17 +36,13 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
     () => (spec.unitScoped ? allRows.filter((r) => r.unitId != null && allowed.has(r.unitId)) : allRows),
     [allRows, allowed, spec]
   )
-  // Server-driven in API mode (paging/searching hits GET /masters/:entity with real
-  // DB LIMIT/OFFSET + cursor); client-side over scopedRows in local mode. A write
-  // bumps refreshKey so the fetched page reflects it.
-  const [refreshKey, setRefreshKey] = useState(0)
-  const bumpRefresh = () => setTimeout(() => setRefreshKey((k) => k + 1), 400)
+  // Server-driven in API mode. Successful writes trigger refreshAllData only
+  // after the backend responds, avoiding stale GET-vs-PUT races.
   const paged = usePagedSource({
     localRows: scopedRows,
     endpoint: MASTER_SEGMENT[spec.key] ? `/masters/${MASTER_SEGMENT[spec.key]}` : '',
     searchText: spec.searchText,
     pageSize: 25,
-    refreshKey,
   })
   const helpers = useRenderHelpers()
 
@@ -58,7 +54,6 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
     try {
       const res = spec.remove(deleting) // the command handles soft vs hard delete
       toast.success(res.cascade[0] ?? 'Done')
-      bumpRefresh()
     } catch (e) {
       toastCommandError(e)
     } finally {
@@ -70,7 +65,6 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
     try {
       spec.setActive(row, true)
       toast.success(`${spec.label} reactivated`)
-      bumpRefresh()
     } catch (e) {
       toastCommandError(e)
     }
@@ -227,7 +221,7 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
           key={editing.row?.id ?? '__new__'}
           spec={spec}
           existing={editing.row}
-          onClose={() => { setEditing(null); bumpRefresh() }}
+          onClose={() => setEditing(null)}
         />
       ) : null}
 
