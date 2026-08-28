@@ -98,9 +98,10 @@ const REGISTRY: Record<string, MasterCfg> = {
     }),
   },
   vendors: {
-    idPrefix: 'vnd', module: 'masters', unitScoped: false, softDelete: true,
+    idPrefix: 'vnd', module: 'masters', unitScoped: true, softDelete: true,
     collection: (s) => s.masters.vendors as unknown as Normalized<Entity>,
     schema: z.object({
+      unitId: z.string().min(1),
       name: z.string().min(1), code: z.string().min(1), type: z.enum(['rm', 'service']),
       contactPerson: z.string().optional(), phone: z.string().optional(), email: z.string().optional(),
       gstin: z.string().optional(), pan: z.string().optional(), stateCode: z.string().optional(),

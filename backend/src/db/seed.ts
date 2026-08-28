@@ -77,9 +77,9 @@ const CUSTOMERS: Customer[] = [
   { id: 'c3', name: 'SKF India Ltd', gstin: '29AAACS1234D1Z1', stateCode: '29', addressLines: ['Mahadevapura', 'Bangalore 560048', 'Karnataka'], paymentTermsDays: 30, active: true },
 ]
 const VENDORS: Vendor[] = [
-  { id: 'v1', name: 'Sunflag Iron & Steel', code: 'VND-001', type: 'rm', gstin: '27AAACS5678E1Z3', pan: 'AAACS5678E', stateCode: '27', addressLines: ['Bhandara Road', 'Nagpur 441401'], city: 'Nagpur', pincode: '441401', bankName: 'SBI', accountNo: '3012345678', ifsc: 'SBIN0001234', invoiceFormat: 'SUN/{FY}/{seq}', active: true },
-  { id: 'v2', name: 'Pune Tool Traders', code: 'VND-002', type: 'service', gstin: '27AAFCP4321F1Z9', stateCode: '27', addressLines: ['Shivajinagar', 'Pune 411005'], active: true },
-  { id: 'v3', name: 'Khed Coolants & Oils', code: 'VND-003', type: 'service', stateCode: '27', addressLines: ['Chakan', 'Pune 410501'], active: true },
+  { id: 'v1', unitId: 'u1', name: 'Sunflag Iron & Steel', code: 'VND-001', type: 'rm', gstin: '27AAACS5678E1Z3', pan: 'AAACS5678E', stateCode: '27', addressLines: ['Bhandara Road', 'Nagpur 441401'], city: 'Nagpur', pincode: '441401', bankName: 'SBI', accountNo: '3012345678', ifsc: 'SBIN0001234', invoiceFormat: 'SUN/{FY}/{seq}', active: true },
+  { id: 'v2', unitId: 'u1', name: 'Pune Tool Traders', code: 'VND-002', type: 'service', gstin: '27AAFCP4321F1Z9', stateCode: '27', addressLines: ['Shivajinagar', 'Pune 411005'], active: true },
+  { id: 'v3', unitId: 'u1', name: 'Khed Coolants & Oils', code: 'VND-003', type: 'service', stateCode: '27', addressLines: ['Chakan', 'Pune 410501'], active: true },
 ]
 
 const USERS: User[] = [
@@ -222,7 +222,7 @@ function bulkSeed(s: RootState): number {
   for (let i = 0; i < 37; i++) {
     putEntity(s.masters.vendors, {
       id: `vb${i}`, name: `${pick(['Sunrise', 'Metro', 'Pune', 'Nagpur', 'Krishna', 'Global'], i)} ${pick(['Steel', 'Tools', 'Coolants', 'Logistics', 'Traders'], i + 1)} ${i + 1}`,
-      code: `VND-${pad(100 + i)}`, type: i % 2 ? 'service' : 'rm', stateCode: '27',
+      unitId: pick(ALL_UNIT_IDS, i), code: `VND-${pad(100 + i)}`, type: i % 2 ? 'service' : 'rm', stateCode: '27',
       addressLines: [`Gala ${i + 1}, Bhosari`, `Pune ${411000 + i}`], city: 'Pune', active: i % 11 !== 0,
     })
   }

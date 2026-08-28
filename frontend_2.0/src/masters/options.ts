@@ -39,6 +39,19 @@ export const rmVendorOptions = (s: RootState): SelectOption[] =>
 export const serviceVendorOptions = (s: RootState): SelectOption[] =>
   values(s.masters.vendors).filter((v) => v.active && v.type === 'service').map(vendorOpt)
 
+/** Vendors usable for an expense in one selected unit. Explicit unit assignment
+ * is preferred; older vendors are inferred only from transactions in that unit. */
+export const vendorOptionsForUnit = (unitId: string) => (s: RootState): SelectOption[] => {
+  if (!unitId || !writableUnitIds(s).has(unitId)) return []
+  const historicallyUsed = new Set([
+    ...values(s.expenses.expenses).filter((e) => e.unitId === unitId).map((e) => e.vendorId),
+    ...values(s.inventory.inwards).filter((i) => i.unitId === unitId).map((i) => i.vendorId),
+  ].filter((id): id is string => Boolean(id)))
+  return values(s.masters.vendors)
+    .filter((v) => v.active && (v.unitId === unitId || (!v.unitId && historicallyUsed.has(v.id))))
+    .map(vendorOpt)
+}
+
 export const customerOptions = (s: RootState): SelectOption[] =>
   values(s.masters.customers)
     .filter((c) => c.active)

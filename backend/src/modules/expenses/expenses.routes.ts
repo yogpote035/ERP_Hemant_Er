@@ -45,10 +45,10 @@ const createExpenseSchema = z.object({
   quantity: z.number().nonnegative().optional(),
   ratePaise: z.number().int().nonnegative().optional(),
   subTotalPaise: z.number().int().nonnegative().optional(),
-  igstPct: z.number().nonnegative().optional(),
-  cgstPct: z.number().nonnegative().optional(),
-  sgstPct: z.number().nonnegative().optional(),
-  tcsPct: z.number().nonnegative().optional(),
+  igstPct: z.number().min(0).max(100).optional(),
+  cgstPct: z.number().min(0).max(100).optional(),
+  sgstPct: z.number().min(0).max(100).optional(),
+  tcsPct: z.number().min(0).max(100).optional(),
   supplierInvoiceNo: z.string().optional(),
   totalPaise: z.number().int(),
   instalments: z.array(instalmentSchema).optional(),
@@ -94,6 +94,18 @@ function toRow(e: Expense, vendorName: string) {
   }
 }
 
+function validateVendorUnit(s: ReturnType<typeof getDb>, vendorId: string | undefined, unitId: string) {
+  if (!vendorId) return
+  const vendor = getById(s.masters.vendors, vendorId)
+  if (!vendor || !vendor.active) throw badRequest('Unknown or inactive vendor')
+  if (vendor.unitId && vendor.unitId !== unitId) throw badRequest('Vendor does not belong to the selected unit')
+  if (!vendor.unitId) {
+    const usedInUnit = values(s.expenses.expenses).some((e) => e.unitId === unitId && e.vendorId === vendorId) ||
+      values(s.inventory.inwards).some((i) => i.unitId === unitId && i.vendorId === vendorId)
+    if (!usedInUnit) throw badRequest('Assign this vendor to the selected unit in Vendor Management first')
+  }
+}
+
 // ── router ───────────────────────────────────────────────────────────────────
 export const expensesRouter = Router()
 expensesRouter.use(authenticate)
@@ -132,6 +144,8 @@ expensesRouter.post(
     const s = getDb()
 
     assertUnit(req, input.unitId)
+    validateVendorUnit(s, input.vendorId, input.unitId)
+    if ((input.igstPct ?? 0) > 0 && ((input.cgstPct ?? 0) > 0 || (input.sgstPct ?? 0) > 0)) throw badRequest('Use either IGST or CGST + SGST, not both')
     if (!input.category.trim()) throw badRequest('Description is required')
     if (!(input.totalPaise > 0)) throw badRequest('Total payable must be greater than 0')
     if (input.totalPaise > 1e13) throw badRequest('Amount is implausibly large')
@@ -188,6 +202,8 @@ expensesRouter.put(
     if (!existing) throw notFound('Expense not found')
     assertUnit(req, existing.unitId)
     assertUnit(req, input.unitId)
+    validateVendorUnit(s, input.vendorId, input.unitId)
+    if ((input.igstPct ?? 0) > 0 && ((input.cgstPct ?? 0) > 0 || (input.sgstPct ?? 0) > 0)) throw badRequest('Use either IGST or CGST + SGST, not both')
     if (!input.category.trim()) throw badRequest('Description is required')
     if (!(input.totalPaise > 0)) throw badRequest('Total payable must be greater than 0')
     if (input.totalPaise > 1e13) throw badRequest('Amount is implausibly large')

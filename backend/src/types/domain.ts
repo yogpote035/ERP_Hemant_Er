@@ -51,6 +51,8 @@ export type VendorType = 'rm' | 'service'
 
 export interface Vendor {
   id: Id
+  /** Unit that owns and may use this vendor. Legacy records can be inferred from transactions. */
+  unitId?: Id
   name: string
   code: string
   type: VendorType

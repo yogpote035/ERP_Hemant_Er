@@ -3,7 +3,7 @@
  * payments. Balance + status are DERIVED (selectors/finance.ts); the store
  * holds the total and the instalment list only.
  */
-import type { Expense, Id, ISODate, PaymentMode } from '@/types/domain'
+import type { Expense, ExpenseInstalment, Id, ISODate, PaymentMode } from '@/types/domain'
 import type { Paise } from '@/lib/money'
 import { formatINRSymbol } from '@/lib/money'
 import { expenseBalance } from '@/selectors/finance'
@@ -32,15 +32,32 @@ export interface ExpenseInput {
   tcsPct?: number
   supplierInvoiceNo?: string
   totalPaise: Paise
+  /** Optional payment captured together with a newly-created supplier invoice. */
+  instalments?: ExpenseInstalment[]
 }
 
 function validateExpense(s: RootState, input: ExpenseInput): { ok: true } | { ok: false; errors: string[] } {
   const errors: string[] = []
   if (!writableUnitIds(s).has(input.unitId)) errors.push("You don't have access to that unit")
+  if (input.vendorId) {
+    const vendor = getById(s.masters.vendors, input.vendorId)
+    if (!vendor || !vendor.active) errors.push('Unknown or inactive vendor')
+    else if (vendor.unitId && vendor.unitId !== input.unitId) errors.push('Vendor does not belong to the selected unit')
+    else if (!vendor.unitId) {
+      const usedInUnit = Object.values(s.expenses.expenses.byId).some((e) => e?.unitId === input.unitId && e.vendorId === input.vendorId) ||
+        Object.values(s.inventory.inwards.byId).some((i) => i?.unitId === input.unitId && i.vendorId === input.vendorId)
+      if (!usedInUnit) errors.push('Assign this vendor to the selected unit in Vendor Management first')
+    }
+  }
   if (!input.category.trim()) errors.push('Description is required')
+  if (!input.id && !input.vendorId) errors.push('Supplier name is required')
   if (!input.date) errors.push('Date is required')
   if (!(input.totalPaise > 0)) errors.push('Total payable must be greater than 0')
   else if (input.totalPaise > 1e13) errors.push('Amount is implausibly large') // ~₹10,000 cr guard vs fat-finger / exponent paste
+  if ((input.igstPct ?? 0) > 0 && ((input.cgstPct ?? 0) > 0 || (input.sgstPct ?? 0) > 0)) errors.push('Use either IGST or CGST + SGST, not both')
+  for (const pct of [input.igstPct, input.cgstPct, input.sgstPct, input.tcsPct]) if ((pct ?? 0) > 100) errors.push('Tax percentages cannot exceed 100%')
+  const initialPaid = (input.instalments ?? []).reduce((sum, p) => sum + p.amountPaise, 0)
+  if (initialPaid > input.totalPaise) errors.push('Payment amount cannot exceed grand total')
   if (input.id) {
     const existing = getById(s.expenses.expenses, input.id)
     if (existing) {
@@ -73,7 +90,7 @@ function applyExpense(draft: RootState, input: ExpenseInput, ctx: CommandContext
     tcsPct: input.tcsPct,
     supplierInvoiceNo: input.supplierInvoiceNo,
     totalPaise: input.totalPaise,
-    instalments: existing?.instalments ?? [],
+    instalments: existing?.instalments ?? input.instalments ?? [],
     createdBy: existing?.createdBy ?? ctx.actor.id,
     createdAt: existing?.createdAt ?? ctx.now,
   }

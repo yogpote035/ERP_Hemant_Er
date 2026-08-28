@@ -5,7 +5,7 @@ import { formatINRSymbol, formatINRCompact, fromPaise, toPaise, type Paise } fro
 import { formatDMY, todayISO } from '@/lib/date'
 import type { Expense, PaymentMode } from '@/types/domain'
 import { useStore } from '@/store'
-import { unitOptions, serviceVendorOptions } from '@/masters/options'
+import { unitOptions, vendorOptionsForUnit } from '@/masters/options'
 import { runSaveExpense, runRecordExpensePayment, runDeleteExpense } from '@/store/expenseCommands'
 import { selectExpenseRows, selectVendorOutstanding, type ExpenseRow, type ExpenseStatus } from '@/selectors/finance'
 import { useCan } from '@/hooks/useCan'
@@ -19,11 +19,11 @@ const numOf = (v: string) => {
 }
 const STATUS_TONE: Record<ExpenseStatus, BadgeTone> = { unpaid: 'primary', partial: 'warning', overdue: 'danger', paid: 'success' }
 const MODES: PaymentMode[] = ['rtgs', 'neft', 'cheque', 'upi', 'cash', 'bank']
+const PAYMENT_MODE_OPTIONS = MODES.map((mode) => ({ value: mode, label: mode.toUpperCase() }))
 
 export default function Expenses() {
   const can = useCan()
   const units = useStore(unitOptions)
-  const vendors = useStore(serviceVendorOptions)
   const rows = useStore(useShallow(selectExpenseRows))
   const vendorOut = useStore(useShallow(selectVendorOutstanding))
   const totalPaid = rows.reduce((a, r) => a + r.paid, 0)
@@ -153,8 +153,8 @@ export default function Expenses() {
         </Card>
       )}
 
-      {creating ? <ExpenseForm units={units} vendors={vendors} onClose={() => { setCreating(false); bumpRefresh() }} /> : null}
-      {editing ? <ExpenseForm units={units} vendors={vendors} existing={editing} onClose={() => { setEditing(null); bumpRefresh() }} /> : null}
+      {creating ? <ExpenseForm units={units} onClose={() => { setCreating(false); bumpRefresh() }} /> : null}
+      {editing ? <ExpenseForm units={units} existing={editing} onClose={() => { setEditing(null); bumpRefresh() }} /> : null}
       {paying ? <PayModal row={paying} onClose={() => { setPaying(null); bumpRefresh() }} /> : null}
       <ConfirmDialog
         open={deleting != null}
@@ -176,17 +176,16 @@ export default function Expenses() {
 
 function ExpenseForm({
   units,
-  vendors,
   existing,
   onClose,
 }: {
   units: { value: string; label: string }[]
-  vendors: { value: string; label: string }[]
   existing?: Expense
   onClose: () => void
 }) {
   const [unitId, setUnitId] = useState(existing?.unitId ?? '')
   const [vendorId, setVendorId] = useState(existing?.vendorId ?? '')
+  const vendors = useStore(vendorOptionsForUnit(unitId))
   // "Description" is the renamed Category field — stored on expense.category.
   const [description, setDescription] = useState(existing?.category ?? '')
   const [hsnSac, setHsnSac] = useState(existing?.hsnSac ?? '')
@@ -208,7 +207,11 @@ function ExpenseForm({
   const [supplierInvoiceNo, setSupplierInvoiceNo] = useState(existing?.supplierInvoiceNo ?? '')
   const [date, setDate] = useState(existing?.date ?? todayISO())
   const [dueDate, setDueDate] = useState(existing?.dueDate ?? '')
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>('bank')
+  const [paymentDate, setPaymentDate] = useState(todayISO())
+  const [paymentAmount, setPaymentAmount] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const supplier = useStore((s) => vendorId ? s.masters.vendors.byId[vendorId] : undefined)
 
   // Live math: Sub Total = Qty × Rate; each GST/TCS % applies to the sub total;
   // Total Amount = Sub Total + all taxes. Sub Total and Total are read-only.
@@ -222,6 +225,9 @@ function ExpenseForm({
   const tcsAmt = pctAmt(tcsPct)
   const gstTotal = (igstAmt + cgstAmt + sgstAmt + tcsAmt) as Paise
   const totalPaise = (subTotalPaise + gstTotal) as Paise
+  const existingPaidPaise = (existing?.instalments ?? []).reduce((sum, p) => (sum + p.amountPaise) as Paise, 0 as Paise)
+  const paymentPaise = existing ? existingPaidPaise : toPaise(numOf(paymentAmount))
+  const balancePaise = Math.max(0, totalPaise - paymentPaise) as Paise
 
   function onSave() {
     setSubmitting(true)
@@ -243,6 +249,7 @@ function ExpenseForm({
         tcsPct: numOf(tcsPct) || undefined,
         supplierInvoiceNo: supplierInvoiceNo.trim() || undefined,
         totalPaise,
+        instalments: !existing && paymentPaise > 0 ? [{ date: paymentDate, amountPaise: paymentPaise, mode: paymentMode }] : undefined,
       })
       toastCommandSuccess(existing ? 'Expense updated' : 'Expense saved', res.cascade)
       onClose()
@@ -262,30 +269,33 @@ function ExpenseForm({
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button onClick={onSave} loading={submitting} disabled={!unitId || !description.trim() || totalPaise <= 0}>{existing ? 'Save changes' : 'Save expense'}</Button>
+          <Button onClick={onSave} loading={submitting} disabled={!unitId || (!existing && !vendorId) || !description.trim() || (!existing && !supplierInvoiceNo.trim()) || totalPaise <= 0 || paymentPaise > totalPaise}>{existing ? 'Save changes' : 'Save expense'}</Button>
         </>
       }
     >
       <div className="space-y-3">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Fld label="Unit">
-            <SearchableDropdown aria-label="Unit" value={unitId} onChange={(v) => setUnitId(v)} options={units} placeholder="Select unit…" />
+            <SearchableDropdown aria-label="Unit" value={unitId} onChange={(v) => { setUnitId(v); setVendorId('') }} options={units} placeholder="Select unit…" />
           </Fld>
-          <Fld label="Vendor (optional)">
-            <SearchableDropdown aria-label="Vendor" value={vendorId} onChange={(v) => setVendorId(v)} options={vendors} placeholder="— none —" />
+          <Fld label="Supplier name">
+            <SearchableDropdown aria-label="Supplier name" value={vendorId} onChange={(v) => setVendorId(v)} options={vendors} placeholder={unitId ? 'Select supplier…' : 'Select unit first…'} />
           </Fld>
+          <Fld label="Supplier GSTIN"><input readOnly className="input h-9 bg-muted mono text-muted-fg" value={supplier?.gstin ?? ''} placeholder="Loaded from supplier" /></Fld>
+          <Fld label="Supplier invoice number"><input className="input h-9 mono" value={supplierInvoiceNo} onChange={(e) => setSupplierInvoiceNo(e.target.value)} placeholder="Supplier's bill no." /></Fld>
+          <Fld label="Invoice date"><input type="date" className="input h-9" value={date} onChange={(e) => setDate(e.target.value)} /></Fld>
+          <Fld label="SAC / HSN code"><input className="input h-9 mono" value={hsnSac} onChange={(e) => setHsnSac(e.target.value)} placeholder="e.g. 27101990" /></Fld>
+          <Fld label="Qty"><input type="number" min={0} step="any" className="input h-9" value={quantity} onChange={(e) => setQuantity(e.target.value)} /></Fld>
+          <Fld label="Rate / pc (₹)"><input type="number" min={0} step="0.01" className="input h-9" value={rate} onChange={(e) => setRate(e.target.value)} /></Fld>
+          <Fld label="Subtotal"><Computed value={subTotalPaise} /></Fld>
           <Fld label="Description"><input className="input h-9" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Item / service description" /></Fld>
-          <Fld label="HSN Code"><input className="input h-9 mono" value={hsnSac} onChange={(e) => setHsnSac(e.target.value)} placeholder="e.g. 27101990" /></Fld>
-          <Fld label="Quantity"><input type="number" min={0} step="any" className="input h-9" value={quantity} onChange={(e) => setQuantity(e.target.value)} /></Fld>
-          <Fld label="Rate (₹)"><input type="number" min={0} step="0.01" className="input h-9" value={rate} onChange={(e) => setRate(e.target.value)} /></Fld>
-          <Fld label="Sub Total (Qty × Rate)"><Computed value={subTotalPaise} /></Fld>
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Fld label="IGST %"><input type="number" min={0} step="0.01" className="input h-9" value={igstPct} onChange={(e) => setIgstPct(e.target.value)} /></Fld>
-          <Fld label="CGST %"><input type="number" min={0} step="0.01" className="input h-9" value={cgstPct} onChange={(e) => setCgstPct(e.target.value)} /></Fld>
-          <Fld label="SGST %"><input type="number" min={0} step="0.01" className="input h-9" value={sgstPct} onChange={(e) => setSgstPct(e.target.value)} /></Fld>
-          <Fld label="TCS %"><input type="number" min={0} step="0.01" className="input h-9" value={tcsPct} onChange={(e) => setTcsPct(e.target.value)} /></Fld>
+          <Fld label={`CGST % · ${formatINRSymbol(cgstAmt)}`}><input type="number" min={0} max={100} step="0.01" className="input h-9" value={cgstPct} onChange={(e) => setCgstPct(e.target.value)} /></Fld>
+          <Fld label={`SGST % · ${formatINRSymbol(sgstAmt)}`}><input type="number" min={0} max={100} step="0.01" className="input h-9" value={sgstPct} onChange={(e) => setSgstPct(e.target.value)} /></Fld>
+          <Fld label={`IGST % · ${formatINRSymbol(igstAmt)}`}><input type="number" min={0} max={100} step="0.01" className="input h-9" value={igstPct} onChange={(e) => setIgstPct(e.target.value)} /></Fld>
+          <Fld label={`TCS % · ${formatINRSymbol(tcsAmt)}`}><input type="number" min={0} max={100} step="0.01" className="input h-9" value={tcsPct} onChange={(e) => setTcsPct(e.target.value)} /></Fld>
         </div>
         {gstTotal > 0 ? (
           <p className="text-[12px] text-muted-fg" aria-live="polite">
@@ -295,11 +305,23 @@ function ExpenseForm({
         ) : null}
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Fld label="Total Amount (Sub Total + GST)"><Computed value={totalPaise} strong /></Fld>
-          <Fld label="Supplier Invoice No"><input className="input h-9 mono" value={supplierInvoiceNo} onChange={(e) => setSupplierInvoiceNo(e.target.value)} placeholder="Supplier's bill no." /></Fld>
-          <Fld label="Date"><input type="date" className="input h-9" value={date} onChange={(e) => setDate(e.target.value)} /></Fld>
+          <Fld label="Grand total"><Computed value={totalPaise} strong /></Fld>
           <Fld label="Due date (optional)"><input type="date" className="input h-9" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></Fld>
+          <Fld label="Mode of payment">
+            <SearchableDropdown
+              aria-label="Mode of payment"
+              value={paymentMode}
+              onChange={(value) => setPaymentMode(value as PaymentMode)}
+              options={PAYMENT_MODE_OPTIONS}
+              searchable={false}
+              disabled={Boolean(existing)}
+            />
+          </Fld>
+          <Fld label="Payment date"><input type="date" className="input h-9" value={existing?.instalments.at(-1)?.date ?? paymentDate} onChange={(e) => setPaymentDate(e.target.value)} disabled={Boolean(existing)} /></Fld>
+          <Fld label="Payment amount"><input type="number" min={0} max={fromPaise(totalPaise)} step="0.01" className="input h-9" value={existing ? fromPaise(existingPaidPaise) : paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} disabled={Boolean(existing)} /></Fld>
+          <Fld label="Balance"><Computed value={balancePaise} strong /></Fld>
         </div>
+        {paymentPaise > totalPaise ? <p className="text-[12px] text-danger">Payment amount cannot exceed the grand total.</p> : null}
       </div>
     </Drawer>
   )
@@ -364,7 +386,8 @@ function PayModal({ row, onClose }: { row: ExpenseRow; onClose: () => void }) {
             aria-label="Mode"
             value={mode}
             onChange={(v) => setMode(v as PaymentMode)}
-            options={MODES.map((m) => ({ value: m, label: m.toUpperCase() }))}
+            options={PAYMENT_MODE_OPTIONS}
+            searchable={false}
           />
         </Fld>
         <Fld label="Ref"><input className="input h-9" value={ref} onChange={(e) => setRef(e.target.value)} /></Fld>

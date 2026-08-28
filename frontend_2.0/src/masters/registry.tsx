@@ -265,6 +265,7 @@ const partMaster = defineMaster<Part, PartForm>({
 
 // ── Vendors ─────────────────────────────────────────────────────────────────────
 const vendorSchema = z.object({
+  unitId: z.string().min(1, 'Required'),
   name: z.string().min(1, 'Required'),
   code: z.string().min(1, 'Required'),
   type: z.enum(['rm', 'service']),
@@ -295,17 +296,20 @@ const vendorMaster = defineMaster<Vendor, VendorForm>({
   icon: Truck,
   idPrefix: 'vnd',
   softDelete: true,
+  unitScoped: true,
   collection: (s) => s.masters.vendors,
   schema: vendorSchema,
   columns: [
     { key: 'code', header: 'Code', render: (v) => <span className="font-medium">{v.code}</span> },
     { key: 'name', header: 'Name', render: (v) => v.name },
+    { key: 'unit', header: 'Unit', render: (v, h) => v.unitId ? h.unitCode(v.unitId) : 'Unassigned' },
     { key: 'type', header: 'Type', render: (v) => <Badge tone={v.type === 'rm' ? 'primary' : 'default'}>{v.type === 'rm' ? 'RM' : 'Service'}</Badge> },
     { key: 'gstin', header: 'GSTIN', render: (v) => <span className="mono text-xs">{v.gstin ?? '—'}</span> },
     { key: 'active', header: 'Status', render: activeCell },
   ],
   fields: [
     { kind: 'text', name: 'name', label: 'Vendor name', required: true, colSpan: 2 },
+    { kind: 'select', name: 'unitId', label: 'Assigned Unit', required: true, options: unitOptions },
     { kind: 'text', name: 'code', label: 'Code', required: true },
     { kind: 'select', name: 'type', label: 'Type', required: true, options: [{ value: 'rm', label: 'Raw material' }, { value: 'service', label: 'Service' }] },
     { kind: 'text', name: 'contactPerson', label: 'Contact person' },
@@ -324,14 +328,14 @@ const vendorMaster = defineMaster<Vendor, VendorForm>({
   ],
   emptyForm: () => ({ type: 'service' }),
   toForm: (v) => ({
-    name: v.name, code: v.code, type: v.type, contactPerson: v.contactPerson ?? '',
+    unitId: v.unitId ?? '', name: v.name, code: v.code, type: v.type, contactPerson: v.contactPerson ?? '',
     phone: v.phone ?? '', email: v.email ?? '', gstin: v.gstin ?? '', pan: v.pan ?? '',
     stateCode: v.stateCode ?? '', city: v.city ?? '', pincode: v.pincode ?? '',
     addressLines: joinLines(v.addressLines), bankName: v.bankName ?? '',
     accountNo: v.accountNo ?? '', ifsc: v.ifsc ?? '', remarks: v.remarks ?? '',
   }),
   toEntity: (v, ctx) => ({
-    id: ctx.id, name: v.name.trim(), code: v.code.trim(), type: v.type,
+    id: ctx.id, unitId: v.unitId, name: v.name.trim(), code: v.code.trim(), type: v.type,
     contactPerson: opt(v.contactPerson), phone: opt(v.phone), email: opt(v.email),
     gstin: opt(v.gstin), pan: opt(v.pan), stateCode: opt(v.stateCode), city: opt(v.city),
     pincode: opt(v.pincode), addressLines: splitLines(v.addressLines), bankName: opt(v.bankName),
