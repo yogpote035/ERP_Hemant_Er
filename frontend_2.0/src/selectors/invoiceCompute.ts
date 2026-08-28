@@ -178,7 +178,7 @@ export function selectInvoicePdfModel(s: RootState, invoiceId: Id): InvoicePdfMo
   // Tax kind keys off the ISSUER's state (a supplier-issued bill uses the vendor's
   // state, not the unit's) — must match selectInvoiceDocModel / finalize.
   const issuerState = issuerVendor?.stateCode ?? unit?.stateCode
-  const taxKind: TaxKind = inv.taxKind ?? deriveTaxKind(issuerState, cust?.stateCode)
+  const taxKind: TaxKind = inv.taxKind ?? deriveTaxKind(issuerState, cust?.shippingStateCode || cust?.stateCode)
   const computed = computeInvoice(s, inv, taxKind)
   const totals = inv.totals ?? computed.totals
   const packing = inv.packing ?? computed.packing
@@ -274,6 +274,19 @@ export interface InvoiceDocModel {
   custPan?: string
   custState: string
   custAddress: string[]
+  // Consignee (shipped to) and customer commercial/contact details
+  shipName: string
+  shipGstin: string
+  shipPan?: string
+  shipState: string
+  shipAddress: string[]
+  contactPerson?: string
+  contactPhone?: string
+  contactEmail?: string
+  freightTerms?: string
+  transitInsuranceTerms?: string
+  gstType: 'Inter State' | 'Intra State'
+  sez: boolean
   // Body
   parts: InvoiceDocPartLine[]
   totals: InvoiceTotals
@@ -351,6 +364,12 @@ export function selectInvoiceDocModel(s: RootState, invoiceId: Id): InvoiceDocMo
   const custName = ps?.custName ?? cust?.name ?? '—'
   const custGstin = ps?.custGstin ?? cust?.gstin ?? ''
   const custAddress = ps?.custAddress ?? cust?.addressLines ?? []
+  const shipName = ps?.shippingName || cust?.shippingName || custName
+  const shipGstin = ps?.shippingGstin || cust?.shippingGstin || custGstin
+  const shipState = ps?.shippingStateCode || cust?.shippingStateCode || ps?.custStateCode || cust?.stateCode || ''
+  const shipAddress = ps?.shippingAddress?.length
+    ? ps.shippingAddress
+    : cust?.shippingAddressLines?.length ? cust.shippingAddressLines : custAddress
 
   return {
     invoiceNo: inv.billNo,
@@ -379,6 +398,18 @@ export function selectInvoiceDocModel(s: RootState, invoiceId: Id): InvoiceDocMo
     custPan: panFromGstin(custGstin),
     custState: ps?.custStateCode ?? cust?.stateCode ?? '',
     custAddress,
+    shipName,
+    shipGstin,
+    shipPan: panFromGstin(shipGstin),
+    shipState,
+    shipAddress,
+    contactPerson: ps?.custContactPerson ?? cust?.contactPerson,
+    contactPhone: ps?.custPhone ?? cust?.phone,
+    contactEmail: ps?.custEmail ?? cust?.email,
+    freightTerms: ps?.freightTerms ?? cust?.freightTerms,
+    transitInsuranceTerms: ps?.transitInsuranceTerms ?? cust?.transitInsuranceTerms,
+    gstType: taxKind === 'igst' ? 'Inter State' : 'Intra State',
+    sez: ps?.custSez ?? cust?.sez ?? false,
     parts,
     totals,
     packing: inv.packing ?? computed.packing,

@@ -208,7 +208,7 @@ invoicesRouter.post(
       const d = getById(draft.billing.invoices, inv.id) as Invoice
       const c = getById(draft.masters.customers, input.customerId)
       const issuerState = issuerStateOf(draft, d, input.issuerKind, input.issuerVendorId)
-      const taxKind = deriveTaxKind(issuerState, c?.stateCode)
+      const taxKind = deriveTaxKind(issuerState, c?.shippingStateCode || c?.stateCode)
       const { totals, packing, lines } = computeInvoice(draft, d, taxKind)
 
       const invoiceDate = input.invoiceDate || d.invoiceDate || todayISO()
@@ -234,6 +234,16 @@ invoicesRouter.post(
         custGstin: c?.gstin ?? '',
         custStateCode: c?.stateCode ?? '',
         custAddress: c?.addressLines ?? [],
+        shippingName: c?.shippingName || c?.name || '',
+        shippingAddress: c?.shippingAddressLines?.length ? c.shippingAddressLines : c?.addressLines ?? [],
+        shippingGstin: c?.shippingGstin || c?.gstin || '',
+        shippingStateCode: c?.shippingStateCode || c?.stateCode || '',
+        custContactPerson: c?.contactPerson,
+        custPhone: c?.phone,
+        custEmail: c?.email,
+        freightTerms: c?.freightTerms,
+        transitInsuranceTerms: c?.transitInsuranceTerms,
+        custSez: c?.sez ?? false,
         issuerName: issuerVendor?.name ?? issuerUnit?.name ?? '',
         issuerGstin: issuerVendor?.gstin ?? issuerUnit?.gstin ?? '',
         issuerStateCode: (issuerVendor?.stateCode ?? issuerUnit?.stateCode) ?? '',

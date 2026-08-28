@@ -235,21 +235,31 @@ const bodySchema = z.union([
 export const dispatchRouter = Router()
 dispatchRouter.use(authenticate)
 
+/** Full Indian financial-year label used by delivery challans (April–March). */
+function currentDcFinancialYear(now = new Date()): string {
+  const calendarYear = now.getFullYear()
+  const startYear = now.getMonth() >= 3 ? calendarYear : calendarYear - 1
+  return `${startYear}-${String(startYear + 1).slice(-2)}`
+}
+
 /** Reserve the next company D/C number for an outward-entry batch. */
 dispatchRouter.post(
   '/next-dc',
   requirePermission('dispatch', 'create'),
   asyncHandler(async (_req, res) => {
+    const fy = currentDcFinancialYear()
     const dcNo = await mutate((state) => {
-      const key = 'dispatch:dc'
+      // A separate counter per FY automatically resets the visible number to 01
+      // every April while preserving older challan sequences.
+      const key = `dispatch:dc:${fy}`
       const stored = state.system.sequences[key] ?? 0
       const existingMax = values(state.inventory.dispatches).reduce((max, dispatch) => {
-        const match = /^DC-(\d+)$/.exec(dispatch.billNo ?? '')
-        return match ? Math.max(max, Number(match[1])) : max
+        const match = /^(\d+)\/(\d{4}-\d{2})$/.exec(dispatch.billNo ?? '')
+        return match?.[2] === fy ? Math.max(max, Number(match[1])) : max
       }, 0)
       const next = Math.max(stored, existingMax) + 1
       state.system.sequences[key] = next
-      return `DC-${String(next).padStart(6, '0')}`
+      return `${String(next).padStart(2, '0')}/${fy}`
     })
     res.status(201).json({ data: { dcNo } })
   })

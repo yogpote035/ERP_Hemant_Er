@@ -344,6 +344,19 @@ const customerSchema = z.object({
   stateCode: z.string().regex(/^\d{2}$/, 'Two digits'),
   paymentTermsDays: z.number({ invalid_type_error: 'Number' }).int().min(0).optional(),
   addressLines: z.string().optional(),
+  shippingName: z.string().optional(),
+  shippingAddressLines: z.string().optional(),
+  shippingGstin: z.union([z.literal(''), z.string().regex(GSTIN_RE, GSTIN_MSG)]).optional(),
+  shippingStateCode: z.union([z.literal(''), z.string().regex(/^\d{2}$/, 'Two digits')]).optional(),
+  contactPerson: z.string().optional(),
+  phone: z.union([z.literal(''), z.string().regex(/^[+()\d\s-]{7,20}$/, 'Enter a valid phone number')]).optional(),
+  email: z.union([z.literal(''), z.string().email('Enter a valid email address')]).optional(),
+  freightTerms: z.string().optional(),
+  transitInsuranceTerms: z.string().optional(),
+  sez: z.boolean().optional(),
+}).superRefine((v, ctx) => {
+  if (v.shippingGstin && !v.shippingStateCode) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['shippingStateCode'], message: 'Required with consignee GSTIN' })
+  if (gstinStateMismatch(v.shippingGstin, v.shippingStateCode)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['shippingStateCode'], message: 'Must match first 2 GSTIN digits' })
 })
 type CustomerForm = z.infer<typeof customerSchema>
 
@@ -372,15 +385,33 @@ const customerMaster = defineMaster<Customer, CustomerForm>({
     { kind: 'text', name: 'stateCode', label: 'State code', required: true, hint: STATE_HINT },
     { kind: 'number', name: 'paymentTermsDays', label: 'Payment terms (days)', min: 0 },
     { kind: 'textarea', name: 'addressLines', label: 'Address (one line each)', colSpan: 2 },
+    { kind: 'text', name: 'contactPerson', label: 'Kind attention (contact person)' },
+    { kind: 'text', name: 'phone', label: 'Contact no.' },
+    { kind: 'text', name: 'email', label: 'Email ID', colSpan: 2 },
+    { kind: 'text', name: 'shippingName', label: 'Consignee name (blank = customer)', colSpan: 2 },
+    { kind: 'textarea', name: 'shippingAddressLines', label: 'Consignee / shipped-to address (blank = billing address)', colSpan: 2 },
+    { kind: 'text', name: 'shippingGstin', label: 'Consignee GSTIN (blank = billing GSTIN)' },
+    { kind: 'text', name: 'shippingStateCode', label: 'Consignee state code', hint: STATE_HINT },
+    { kind: 'text', name: 'freightTerms', label: 'Freight charges terms', placeholder: 'e.g. Supplier Account Non Chargeable' },
+    { kind: 'text', name: 'transitInsuranceTerms', label: 'Transit insurance terms' },
+    { kind: 'checkbox', name: 'sez', label: 'SEZ customer / consignee' },
   ],
   emptyForm: () => ({}),
   toForm: (c) => ({
     name: c.name, gstin: c.gstin, stateCode: c.stateCode,
     paymentTermsDays: c.paymentTermsDays, addressLines: joinLines(c.addressLines),
+    shippingName: c.shippingName ?? '', shippingAddressLines: joinLines(c.shippingAddressLines ?? []),
+    shippingGstin: c.shippingGstin ?? '', shippingStateCode: c.shippingStateCode ?? '',
+    contactPerson: c.contactPerson ?? '', phone: c.phone ?? '', email: c.email ?? '',
+    freightTerms: c.freightTerms ?? '', transitInsuranceTerms: c.transitInsuranceTerms ?? '', sez: c.sez ?? false,
   }),
   toEntity: (v, ctx) => ({
     id: ctx.id, name: v.name.trim(), gstin: v.gstin.trim().toUpperCase(), stateCode: v.stateCode,
     paymentTermsDays: v.paymentTermsDays, addressLines: splitLines(v.addressLines),
+    shippingName: opt(v.shippingName), shippingAddressLines: splitLines(v.shippingAddressLines),
+    shippingGstin: opt(v.shippingGstin)?.toUpperCase(), shippingStateCode: opt(v.shippingStateCode),
+    contactPerson: opt(v.contactPerson), phone: opt(v.phone), email: opt(v.email)?.toLowerCase(),
+    freightTerms: opt(v.freightTerms), transitInsuranceTerms: opt(v.transitInsuranceTerms), sez: v.sez ?? false,
     active: ctx.existing?.active ?? true,
   }),
   extraValidate: (v, s, existingId) => {

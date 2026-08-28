@@ -820,15 +820,30 @@ function InvoicePreview({ invoiceId, onClose, onPdf }: { invoiceId: Id; onClose:
           </div>
         </div>
 
-        {/* Receiver */}
-        <div className="space-y-0.5 border border-t-0 border-[#cbd5e1] p-2.5">
-          <div className="text-[9px] font-semibold uppercase tracking-wide text-[#64748b]">Details of Receiver (Bill To)</div>
-          <div className="text-[12.5px] font-bold text-[#1e3a8a]">{m.custName}</div>
-          {m.custAddress.map((l, i) => <div key={i} className="text-[#475569]">{l}</div>)}
-          <div className="flex flex-wrap gap-x-6">
+        {/* Dynamic billed-to and shipped-to parties */}
+        <div className="grid grid-cols-2 border border-t-0 border-[#cbd5e1]">
+          <div className="space-y-0.5 border-r border-[#cbd5e1] p-2.5">
+            <div className="text-[9px] font-semibold uppercase tracking-wide text-[#64748b]">Details of Receiver (Billed To)</div>
+            <div className="text-[12.5px] font-bold text-[#1e3a8a]">{m.custName}</div>
+            {m.custAddress.map((l, i) => <div key={i} className="text-[#475569]">{l}</div>)}
             <KV k="GSTIN/UIN" v={m.custGstin || '—'} mono />
             <KV k="State Code" v={m.custState || '—'} />
             <KV k="PAN No" v={m.custPan || '—'} mono />
+            <KV k="Kind Attn." v={m.contactPerson || '—'} />
+            <KV k="Contact No" v={m.contactPhone || '—'} />
+            <KV k="Freight Charges" v={m.freightTerms || '—'} />
+            <KV k="Transit Insurance" v={m.transitInsuranceTerms || '—'} />
+          </div>
+          <div className="space-y-0.5 p-2.5">
+            <div className="text-[9px] font-semibold uppercase tracking-wide text-[#64748b]">Details of Consignee (Shipped To)</div>
+            <div className="text-[12.5px] font-bold text-[#1e3a8a]">{m.shipName}</div>
+            {m.shipAddress.map((l, i) => <div key={i} className="text-[#475569]">{l}</div>)}
+            <KV k="GSTIN/UIN" v={m.shipGstin || '—'} mono />
+            <KV k="State Code" v={m.shipState || '—'} />
+            <KV k="PAN No" v={m.shipPan || '—'} mono />
+            <KV k="Email ID" v={m.contactEmail || '—'} />
+            <KV k="GST Type" v={m.gstType} />
+            <KV k="SEZ" v={m.sez ? 'Yes' : 'No'} />
           </div>
         </div>
 

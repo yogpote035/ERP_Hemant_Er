@@ -58,7 +58,7 @@ function applyFinalize(draft: RootState, input: FinalizeInput, ctx: CommandConte
   const inv = getById(draft.billing.invoices, input.invoiceId) as Invoice
   const cust = getById(draft.masters.customers, input.customerId)
   const issuerState = issuerStateOf(draft, inv, input)
-  const taxKind = deriveTaxKind(issuerState, cust?.stateCode)
+  const taxKind = deriveTaxKind(issuerState, cust?.shippingStateCode || cust?.stateCode)
   const { totals, packing, lines } = computeInvoice(draft, inv, taxKind)
   const invoiceDate = input.invoiceDate || inv.invoiceDate || ctx.today
   const terms = cust?.paymentTermsDays
@@ -74,6 +74,16 @@ function applyFinalize(draft: RootState, input: FinalizeInput, ctx: CommandConte
     custGstin: cust?.gstin ?? '',
     custStateCode: cust?.stateCode ?? '',
     custAddress: cust?.addressLines ?? [],
+    shippingName: cust?.shippingName || cust?.name || '',
+    shippingAddress: cust?.shippingAddressLines?.length ? cust.shippingAddressLines : cust?.addressLines ?? [],
+    shippingGstin: cust?.shippingGstin || cust?.gstin || '',
+    shippingStateCode: cust?.shippingStateCode || cust?.stateCode || '',
+    custContactPerson: cust?.contactPerson,
+    custPhone: cust?.phone,
+    custEmail: cust?.email,
+    freightTerms: cust?.freightTerms,
+    transitInsuranceTerms: cust?.transitInsuranceTerms,
+    custSez: cust?.sez ?? false,
     issuerName: issuerVendor?.name ?? issuerUnit?.name ?? '',
     issuerGstin: issuerVendor?.gstin ?? issuerUnit?.gstin ?? '',
     issuerStateCode: (issuerVendor?.stateCode ?? issuerUnit?.stateCode) ?? '',

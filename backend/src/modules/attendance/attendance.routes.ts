@@ -108,6 +108,38 @@ attendanceRouter.get(
   })
 )
 
+/** Spreadsheet-style production attendance: validate every row first, then save
+ * the complete batch in one repository transaction (all rows or none). */
+attendanceRouter.post(
+  '/production/bulk',
+  requirePermission('attendance', 'create'),
+  asyncHandler(async (req, res) => {
+    const inputs = z.array(productionSchema.omit({ id: true })).min(1).max(100).parse(req.body)
+    for (const [index, input] of inputs.entries()) {
+      assertUnit(req, input.unitId)
+      const errors = validateProduction(getDb(), input)
+      if (errors.length) throw badRequest(`Row ${index + 1}: ${errors.join('; ')}`, errors)
+    }
+    const created = await mutate((state) => inputs.map((input) => {
+      const id = genId('prod')
+      const rate = latestProductionRate(state, input.partId, input.machineId, input.operationId, input.date) as Paise
+      const entry: ProductionAttendance = {
+        id, unitId: input.unitId, date: input.date, shiftNo: input.shiftNo,
+        employeeId: input.employeeId, machineId: input.machineId, partId: input.partId,
+        operationId: input.operationId, openingCounter: input.standard,
+        closingCounter: input.plan, totalMakeQty: input.totalMakeQty, okQty: input.okQty,
+        scrapQty: input.scrapQty, reworkQty: input.reworkQty, mfQty: input.mfQty,
+        downtimeFrom: input.downtimeFrom, downtimeTo: input.downtimeTo,
+        remark: input.remark, rateSnapshotPaise: rate,
+        createdBy: req.auth!.user.id, createdAt: nowISO(),
+      }
+      putEntity(state.hr.production, entry)
+      return entry
+    }))
+    res.status(201).json({ data: created, cascade: [`${created.length} production entries saved`] })
+  })
+)
+
 attendanceRouter.post(
   '/production',
   asyncHandler(async (req, res) => {

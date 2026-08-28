@@ -66,6 +66,18 @@ const REGISTRY: Record<string, MasterCfg> = {
     schema: z.object({
       name: z.string().min(1), gstin: z.string().default(''), stateCode: z.string().min(1),
       addressLines, paymentTermsDays: z.number().int().min(0).optional(),
+      shippingName: z.string().optional(), shippingAddressLines: addressLines,
+      shippingGstin: z.string().regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/).optional(), shippingStateCode: z.string().regex(/^\d{2}$/).optional(),
+      contactPerson: z.string().optional(),
+      phone: z.string().regex(/^[+()\d\s-]{7,20}$/).optional(),
+      email: z.string().email().optional(),
+      freightTerms: z.string().optional(), transitInsuranceTerms: z.string().optional(),
+      sez: z.boolean().optional(),
+    }).superRefine((v, ctx) => {
+      if (v.shippingGstin && !v.shippingStateCode) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['shippingStateCode'], message: 'Required with consignee GSTIN' })
+      if (v.shippingGstin && v.shippingStateCode && v.shippingGstin.slice(0, 2) !== v.shippingStateCode) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['shippingStateCode'], message: 'Must match first 2 consignee GSTIN digits' })
+      }
     }),
   },
   vendors: {

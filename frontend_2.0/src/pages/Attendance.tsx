@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { CalendarClock, Pencil, Trash2, X } from 'lucide-react'
+import { CalendarClock, ListPlus, Pencil, Trash2, X } from 'lucide-react'
 import { formatINRSymbol, fromPaise, mulQty, type Paise } from '@/lib/money'
 import { formatDMY, todayISO } from '@/lib/date'
 import type { Id, ProductionAttendance, ShiftAttendance } from '@/types/domain'
@@ -16,6 +16,7 @@ import {
   runSaveShiftAttendance,
   runDeleteProductionAttendance,
   runDeleteShiftAttendance,
+  type ProductionInput,
 } from '@/store/attendanceCommands'
 import {
   selectProductionRows,
@@ -29,6 +30,8 @@ import { useCan } from '@/hooks/useCan'
 import { toastCommandError, toastCommandSuccess } from '@/lib/commandToast'
 import { Button, Card, ConfirmDialog, EmptyState, SearchableDropdown, TablePager, Tabs } from '@/components/ui'
 import { usePagedSource } from '@/hooks/usePagedSource'
+import { attendanceApi } from '@/api/modules'
+import { refreshAllData } from '@/api/refresh'
 
 type TabKey = 'production' | 'shift' | 'earnings'
 const TABS = [
@@ -48,6 +51,16 @@ const SHIFT_OPTIONS = [
 const intOf = (v: string) => {
   const n = Number(v)
   return Number.isFinite(n) ? Math.round(n) : 0
+}
+
+interface QueuedProduction {
+  key: string
+  input: Omit<ProductionInput, 'id'>
+  employee: string
+  machine: string
+  part: string
+  operation: string
+  rate: Paise
 }
 /** Minutes → "1h 05m" / "45m". */
 function fmtMins(mins: number): string {
@@ -81,6 +94,8 @@ function ProductionTab() {
   // Employees span every writable unit; the picked employee fixes the unit.
   const employees = useStore(useShallow(employeeOptionsWritable('production')))
   const empById = useStore((s) => s.masters.employees.byId)
+  const machineById = useStore((s) => s.masters.machines.byId)
+  const partById = useStore((s) => s.masters.parts.byId)
 
   const [editingId, setEditingId] = useState<Id | null>(null)
   const [deleting, setDeleting] = useState<ProductionAttendance | null>(null)
@@ -121,6 +136,8 @@ function ProductionTab() {
   const [dtTo, setDtTo] = useState('')
   const [remark, setRemark] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [queued, setQueued] = useState<QueuedProduction[]>([])
+  const [batchErrors, setBatchErrors] = useState<Record<string, Record<string, string>>>({})
 
   // Total Make defaults to Closing − Opening (SRS FR-AT03); a typed value overrides it.
   const autoMake = Math.max(0, intOf(plan) - intOf(standard))
@@ -269,6 +286,76 @@ function ProductionTab() {
     }
   }
 
+  function currentInput(): Omit<ProductionInput, 'id'> {
+    return {
+      unitId, date, shiftNo: shiftNo || undefined, employeeId, machineId, partId,
+      operationId: operationId || undefined, standard: intOf(standard), plan: intOf(plan),
+      totalMakeQty: make, okQty: intOf(okQty), scrapQty: intOf(scrap) || undefined,
+      reworkQty: intOf(rework) || undefined, mfQty: intOf(mf) || undefined,
+      downtimeFrom: dtFrom || undefined, downtimeTo: dtTo || undefined,
+      remark: remark.trim() || undefined,
+    }
+  }
+
+  function clearQuantities() {
+    setTotalMake(''); setOkQty(''); setScrap(''); setRework(''); setMf('')
+    setDtFrom(''); setDtTo(''); setRemark('')
+  }
+
+  function addToBatch() {
+    if (blockReason || rate == null) return
+    const labelOf = (opts: { value: string; label: string }[], id: string) => opts.find((o) => o.value === id)?.label ?? id
+    const key = crypto.randomUUID()
+    setQueued((rows) => [...rows, {
+      key, input: currentInput(), rate,
+      employee: labelOf(employees, employeeId), machine: labelOf(machines, machineId),
+      part: labelOf(parts, partId), operation: operationId ? labelOf(operations, operationId) : '—',
+    }])
+    setBatchErrors((errors) => { const next = { ...errors }; delete next[key]; return next })
+    clearQuantities()
+  }
+
+  function validateQueuedRow(row: QueuedProduction): Record<string, string> {
+    const i = row.input
+    const errors: Record<string, string> = {}
+    if (!i.date) errors.date = 'Date is required'
+    if (!i.employeeId || !empById[i.employeeId]) errors.employee = 'Select a valid operator'
+    if (!i.machineId || !machineById[i.machineId] || machineById[i.machineId]?.unitId !== i.unitId) errors.machine = 'Select a valid machine for this unit'
+    if (!i.partId || !partById[i.partId] || partById[i.partId]?.unitId !== i.unitId) errors.part = 'Select a valid part for this unit'
+    if (i.standard < 0) errors.standard = 'Start quantity cannot be negative'
+    if (i.plan < i.standard) errors.plan = 'End quantity must be greater than or equal to start'
+    if (i.totalMakeQty <= 0) errors.totalMakeQty = 'Total make must be greater than zero'
+    const quantities = [i.okQty, i.scrapQty ?? 0, i.reworkQty ?? 0, i.mfQty ?? 0]
+    if (quantities.some((qty) => qty < 0)) errors.quantities = 'Production quantities cannot be negative'
+    if (quantities.reduce((sum, qty) => sum + qty, 0) > i.totalMakeQty) errors.quantities = 'OK + Scrap + Rework + MF exceeds total make'
+    if (!(row.rate > 0)) errors.rate = 'A valid production rate is required'
+    return errors
+  }
+
+  async function saveBatch() {
+    if (!queued.length) return
+    const errors: Record<string, Record<string, string>> = {}
+    for (const row of queued) {
+      const rowErrors = validateQueuedRow(row)
+      if (Object.keys(rowErrors).length > 0) errors[row.key] = rowErrors
+    }
+    setBatchErrors(errors)
+    if (Object.keys(errors).length > 0) {
+      toastCommandError(new Error(`Correct the highlighted fields in ${Object.keys(errors).length} row(s)`))
+      return
+    }
+    setSubmitting(true)
+    try {
+      await attendanceApi.createProductionBulk(queued.map((row) => row.input))
+      await refreshAllData()
+      toastCommandSuccess('Production batch saved', [`${queued.length} entries inserted`])
+      setQueued([])
+      setBatchErrors({})
+      bumpRefresh()
+    } catch (e) { toastCommandError(e) }
+    finally { setSubmitting(false) }
+  }
+
   return (
     <div className="space-y-4">
       {canCreate || canEdit ? (
@@ -345,9 +432,44 @@ function ProductionTab() {
                 >
                   {editingId ? 'Update production' : 'Save production'}
                 </Button>
+                {!editingId ? (
+                  <Button variant="secondary" leftIcon={<ListPlus size={14} />} onClick={addToBatch} disabled={blockReason != null || submitting}>
+                    Add row
+                  </Button>
+                ) : null}
               </div>
             </div>
           </div>
+        </Card>
+      ) : null}
+
+      {queued.length > 0 ? (
+        <Card className="overflow-x-auto p-0">
+          <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+            <div>
+              <div className="text-[13px] font-semibold">Pending production batch</div>
+              <div className="text-[11px] text-muted-fg">Review all rows before inserting them together.</div>
+            </div>
+            <Button className="ml-auto" onClick={() => void saveBatch()} loading={submitting}>Save all {queued.length}</Button>
+          </div>
+          <table className="w-full min-w-[1050px] text-[12px]">
+            <thead><tr className="border-b border-border bg-muted text-left text-[10.5px] uppercase text-muted-fg">
+              {['Date','Shift','M/c','Type / Part','Operation','Operator','Start','End','Total make','OK','Scrap','Rework','MF','Rate / pc','Amount',''].map((h) => <th key={h} className="px-2 py-2 font-semibold">{h}</th>)}
+            </tr></thead>
+            <tbody>{queued.map((row) => {
+              const i = row.input
+              const errors = batchErrors[row.key] ?? {}
+              const cell = (field: string) => errors[field] ? 'bg-danger/10 text-danger' : ''
+              return <tr key={row.key} className="border-b border-border/60">
+                <td className={`px-2 py-2 mono ${cell('date')}`} title={errors.date}>{formatDMY(i.date)}</td><td className="px-2 py-2">{i.shiftNo ?? '—'}</td>
+                <td className={`px-2 py-2 ${cell('machine')}`} title={errors.machine}>{row.machine}</td><td className={`px-2 py-2 ${cell('part')}`} title={errors.part}>{row.part}</td><td className="px-2 py-2">{row.operation}</td><td className={`px-2 py-2 ${cell('employee')}`} title={errors.employee}>{row.employee}</td>
+                <td className={`px-2 py-2 text-right mono ${cell('standard')}`} title={errors.standard}>{i.standard}</td><td className={`px-2 py-2 text-right mono ${cell('plan')}`} title={errors.plan}>{i.plan}</td><td className={`px-2 py-2 text-right mono ${cell('totalMakeQty')}`} title={errors.totalMakeQty}>{i.totalMakeQty}</td>
+                <td className={`px-2 py-2 text-right mono ${cell('quantities')}`} title={errors.quantities}>{i.okQty}</td><td className={`px-2 py-2 text-right mono ${cell('quantities')}`} title={errors.quantities}>{i.scrapQty ?? 0}</td><td className={`px-2 py-2 text-right mono ${cell('quantities')}`} title={errors.quantities}>{i.reworkQty ?? 0}</td><td className={`px-2 py-2 text-right mono ${cell('quantities')}`} title={errors.quantities}>{i.mfQty ?? 0}</td>
+                <td className={`px-2 py-2 text-right mono ${cell('rate')}`} title={errors.rate}>₹{fromPaise(row.rate)}</td><td className="px-2 py-2 text-right mono font-semibold">{formatINRSymbol(mulQty(row.rate, i.okQty))}</td>
+                <td className="px-2 py-2"><button type="button" className="btn btn-ghost h-8 w-8 p-0 text-danger" onClick={() => { setQueued((rows) => rows.filter((x) => x.key !== row.key)); setBatchErrors((all) => { const next = { ...all }; delete next[row.key]; return next }) }} aria-label="Remove pending row"><Trash2 size={14} /></button></td>
+              </tr>
+            })}</tbody>
+          </table>
         </Card>
       ) : null}
 

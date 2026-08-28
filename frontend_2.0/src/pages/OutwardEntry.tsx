@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
+import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowUpFromLine, ReceiptText, X } from 'lucide-react'
 import { addP, formatINRSymbol, mulQty, pctOfPaise, toPaise, fromPaise, type Paise } from '@/lib/money'
 import { todayISO } from '@/lib/date'
@@ -8,7 +9,7 @@ import { latestProductionRatePaise, selectOpenInwardRows } from '@/selectors/reg
 import { runSaveDispatchBatch, type DispatchBatchLine } from '@/store/registerCommands'
 import { useCan } from '@/hooks/useCan'
 import { dispatchApi } from '@/api/modules'
-import { toastCommandError, toastCommandSuccess } from '@/lib/commandToast'
+import { toastCommandError, toastCommandSuccessLink } from '@/lib/commandToast'
 import { Button, Card, EmptyState, MultiSelectDropdown } from '@/components/ui'
 
 interface LineState {
@@ -20,6 +21,8 @@ interface LineState {
   mc: string
   mf: string
   rate: string
+  /** True while the value follows Rate Master; typing switches it to manual. */
+  rateAuto: boolean
   remark: string
 }
 
@@ -43,9 +46,12 @@ export default function OutwardEntry({
   onDone?: () => void
 }) {
   const can = useCan()
+  const navigate = useNavigate()
   const canCreate = can('dispatch', 'create')
   const openRows = useStore(useShallow(selectOpenInwardRows))
   const partsById = useStore((s) => s.masters.parts.byId)
+  // Subscribe so blank/automatic line rates react when Rate Master data refreshes.
+  const productionRates = useStore((s) => s.masters.productionRates)
 
   const challanById = useMemo(() => new Map(openRows.map((r) => [r.inward.id, r])), [openRows])
   const gstOf = useCallback(
@@ -70,8 +76,26 @@ export default function OutwardEntry({
   const lineForChallan = useCallback((challanId: string): LineState => {
     const partId = challanById.get(challanId)?.inward.partId ?? ''
     const ratePaise = partId ? latestProductionRatePaise(useStore.getState(), partId) : undefined
-    return { key: `ln-${_seq++}`, challanId, bill: dcNo, dcDate: todayISO(), ok: '', mc: '', mf: '', rate: ratePaise != null ? String(fromPaise(ratePaise)) : '', remark: '' }
+    return { key: `ln-${_seq++}`, challanId, bill: dcNo, dcDate: todayISO(), ok: '', mc: '', mf: '', rate: ratePaise != null ? String(fromPaise(ratePaise)) : '', rateAuto: ratePaise != null, remark: '' }
   }, [challanById, dcNo])
+
+  // Keep master-derived values dynamic. A manually typed rate is never overwritten.
+  useEffect(() => {
+    setLines((current) => {
+      let changed = false
+      const next = current.map((line) => {
+        if (!line.rateAuto && line.rate !== '') return line
+        const partId = challanById.get(line.challanId)?.inward.partId
+        const masterRate = partId ? latestProductionRatePaise(useStore.getState(), partId, line.dcDate || todayISO()) : undefined
+        const value = masterRate != null ? String(fromPaise(masterRate)) : ''
+        const auto = masterRate != null
+        if (line.rate === value && line.rateAuto === auto) return line
+        changed = true
+        return { ...line, rate: value, rateAuto: auto }
+      })
+      return changed ? next : current
+    })
+  }, [productionRates, challanById])
 
   // Reconcile the line list to the multi-select: keep existing, add new, drop un-ticked.
   const setSelected = useCallback((ids: string[]) => {
@@ -143,6 +167,16 @@ export default function OutwardEntry({
   function setLine(key: string, patch: Partial<LineState>) {
     setLines((prev) => prev.map((ln) => (ln.key === key ? { ...ln, ...patch } : ln)))
   }
+  function setLineDate(line: LineState, dcDate: string) {
+    if (!line.rateAuto) { setLine(line.key, { dcDate }); return }
+    const partId = challanById.get(line.challanId)?.inward.partId
+    const masterRate = partId ? latestProductionRatePaise(useStore.getState(), partId, dcDate) : undefined
+    setLine(line.key, {
+      dcDate,
+      rate: masterRate != null ? String(fromPaise(masterRate)) : '',
+      rateAuto: masterRate != null,
+    })
+  }
   function removeLine(challanId: string) {
     setLines((prev) => prev.filter((ln) => ln.challanId !== challanId))
   }
@@ -184,10 +218,10 @@ export default function OutwardEntry({
         runSaveDispatchBatch({ inwardId, lines: batchLines })
       }
       const challanNote = `${byChallan.size} challan${byChallan.size === 1 ? '' : 's'}`
-      toastCommandSuccess('Draft invoice created · outward recorded · stock updated', [
+      toastCommandSuccessLink('Draft invoice created · outward recorded · stock updated', [
         `across ${challanNote}`,
         'finalise & issue it on Billing & Invoice',
-      ])
+      ], () => navigate('/billing'))
       setLines([])
       onDone?.()
     } catch (e) {
@@ -302,12 +336,15 @@ export default function OutwardEntry({
                       <div className={`text-[10px] ${c.over ? 'text-danger' : 'text-faint'}`}>{r?.partNo ?? ''} · {intFmt(c.total)}/{intFmt(c.avail)} avail{c.over ? ' ⚠' : ''}</div>
                     </td>
                     <td className="px-2 py-1.5"><input value={ln.bill} readOnly placeholder={dcLoading ? 'Generating…' : 'Auto'} aria-label={`Line ${i + 1} our D/C no`} className="cell-input cursor-not-allowed bg-muted text-left" /></td>
-                    <td className="px-2 py-1.5"><input type="date" value={ln.dcDate} onChange={(e) => setLine(ln.key, { dcDate: e.target.value })} aria-label={`Line ${i + 1} our D.C date`} className="cell-input text-left" /></td>
+                    <td className="px-2 py-1.5"><input type="date" value={ln.dcDate} onChange={(e) => setLineDate(ln, e.target.value)} aria-label={`Line ${i + 1} our D.C date`} className="cell-input text-left" /></td>
                     <td className="px-2 py-1.5"><CellNum value={ln.ok} onChange={(v) => setLine(ln.key, { ok: v })} label={`Line ${i + 1} OK qty`} /></td>
                     <td className="px-2 py-1.5"><CellNum value={ln.mc} onChange={(v) => setLine(ln.key, { mc: v })} label={`Line ${i + 1} machine reject`} /></td>
                     <td className="px-2 py-1.5"><CellNum value={ln.mf} onChange={(v) => setLine(ln.key, { mf: v })} label={`Line ${i + 1} material fault`} /></td>
                     <td className="px-3 py-1.5 text-right mono font-semibold">{intFmt(c.total)}</td>
-                    <td className="px-2 py-1.5"><CellNum value={ln.rate} onChange={(v) => setLine(ln.key, { rate: v })} label={`Line ${i + 1} rate`} step="0.01" /></td>
+                    <td className="px-2 py-1.5">
+                      <CellNum value={ln.rate} onChange={(v) => setLine(ln.key, { rate: v, rateAuto: false })} label={`Line ${i + 1} rate`} step="0.01" placeholder="Enter rate" />
+                      <div className={`mt-0.5 text-right text-[9px] ${ln.rateAuto ? 'text-success' : 'text-faint'}`}>{ln.rateAuto ? 'Auto rate' : 'Enter manually'}</div>
+                    </td>
                     <td className="px-3 py-1.5 text-right mono text-muted-fg">{formatINRSymbol(c.sub)}</td>
                     <td className="px-3 py-1.5 text-right mono text-muted-fg">{formatINRSymbol(c.igst)}</td>
                     <td className="px-3 py-1.5 text-right mono font-semibold">{formatINRSymbol(c.grand)}</td>
@@ -374,8 +411,8 @@ function Fld({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-function CellNum({ value, onChange, label, step }: { value: string; onChange: (v: string) => void; label: string; step?: string }) {
+function CellNum({ value, onChange, label, step, placeholder }: { value: string; onChange: (v: string) => void; label: string; step?: string; placeholder?: string }) {
   return (
-    <input type="number" min={0} step={step} value={value} onChange={(e) => onChange(e.target.value)} aria-label={label} className="cell-input text-right" />
+    <input type="number" min={0} step={step} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} aria-label={label} className="cell-input text-right" />
   )
 }

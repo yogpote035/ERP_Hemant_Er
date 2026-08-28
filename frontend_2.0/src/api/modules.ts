@@ -53,6 +53,7 @@ export const rejectionApi = {
 }
 export const attendanceApi = {
   createProduction: (body: unknown) => api.post('/attendance/production', body),
+  createProductionBulk: (body: unknown[]) => api.post('/attendance/production/bulk', body),
   removeProduction: (id: string) => api.del(`/attendance/production/${id}`),
   createShift: (body: unknown) => api.post('/attendance/shift', body),
   removeShift: (id: string) => api.del(`/attendance/shift/${id}`),

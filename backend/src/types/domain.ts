@@ -77,6 +77,16 @@ export interface Customer {
   gstin: string
   stateCode: string
   addressLines: string[]
+  shippingName?: string
+  shippingAddressLines?: string[]
+  shippingGstin?: string
+  shippingStateCode?: string
+  contactPerson?: string
+  phone?: string
+  email?: string
+  freightTerms?: string
+  transitInsuranceTerms?: string
+  sez?: boolean
   paymentTermsDays?: number
   active: boolean
 }
@@ -216,6 +226,16 @@ export interface InvoicePartySnapshot {
   custGstin: string
   custStateCode: string
   custAddress: string[]
+  shippingName?: string
+  shippingAddress?: string[]
+  shippingGstin?: string
+  shippingStateCode?: string
+  custContactPerson?: string
+  custPhone?: string
+  custEmail?: string
+  freightTerms?: string
+  transitInsuranceTerms?: string
+  custSez?: boolean
   issuerName: string
   issuerGstin: string
   issuerStateCode: string

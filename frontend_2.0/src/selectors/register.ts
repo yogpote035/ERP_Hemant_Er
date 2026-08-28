@@ -72,10 +72,9 @@ export function selectOpenInwardRows(s: RootState): InwardRow[] {
 
 /** Latest production rate for a part that is EFFECTIVE as of today (not future-dated,
  *  not superseded) — used to prefill the outward billing rate. */
-export function latestProductionRatePaise(s: RootState, partId: Id): Paise | undefined {
-  const today = todayISO()
+export function latestProductionRatePaise(s: RootState, partId: Id, asOf = todayISO()): Paise | undefined {
   const candidates = values(s.masters.productionRates)
-    .filter((r) => r.partId === partId && !r.supersededAt && r.effectiveFrom <= today)
+    .filter((r) => r.partId === partId && r.effectiveFrom <= asOf && (!r.supersededAt || r.supersededAt > asOf))
     .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))
   return candidates[0]?.ratePaise
 }

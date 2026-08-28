@@ -99,15 +99,30 @@ function InvoiceDoc({ m }: { m: InvoiceDocModel }) {
           </View>
         </View>
 
-        {/* Receiver */}
-        <View style={[s.box, { padding: 5 }]}>
-          <Text style={s.sectLabel}>Details of Receiver (Bill To)</Text>
-          <Text style={s.brand}>{m.custName}</Text>
-          {m.custAddress.map((l, i) => <Text key={i} style={{ color: C.sub }}>{l}</Text>)}
-          <View style={s.row}>
-            <Text style={{ width: '40%' }}>GSTIN/UIN: {m.custGstin || '—'}</Text>
-            <Text style={{ width: '30%' }}>State Code: {m.custState || '—'}</Text>
-            <Text style={{ width: '30%' }}>PAN: {m.custPan || '—'}</Text>
+        {/* Dynamic billed-to and shipped-to parties */}
+        <View style={[s.box, s.row]} wrap={false}>
+          <View style={[s.half, s.vr]}>
+            <Text style={s.sectLabel}>Details of Receiver (Billed To)</Text>
+            <Text style={s.brand}>{m.custName}</Text>
+            {m.custAddress.map((l, i) => <Text key={i} style={{ color: C.sub }}>{l}</Text>)}
+            <KV k="GSTIN/UIN" v={m.custGstin || '—'} />
+            <KV k="State Code" v={m.custState || '—'} />
+            <KV k="PAN No" v={m.custPan || '—'} />
+            <KV k="Kind Attn." v={m.contactPerson || '—'} />
+            <KV k="Contact No" v={m.contactPhone || '—'} />
+            <KV k="Freight Charges" v={m.freightTerms || '—'} />
+            <KV k="Transit Insurance" v={m.transitInsuranceTerms || '—'} />
+          </View>
+          <View style={s.half}>
+            <Text style={s.sectLabel}>Details of Consignee (Shipped To)</Text>
+            <Text style={s.brand}>{m.shipName}</Text>
+            {m.shipAddress.map((l, i) => <Text key={i} style={{ color: C.sub }}>{l}</Text>)}
+            <KV k="GSTIN/UIN" v={m.shipGstin || '—'} />
+            <KV k="State Code" v={m.shipState || '—'} />
+            <KV k="PAN No" v={m.shipPan || '—'} />
+            <KV k="Email ID" v={m.contactEmail || '—'} />
+            <KV k="GST Type" v={m.gstType} />
+            <KV k="SEZ" v={m.sez ? 'Yes' : 'No'} />
           </View>
         </View>
 
