@@ -1,3 +1,4 @@
+import { Fragment } from 'react'
 import { NavLink } from 'react-router-dom'
 import { CheckCircle2, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/cn'
@@ -22,8 +23,8 @@ function initials(name: string): string {
 
 /**
  * Left navigation — a dark rail (#0f172a) in both themes, matching the client
- * mock: a HEMANT ENGINEERING WORKS brand block, the 10 primary modules rendered
- * FLAT (filtered by `can(module,'view')`), a stock-reconcile health pill, and
+ * mock: a HEMANT ENGINEERING WORKS brand block, permission-filtered ERP modules
+ * grouped in business-flow order, a stock-reconcile health pill, and
  * the signed-in user footer. Fixed on desktop; off-canvas drawer on mobile.
  */
 export function Sidebar({ mobileOpen, onNavigate }: { mobileOpen: boolean; onNavigate: () => void }) {
@@ -73,10 +74,22 @@ export function Sidebar({ mobileOpen, onNavigate }: { mobileOpen: boolean; onNav
         </div>
       </div>
 
-      {/* Nav — flat list (mock order) */}
-      <nav className="scrollbar-thin min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2.5 py-3">
-        {items.map((item) => (
-          <NavItemLink key={item.to} item={item} onNavigate={onNavigate} />
+      {/* Nav — standard ERP groups in business-flow order */}
+      <nav className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-2.5 py-3">
+        {items.map((item, index) => (
+          <Fragment key={item.to}>
+            {index === 0 || items[index - 1]?.section !== item.section ? (
+              <div className={cn(
+                'px-2.5 pb-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-sidebar-muted/80',
+                index === 0 ? 'pt-0' : 'pt-3'
+              )}>
+                {item.section}
+              </div>
+            ) : null}
+            <div className="mb-0.5">
+              <NavItemLink item={item} onNavigate={onNavigate} />
+            </div>
+          </Fragment>
         ))}
       </nav>
 

@@ -46,35 +46,37 @@ export interface NavItem {
  * Primary modules on the sidebar rail, rendered flat (no collapsible headers).
  */
 export const SIDEBAR_ITEMS: NavItem[] = [
-  { module: 'dashboard', to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, section: 'Operations', blurb: 'KPIs, reconcile health, recent inward & invoices.' },
+  { module: 'dashboard', to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, section: 'Overview', blurb: 'KPIs, reconcile health, recent inward & invoices.' },
 
-  // 1. Setup and master data
-  { module: 'masters', to: '/materials', label: 'Raw Material Master', icon: Package, section: 'Masters', blurb: 'Priced part catalogue with HSN, weights, packing and PO defaults.' },
+  // 1. Reference data used by every transaction
   { module: 'masters', to: '/masters', label: 'All Masters', icon: Database, section: 'Masters', blurb: 'Units, customers, machines, operations, employees and opening stock.' },
-  { module: 'rates', to: '/rates', label: 'Rate Masters', icon: Tags, section: 'Masters', blurb: 'Configure versioned raw-material and production rates.' },
+  { module: 'masters', to: '/materials', label: 'Raw Material Master', icon: Package, section: 'Masters', blurb: 'Priced part catalogue with HSN, weights, packing and PO defaults.' },
   { module: 'masters', to: '/vendors', label: 'Vendor Management', icon: Truck, section: 'Masters', blurb: 'Suppliers, GST profiles, banking and outstanding ledgers.' },
   { module: 'masters', to: '/customers', label: 'Customer Management', icon: Building2, section: 'Masters', blurb: 'Customers, GSTINs, billing states and payment terms.' },
   { module: 'masters', to: '/machines', label: 'Machine Management', icon: Cpu, section: 'Masters', blurb: 'Add and manage machines by unit.' },
-  { module: 'masters', to: '/employees', label: 'Employee Management', icon: UserCog, section: 'Workforce', blurb: 'Add and manage employees, labour types, shift rates and assigned units.' },
+  { module: 'masters', to: '/employees', label: 'Employee Management', icon: UserCog, section: 'Masters', blurb: 'Add and manage employees, labour types, shift rates and assigned units.' },
+  { module: 'rates', to: '/rates', label: 'Rate Masters', icon: Tags, section: 'Masters', blurb: 'Configure versioned raw-material and production rates.' },
 
-  // 2. Inventory transaction flow
-  { module: 'stock', to: '/inventory', label: 'Inventory Management', icon: Boxes, section: 'Operations', blurb: 'Material inward and live stock using controlled catalogue parts.' },
+  // 2. Physical material flow: receive → hold → dispatch
   { module: 'inward', to: '/inward', label: 'Material Inward', icon: ArrowDownToLine, section: 'Inventory', blurb: 'Challan-wise material receipt with heat number and supplier.' },
+  { module: 'stock', to: '/inventory', label: 'Inventory & Stock', icon: Boxes, section: 'Inventory', blurb: 'Live stock using controlled catalogue parts.' },
   { module: 'dispatch', to: '/outward', label: 'Material Outward', icon: ArrowUpFromLine, section: 'Inventory', blurb: 'Challan-cum-invoice dispatch with auto-GST and stock sync.' },
 
-  // 3. Billing and finance
+  // 3. Commercial and accounting flow
   { module: 'billing', to: '/billing', label: 'Billing & Invoice', icon: ReceiptText, section: 'Finance', blurb: 'Auto-generated GST tax invoices with HSN & challan traceability.' },
   { module: 'payments', to: '/payments', label: 'Payments', icon: Wallet, section: 'Finance', blurb: 'Receipts and allocation against invoices.' },
+  { module: 'expenses', to: '/expenses', label: 'Expense Tracker', icon: Wallet, section: 'Finance', blurb: 'Outstanding balances, payment schedules and expense trends.' },
   { module: 'scrap', to: '/scrap', label: 'Scrap Billing', icon: Recycle, section: 'Finance', blurb: 'Scrap sales with GST + TCS.' },
   { module: 'rejection', to: '/rejection', label: 'Rejection Advice', icon: PackageX, section: 'Finance', blurb: 'Rejected-material delivery challans.' },
-  { module: 'expenses', to: '/expenses', label: 'Expense Tracker', icon: Wallet, section: 'Finance', blurb: 'Outstanding balances, payment schedules and expense trends.' },
 
-  // 4. Workforce, reporting and administration
+  // 4. Production workforce and management information
   { module: 'attendance', to: '/attendance', label: 'Attendance & Payroll', icon: CalendarClock, section: 'Workforce', blurb: 'Production + shift attendance and derived earnings.' },
-  { module: 'reports', to: '/reports', label: 'Reports', icon: BarChart3, section: 'Insights', blurb: 'Operational, financial and statutory reports — ready to download.' },
-  { module: 'import', to: '/import', label: 'Excel Import', icon: FileSpreadsheet, section: 'Operations', blurb: 'Import, map and validate operational workbook data.' },
-  { module: 'users', to: '/users', label: 'User Management', icon: UserCog, section: 'Admin', blurb: 'Create operational users, assign units, set roles and status.' },
-  { module: 'masters', to: '/settings', label: 'Settings', icon: Settings, section: 'Admin', blurb: 'Company profile, invoicing, units, roles and backups.' },
+  { module: 'reports', to: '/reports', label: 'Reports', icon: BarChart3, section: 'Reporting', blurb: 'Operational, financial and statutory reports — ready to download.' },
+
+  // 5. System administration
+  { module: 'import', to: '/import', label: 'Excel Import', icon: FileSpreadsheet, section: 'Administration', blurb: 'Import, map and validate operational workbook data.' },
+  { module: 'users', to: '/users', label: 'User Management', icon: UserCog, section: 'Administration', blurb: 'Create operational users, assign units, set roles and status.' },
+  { module: 'masters', to: '/settings', label: 'Settings', icon: Settings, section: 'Administration', blurb: 'Company profile, invoicing, units, roles and backups.' },
 ]
 
 /**
