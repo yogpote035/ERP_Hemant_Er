@@ -19,6 +19,10 @@ import { log } from '../lib/logging.js'
 let state: RootState = createEmptyState()
 let driver: PersistenceDriver | null = null
 let writeChain: Promise<void> = Promise.resolve()
+/** After a direct paging query loses the remote DB, serve pages from the already
+ * loaded authoritative memory state for a short period instead of making every
+ * request wait for the same network timeout. Writes still require the database. */
+let pageQueryBackoffUntil = 0
 /** Monotonic in-memory state version — drives optimistic-concurrency on the
  *  full-state snapshot endpoint. Bumped on every successful write; resets to 0 on
  *  restart (a stale client then gets one 409 and re-syncs). */
@@ -134,9 +138,21 @@ export async function replaceState(next: RootState): Promise<void> {
  * loaded. On the file driver it falls back to an in-memory slice (dev/test only).
  */
 export async function queryCollectionPage(path: string, q: PageQuery): Promise<PageResult> {
-  if (driver?.queryPage) return driver.queryPage(path, q)
+  if (driver?.queryPage && Date.now() >= pageQueryBackoffUntil) {
+    try {
+      return await driver.queryPage(path, q)
+    } catch (error) {
+      pageQueryBackoffUntil = Date.now() + 60_000
+      log.warn('direct database page query failed; using memory fallback', {
+        collection: path,
+        error: (error as Error)?.message,
+        retryAfterSeconds: 60,
+      })
+    }
+  }
 
-  // In-memory fallback (file/test): slice the cached collection.
+  // In-memory fallback (file/test or temporary remote database interruption):
+  // slice the state loaded from the same durable datastore at startup.
   const cfg = COLLECTIONS.find((c) => c.path === path)
   if (!cfg) return { rows: [], total: 0, nextCursor: null }
   let rows = values(cfg.get(state)) as Array<{ id: string; unitId?: string }>

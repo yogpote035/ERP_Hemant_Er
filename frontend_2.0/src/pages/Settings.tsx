@@ -119,6 +119,7 @@ function InvoicingTab() {
               <th className="px-3 py-2.5 font-semibold">Invoice format</th>
               <th className="px-3 py-2.5 font-semibold">Seq pad</th>
               <th className="px-3 py-2.5 font-semibold">Bank</th>
+              <th className="px-3 py-2.5 font-semibold">Branch</th>
               <th className="px-3 py-2.5 font-semibold">IFSC</th>
             </tr>
           </thead>
@@ -129,11 +130,12 @@ function InvoicingTab() {
                 <td className="px-3 py-2.5"><span className="mono text-xs">{u.invoiceFormat}</span></td>
                 <td className="px-3 py-2.5 mono text-xs">{u.seqPad}</td>
                 <td className="px-3 py-2.5">{u.bankName ?? '—'}</td>
+                <td className="px-3 py-2.5">{u.bankBranch ?? '—'}</td>
                 <td className="px-3 py-2.5 mono text-xs">{u.ifsc ?? '—'}</td>
               </tr>
             ))}
             {units.length === 0 ? (
-              <tr><td colSpan={5} className="px-3 py-6 text-center text-muted-fg">No units configured yet.</td></tr>
+              <tr><td colSpan={6} className="px-3 py-6 text-center text-muted-fg">No units configured yet.</td></tr>
             ) : null}
           </tbody>
         </table>

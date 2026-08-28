@@ -80,6 +80,7 @@ const unitSchema = z.object({
   seqPad: z.number({ invalid_type_error: 'Number' }).int().min(1).max(8),
   addressLines: z.string().optional(),
   bankName: z.string().optional(),
+  bankBranch: z.string().optional(),
   accountNo: z.string().optional(),
   ifsc: z.string().optional(),
 })
@@ -113,6 +114,7 @@ const unitMaster = defineMaster<Unit, UnitForm>({
     { kind: 'text', name: 'invoiceFormat', label: 'Invoice format', required: true, lockable: true, hint: 'Default: {seq}/{FY}. Unlock only if you need a custom format, e.g. HEW/{FY}/{seq} becomes HEW/2026-27/007', colSpan: 2 },
     { kind: 'textarea', name: 'addressLines', label: 'Address (one line each)', colSpan: 2 },
     { kind: 'text', name: 'bankName', label: 'Bank name' },
+    { kind: 'text', name: 'bankBranch', label: 'Bank branch' },
     { kind: 'text', name: 'accountNo', label: 'Account no.' },
     { kind: 'text', name: 'ifsc', label: 'IFSC' },
   ],
@@ -120,13 +122,13 @@ const unitMaster = defineMaster<Unit, UnitForm>({
   toForm: (u) => ({
     name: u.name, code: u.code, gstin: u.gstin, stateCode: u.stateCode,
     invoiceFormat: u.invoiceFormat, seqPad: u.seqPad, addressLines: joinLines(u.addressLines),
-    bankName: u.bankName ?? '', accountNo: u.accountNo ?? '', ifsc: u.ifsc ?? '',
+    bankName: u.bankName ?? '', bankBranch: u.bankBranch ?? '', accountNo: u.accountNo ?? '', ifsc: u.ifsc ?? '',
   }),
   toEntity: (v, ctx) => ({
     id: ctx.id, name: v.name.trim(), code: v.code.trim(), gstin: v.gstin.trim().toUpperCase(),
     stateCode: v.stateCode, addressLines: splitLines(v.addressLines),
     invoiceFormat: v.invoiceFormat.trim(), seqPad: v.seqPad,
-    bankName: opt(v.bankName), accountNo: opt(v.accountNo), ifsc: opt(v.ifsc),
+    bankName: opt(v.bankName), bankBranch: opt(v.bankBranch), accountNo: opt(v.accountNo), ifsc: opt(v.ifsc),
     logoDataUrl: ctx.existing?.logoDataUrl,
     active: ctx.existing?.active ?? true,
   }),

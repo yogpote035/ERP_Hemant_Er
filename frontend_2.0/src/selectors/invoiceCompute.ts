@@ -257,7 +257,7 @@ export interface InvoiceDocModel {
   issuerPan?: string
   issuerState: string
   issuerAddress: string[]
-  issuerBank?: { name?: string; acc?: string; ifsc?: string }
+  issuerBank?: { name?: string; branch?: string; acc?: string; ifsc?: string }
   // Meta (fields with no store source are left blank, like the paper form)
   poJobworkNo?: string
   custTaxInvoiceNo?: string
@@ -363,7 +363,7 @@ export function selectInvoiceDocModel(s: RootState, invoiceId: Id): InvoiceDocMo
     issuerPan: panFromGstin(issuerGstin),
     issuerState: ps?.issuerStateCode ?? issuerState ?? '',
     issuerAddress: ps?.issuerAddress ?? issuerVendor?.addressLines ?? unit?.addressLines ?? [],
-    issuerBank: unit ? { name: unit.bankName, acc: unit.accountNo, ifsc: unit.ifsc } : undefined,
+    issuerBank: unit ? { name: unit.bankName, branch: unit.bankBranch, acc: unit.accountNo, ifsc: unit.ifsc } : undefined,
     poJobworkNo: uniq(allPoNos).join(', ') || undefined,
     custTaxInvoiceNo: uniq(allCustInv).join(', ') || undefined,
     // Optional transport details — entered on the invoice, fall back to derived where sensible.

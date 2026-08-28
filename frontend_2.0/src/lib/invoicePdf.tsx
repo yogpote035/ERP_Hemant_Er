@@ -206,6 +206,7 @@ function InvoiceDoc({ m }: { m: InvoiceDocModel }) {
             {m.issuerBank?.name ? (
               <>
                 <Text>{m.issuerBank.name}</Text>
+                {m.issuerBank.branch ? <Text>Branch {m.issuerBank.branch}</Text> : null}
                 <Text>A/c {m.issuerBank.acc || '—'}</Text>
                 <Text>IFSC {m.issuerBank.ifsc || '—'}</Text>
               </>

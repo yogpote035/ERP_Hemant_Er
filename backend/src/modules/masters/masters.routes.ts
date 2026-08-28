@@ -56,7 +56,7 @@ const REGISTRY: Record<string, MasterCfg> = {
       name: z.string().min(1), code: z.string().min(1), gstin: z.string().default(''),
       stateCode: z.string().min(1), addressLines, invoiceFormat: invoiceFormat.default('{seq}/{FY}'),
       seqPad: z.number().int().min(0).default(0),
-      bankName: z.string().optional(), accountNo: z.string().optional(), ifsc: z.string().optional(),
+      bankName: z.string().optional(), bankBranch: z.string().optional(), accountNo: z.string().optional(), ifsc: z.string().optional(),
       logoDataUrl: z.string().optional(),
     }),
   },

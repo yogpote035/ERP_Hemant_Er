@@ -33,6 +33,7 @@ export interface Unit {
   invoiceFormat: string
   seqPad: number
   bankName?: string
+  bankBranch?: string
   accountNo?: string
   ifsc?: string
   logoDataUrl?: string

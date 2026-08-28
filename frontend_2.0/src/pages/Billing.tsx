@@ -942,6 +942,7 @@ function InvoicePreview({ invoiceId, onClose, onPdf }: { invoiceId: Id; onClose:
             {m.issuerBank?.name ? (
               <>
                 <div>{m.issuerBank.name}</div>
+                {m.issuerBank.branch ? <div>Branch {m.issuerBank.branch}</div> : null}
                 <div className="font-mono">A/c {m.issuerBank.acc || '—'}</div>
                 <div className="font-mono">IFSC {m.issuerBank.ifsc || '—'}</div>
               </>

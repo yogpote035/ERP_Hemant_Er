@@ -48,7 +48,9 @@ export class MysqlDriver implements PersistenceDriver {
       database: config.database,
       ssl: config.ssl ? { minVersion: 'TLSv1.2' } : undefined,
       connectionLimit: 8,
-      connectTimeout: 20_000,
+      // Fail over to the repository's in-memory read cache promptly when TiDB is
+      // temporarily unreachable; startup itself already retries three times.
+      connectTimeout: 7_000,
       enableKeepAlive: true,
     })
   }
