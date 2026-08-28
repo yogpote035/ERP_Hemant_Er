@@ -56,11 +56,12 @@ function KV({ k, v }: { k: string; v: string }) {
   )
 }
 
-function InvoiceDoc({ m }: { m: InvoiceDocModel }) {
+const COPY_LABELS = ['ORIGINAL', 'DUPLICATE', 'TRIPLICATE', 'EXTRA'] as const
+
+function InvoicePage({ m, copyLabel }: { m: InvoiceDocModel; copyLabel: typeof COPY_LABELS[number] }) {
   const intra = m.taxKind === 'cgst_sgst'
   const half = m.uniformGstPct != null ? m.uniformGstPct / 2 : undefined
   return (
-    <Document>
       <Page size="A4" style={s.page}>
         {/* Title */}
         <View style={s.titleRow}>
@@ -69,7 +70,7 @@ function InvoiceDoc({ m }: { m: InvoiceDocModel }) {
             <Text style={s.titleSub}>GOODS & SERVICES TAX</Text>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
-            <Text style={s.origTag}>ORIGINAL FOR RECIPIENT</Text>
+            <Text style={s.origTag}>{copyLabel}</Text>
             <Text style={s.statute}>U/s 31 of CGST & SGST Act{'\n'}R.W Section 20 of IGST Act</Text>
           </View>
         </View>
@@ -233,6 +234,14 @@ function InvoiceDoc({ m }: { m: InvoiceDocModel }) {
           </View>
         </View>
       </Page>
+  )
+}
+
+/** One downloadable invoice document always contains the four statutory copies. */
+function InvoiceDoc({ m }: { m: InvoiceDocModel }) {
+  return (
+    <Document>
+      {COPY_LABELS.map((copyLabel) => <InvoicePage key={copyLabel} m={m} copyLabel={copyLabel} />)}
     </Document>
   )
 }
