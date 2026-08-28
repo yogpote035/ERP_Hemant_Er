@@ -236,9 +236,13 @@ export const dispatchRouter = Router()
 dispatchRouter.use(authenticate)
 
 /** Full Indian financial-year label used by delivery challans (April–March). */
-function currentDcFinancialYear(now = new Date()): string {
-  const calendarYear = now.getFullYear()
-  const startYear = now.getMonth() >= 3 ? calendarYear : calendarYear - 1
+function dcFinancialYear(date: string): string {
+  const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(date)
+  if (!match) throw badRequest('A valid D/C date is required')
+  const calendarYear = Number(match[1])
+  const month = Number(match[2])
+  if (month < 1 || month > 12) throw badRequest('A valid D/C date is required')
+  const startYear = month >= 4 ? calendarYear : calendarYear - 1
   return `${startYear}-${String(startYear + 1).slice(-2)}`
 }
 
@@ -246,8 +250,9 @@ function currentDcFinancialYear(now = new Date()): string {
 dispatchRouter.post(
   '/next-dc',
   requirePermission('dispatch', 'create'),
-  asyncHandler(async (_req, res) => {
-    const fy = currentDcFinancialYear()
+  asyncHandler(async (req, res) => {
+    const { date } = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(req.body)
+    const fy = dcFinancialYear(date)
     const dcNo = await mutate((state) => {
       // A separate counter per FY automatically resets the visible number to 01
       // every April while preserving older challan sequences.

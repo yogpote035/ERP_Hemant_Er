@@ -22,7 +22,7 @@ export const inwardApi = {
   attachmentUrl: (id: string) => api.objectUrl(`/inward/${id}/attachment`),
 }
 export const dispatchApi = {
-  nextDc: () => api.post<{ dcNo: string }>('/dispatch/next-dc'),
+  nextDc: (date: string) => api.post<{ dcNo: string }>('/dispatch/next-dc', { date }),
   create: (body: unknown) => api.post('/dispatch', body),
   remove: (id: string) => api.del(`/dispatch/${id}`),
 }
@@ -56,6 +56,7 @@ export const attendanceApi = {
   createProductionBulk: (body: unknown[]) => api.post('/attendance/production/bulk', body),
   removeProduction: (id: string) => api.del(`/attendance/production/${id}`),
   createShift: (body: unknown) => api.post('/attendance/shift', body),
+  createShiftBulk: (body: unknown[]) => api.post('/attendance/shift/bulk', body),
   removeShift: (id: string) => api.del(`/attendance/shift/${id}`),
 }
 export const ratesApi = {

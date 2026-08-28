@@ -116,24 +116,6 @@ export default function OutwardEntry({
     }
   }, [initialChallanId, challanById, setSelected])
 
-  // Reserve one server-controlled D/C number for the whole selected batch and
-  // copy it to every challan line. The field is intentionally read-only.
-  useEffect(() => {
-    if (lines.length === 0) {
-      setDcNo('')
-      return
-    }
-    if (dcNo || dcLoading) return
-    setDcLoading(true)
-    dispatchApi.nextDc()
-      .then(({ dcNo: next }) => {
-        setDcNo(next)
-        setLines((current) => current.map((line) => ({ ...line, bill: next })))
-      })
-      .catch((error) => toastCommandError(error))
-      .finally(() => setDcLoading(false))
-  }, [lines.length, dcNo, dcLoading])
-
   const challanOptions = useMemo(
     () => openRows.map((r) => ({ value: r.inward.id, label: r.inward.challanNo, subtitle: `${r.partNo} · heat ${r.inward.batchHeatNo} · avail ${intFmt(r.available)}` })),
     [openRows]
@@ -181,10 +163,38 @@ export default function OutwardEntry({
     setLines((prev) => prev.filter((ln) => ln.challanId !== challanId))
   }
 
-  function onSave() {
+  async function onSave() {
     const today = todayISO()
+    const activeLines = lines.filter((ln) => intOf(ln.ok) + intOf(ln.mc) + intOf(ln.mf) > 0)
+    const dcDates = new Set(activeLines.map((ln) => ln.dcDate || today))
+    if (dcDates.size > 1) {
+      toastCommandError(new Error('All lines on one D/C must use the same D/C date'))
+      return
+    }
+    if (activeLines.length === 0) {
+      toastCommandError(new Error('Add a quantity on at least one selected challan'))
+      return
+    }
+
+    setSubmitting(true)
+    setDcLoading(true)
+    let allocatedDcNo = dcNo
+    if (!allocatedDcNo) {
+      try {
+        const result = await dispatchApi.nextDc([...dcDates][0] ?? today)
+        allocatedDcNo = result.dcNo
+        setDcNo(allocatedDcNo)
+        setLines((current) => current.map((line) => ({ ...line, bill: allocatedDcNo })))
+      } catch (e) {
+        toastCommandError(e)
+        setSubmitting(false)
+        setDcLoading(false)
+        return
+      }
+    }
+
     const byChallan = new Map<string, DispatchBatchLine[]>()
-    for (const ln of lines) {
+    for (const ln of activeLines) {
       const ok = intOf(ln.ok)
       const mc = intOf(ln.mc)
       const mf = intOf(ln.mf)
@@ -195,7 +205,7 @@ export default function OutwardEntry({
       const line: DispatchBatchLine = {
         kind: billed ? 'billed' : 'rejection',
         okQty: ok, mcRejQty: mc, mfQty: mf,
-        billNo: ln.bill.trim() || undefined,
+        billNo: allocatedDcNo,
         billDate: billed ? dcDate : undefined,
         dispatchDate: dcDate,
         ratePaise: billed ? toPaise(rate) : undefined,
@@ -206,11 +216,6 @@ export default function OutwardEntry({
       else byChallan.set(ln.challanId, [line])
     }
 
-    if (byChallan.size === 0) {
-      toastCommandError(new Error('Add a quantity on at least one selected challan'))
-      return
-    }
-    setSubmitting(true)
     try {
       // Saving the invoice creates the outward dispatch(es) in the background and a
       // DRAFT invoice (via relinkInvoice). The user issues it later on Billing & Invoice.
@@ -228,6 +233,7 @@ export default function OutwardEntry({
       toastCommandError(e)
     } finally {
       setSubmitting(false)
+      setDcLoading(false)
     }
   }
 
@@ -335,7 +341,7 @@ export default function OutwardEntry({
                       <div className="mono font-medium">{r?.inward.challanNo ?? '—'}</div>
                       <div className={`text-[10px] ${c.over ? 'text-danger' : 'text-faint'}`}>{r?.partNo ?? ''} · {intFmt(c.total)}/{intFmt(c.avail)} avail{c.over ? ' ⚠' : ''}</div>
                     </td>
-                    <td className="px-2 py-1.5"><input value={ln.bill} readOnly placeholder={dcLoading ? 'Generating…' : 'Auto'} aria-label={`Line ${i + 1} our D/C no`} className="cell-input cursor-not-allowed bg-muted text-left" /></td>
+                    <td className="px-2 py-1.5"><input value={ln.bill} readOnly placeholder={dcLoading ? 'Generating…' : 'Assigned on save'} aria-label={`Line ${i + 1} our D/C no`} className="cell-input cursor-not-allowed bg-muted text-left" /></td>
                     <td className="px-2 py-1.5"><input type="date" value={ln.dcDate} onChange={(e) => setLineDate(ln, e.target.value)} aria-label={`Line ${i + 1} our D.C date`} className="cell-input text-left" /></td>
                     <td className="px-2 py-1.5"><CellNum value={ln.ok} onChange={(v) => setLine(ln.key, { ok: v })} label={`Line ${i + 1} OK qty`} /></td>
                     <td className="px-2 py-1.5"><CellNum value={ln.mc} onChange={(v) => setLine(ln.key, { mc: v })} label={`Line ${i + 1} machine reject`} /></td>
@@ -380,7 +386,7 @@ export default function OutwardEntry({
       {/* Form bar */}
       <div className="flex flex-wrap items-center gap-2.5">
         {canCreate ? (
-          <Button leftIcon={<ReceiptText size={15} />} onClick={onSave} loading={submitting || dcLoading} disabled={over || computed.totals.total <= 0 || !dcNo}>
+          <Button leftIcon={<ReceiptText size={15} />} onClick={onSave} loading={submitting || dcLoading} disabled={over || computed.totals.total <= 0}>
             Create draft invoice
           </Button>
         ) : null}

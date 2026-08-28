@@ -17,6 +17,7 @@ import {
   runDeleteProductionAttendance,
   runDeleteShiftAttendance,
   type ProductionInput,
+  type ShiftInput,
 } from '@/store/attendanceCommands'
 import {
   selectProductionRows,
@@ -42,6 +43,9 @@ const TABS = [
 
 /** Shift labels shared by both attendance methods. */
 const SHIFT_OPTIONS = [
+  { value: '1', label: 'Shift 1' },
+  { value: '2', label: 'Shift 2' },
+  { value: '3', label: 'Shift 3' },
   { value: 'A', label: 'Shift A' },
   { value: 'B', label: 'Shift B' },
   { value: 'C', label: 'Shift C' },
@@ -61,6 +65,14 @@ interface QueuedProduction {
   part: string
   operation: string
   rate: Paise
+}
+interface QueuedShift {
+  key: string
+  input: Omit<ShiftInput, 'id'>
+  employee: string
+  rate: Paise
+  hours: number
+  wage: Paise
 }
 /** Minutes → "1h 05m" / "45m". */
 function fmtMins(mins: number): string {
@@ -102,7 +114,7 @@ function ProductionTab() {
   const [deleteBusy, setDeleteBusy] = useState(false)
 
   const [date, setDate] = useState(todayISO())
-  const [shiftNo, setShiftNo] = useState('A')
+  const [shiftNo, setShiftNo] = useState('1')
   const [employeeId, setEmployeeId] = useState('')
   const [machineId, setMachineId] = useState('')
   const [partId, setPartId] = useState('')
@@ -578,6 +590,8 @@ function ShiftTab() {
   const [toTime, setToTime] = useState('17:00')
   const [otHours, setOtHours] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [queued, setQueued] = useState<QueuedShift[]>([])
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({})
 
   // Unit derived from the chosen employee (no unit picker on the form).
   const unitId = employeeId ? empById[employeeId]?.unitId ?? '' : ''
@@ -601,11 +615,12 @@ function ShiftTab() {
 
   function resetForm() {
     setEditingId(null)
-    setShiftNo('A')
+    setShiftNo('1')
     setEmployeeId('')
     setFromTime('09:00')
     setToTime('17:00')
     setOtHours('')
+    setFormErrors({})
   }
 
   function startEdit(entry: ShiftAttendance) {
@@ -636,6 +651,12 @@ function ShiftTab() {
   }
 
   function onSave() {
+    const errors = validateCurrentShift()
+    setFormErrors(errors)
+    if (Object.keys(errors).length) {
+      toastCommandError(new Error('Correct the highlighted shift fields'))
+      return
+    }
     setSubmitting(true)
     try {
       const res = runSaveShiftAttendance({
@@ -655,6 +676,62 @@ function ShiftTab() {
     }
   }
 
+  function validateCurrentShift(): Record<string, string> {
+    const errors: Record<string, string> = {}
+    if (!date) errors.date = 'Date is required'
+    if (!shiftNo) errors.shiftNo = 'Shift number is required'
+    if (!employeeId || !empById[employeeId]) errors.employeeId = 'Select a valid employee'
+    if (!unitId) errors.employeeId = 'Selected employee has no assigned unit'
+    if (!fromTime) errors.fromTime = 'Available-from time is required'
+    if (!toTime) errors.toTime = 'Available-to time is required'
+    if (fromTime && toTime && hours <= 0) errors.toTime = 'To time must be after From time (same-day shifts only)'
+    if (!Number.isFinite(otHoursNum) || otHoursNum < 0) errors.otHours = 'OT hours cannot be negative'
+    if (shiftRate <= 0) errors.rate = 'Configure this employee’s shift rate before saving'
+    return errors
+  }
+
+  function currentShiftInput(): Omit<ShiftInput, 'id'> {
+    return {
+      unitId, date, shiftNo, employeeId, fromTime, toTime,
+      otHours: otHoursNum > 0 ? otHoursNum : undefined,
+      otRatePaise: otHoursNum > 0 ? otRatePaise : undefined,
+    }
+  }
+
+  function addShiftRow() {
+    const errors = validateCurrentShift()
+    setFormErrors(errors)
+    if (Object.keys(errors).length) {
+      toastCommandError(new Error('Correct the highlighted shift fields'))
+      return
+    }
+    setQueued((all) => [...all, {
+      key: crypto.randomUUID(), input: currentShiftInput(),
+      employee: empById[employeeId]?.name ?? employeeId,
+      rate: shiftRate, hours, wage,
+    }])
+    setEmployeeId('')
+    setOtHours('')
+    setFormErrors({})
+  }
+
+  async function saveShiftBatch() {
+    if (!queued.length) return
+    setSubmitting(true)
+    try {
+      await attendanceApi.createShiftBulk(queued.map((row) => row.input))
+      await refreshAllData()
+      toastCommandSuccess('Shift attendance batch saved', [`${queued.length} entries inserted`])
+      setQueued([])
+      bumpRefresh()
+    } catch (e) {
+      // Keep every pending row intact so the user can correct/retry it.
+      toastCommandError(e)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       {canCreate || canEdit ? (
@@ -664,12 +741,12 @@ function ShiftTab() {
           </div>
           <div className="space-y-4 p-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Fld label="Date"><input type="date" className="input h-9" value={date} onChange={(e) => setDate(e.target.value)} /></Fld>
+              <Fld label="Date"><input type="date" className={`input h-9 ${formErrors.date ? 'border-danger' : ''}`} value={date} onChange={(e) => setDate(e.target.value)} title={formErrors.date} /></Fld>
               <Fld label="Shift No"><Sel value={shiftNo} set={setShiftNo} opts={SHIFT_OPTIONS} ph="— shift —" label="Shift No" /></Fld>
-              <Fld label="Employee"><Sel value={employeeId} set={setEmployeeId} opts={employees} ph="Select…" label="Employee" /></Fld>
-              <Fld label="From"><input type="time" className="input h-9" value={fromTime} onChange={(e) => setFromTime(e.target.value)} /></Fld>
-              <Fld label="To"><input type="time" className="input h-9" value={toTime} onChange={(e) => setToTime(e.target.value)} /></Fld>
-              <Fld label="OT hours"><input type="number" min={0} step="0.5" className="input h-9" value={otHours} onChange={(e) => setOtHours(e.target.value)} /></Fld>
+              <Fld label="Employee"><div title={formErrors.employeeId}><Sel value={employeeId} set={setEmployeeId} opts={employees} ph="Select…" label="Employee" /></div></Fld>
+              <Fld label="Available from"><input type="time" className={`input h-9 ${formErrors.fromTime ? 'border-danger' : ''}`} value={fromTime} onChange={(e) => setFromTime(e.target.value)} title={formErrors.fromTime} /></Fld>
+              <Fld label="Available to"><input type="time" className={`input h-9 ${formErrors.toTime ? 'border-danger' : ''}`} value={toTime} onChange={(e) => setToTime(e.target.value)} title={formErrors.toTime} /></Fld>
+              <Fld label="OT hours"><input type="number" min={0} step="0.5" className={`input h-9 ${formErrors.otHours ? 'border-danger' : ''}`} value={otHours} onChange={(e) => setOtHours(e.target.value)} title={formErrors.otHours} /></Fld>
             </div>
             <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 border-t border-border pt-3 text-[12.5px]">
               <span className="flex flex-wrap gap-x-6 gap-y-1.5" aria-live="polite">
@@ -681,6 +758,7 @@ function ShiftTab() {
                 <span className="text-primary">Wage: <b className="mono">{formatINRSymbol(wage)}</b></span>
               </span>
               <div className="ml-auto flex items-center gap-2">
+                {Object.values(formErrors)[0] ? <span className="text-[12px] text-danger">{Object.values(formErrors)[0]}</span> : null}
                 {editingId ? (
                   <Button variant="secondary" leftIcon={<X size={14} />} onClick={resetForm} disabled={submitting}>
                     Cancel
@@ -689,9 +767,42 @@ function ShiftTab() {
                 <Button onClick={onSave} loading={submitting} disabled={!unitId || !employeeId || hours <= 0 || (editingId ? !canEdit : !canCreate)}>
                   {editingId ? 'Update shift' : 'Save shift'}
                 </Button>
+                {!editingId ? (
+                  <Button variant="secondary" leftIcon={<ListPlus size={14} />} onClick={addShiftRow} disabled={submitting}>
+                    Add row
+                  </Button>
+                ) : null}
               </div>
             </div>
           </div>
+        </Card>
+      ) : null}
+
+      {queued.length > 0 ? (
+        <Card className="overflow-x-auto p-0">
+          <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+            <div>
+              <div className="text-[13px] font-semibold">Pending shift attendance</div>
+              <div className="text-[11px] text-muted-fg">Review the rows; Save all inserts the complete batch together.</div>
+            </div>
+            <Button className="ml-auto" onClick={() => void saveShiftBatch()} loading={submitting}>Save all {queued.length}</Button>
+          </div>
+          <table className="w-full min-w-[900px] text-[12px]">
+            <thead><tr className="border-b border-border bg-muted text-left text-[10.5px] uppercase text-muted-fg">
+              {['Date','Shift No.','Operator name','Available from','Available to','Total hrs present','Shift rate / 8 hr','Total amount',''].map((h) => <th key={h} className="px-3 py-2 font-semibold">{h}</th>)}
+            </tr></thead>
+            <tbody>{queued.map((row) => <tr key={row.key} className="border-b border-border/60">
+              <td className="px-3 py-2 mono">{formatDMY(row.input.date)}</td>
+              <td className="px-3 py-2 mono">{row.input.shiftNo}</td>
+              <td className="px-3 py-2">{row.employee}</td>
+              <td className="px-3 py-2 mono">{row.input.fromTime}</td>
+              <td className="px-3 py-2 mono">{row.input.toTime}</td>
+              <td className="px-3 py-2 text-right mono">{row.hours.toLocaleString('en-IN')}</td>
+              <td className="px-3 py-2 text-right mono">{formatINRSymbol(row.rate)}</td>
+              <td className="px-3 py-2 text-right mono font-semibold">{formatINRSymbol(row.wage)}</td>
+              <td className="px-3 py-2"><button type="button" className="btn btn-ghost h-8 w-8 p-0 text-danger" onClick={() => setQueued((all) => all.filter((x) => x.key !== row.key))} aria-label="Remove pending shift row"><Trash2 size={14} /></button></td>
+            </tr>)}</tbody>
+          </table>
         </Card>
       ) : null}
 

@@ -222,7 +222,12 @@ type ShiftInput = z.infer<typeof shiftSchema>
 /** Replicates validateShift from attendanceCommands.ts (unit access via assertUnit). */
 function validateShift(s: RootState, input: ShiftInput): string[] {
   const errors: string[] = []
-  if (!getById(s.masters.employees, input.employeeId)) errors.push('Employee is required')
+  const employee = getById(s.masters.employees, input.employeeId)
+  if (!employee) errors.push('Employee is required')
+  else {
+    if (employee.unitId !== input.unitId) errors.push('Employee does not belong to the selected unit')
+    if ((employee.standardShiftRatePaise ?? 0) <= 0) errors.push('Employee shift rate is not configured')
+  }
   if (minutesBetween(input.fromTime, input.toTime) <= 0) errors.push('To-time must be after from-time')
   if (input.otHours != null && input.otHours < 0) errors.push('OT hours cannot be negative')
   if (input.otRatePaise != null && input.otRatePaise < 0) errors.push('OT rate cannot be negative')
@@ -237,6 +242,36 @@ attendanceRouter.get(
     const searchText = (r: (typeof rows)[number]) => r.employeeName
     if (req.query.mode === 'cursor') res.json(cursorList(rows, req.query, { idOf: (r) => r.entry.id, searchText }))
     else res.json(buildList(rows, req.query, searchText))
+  })
+)
+
+/** Spreadsheet-style shift attendance: validate the whole batch and then save
+ * it in one repository transaction. Same-day times are intentional; overnight
+ * shifts remain unsupported. */
+attendanceRouter.post(
+  '/shift/bulk',
+  requirePermission('attendance', 'create'),
+  asyncHandler(async (req, res) => {
+    const inputs = z.array(shiftSchema.omit({ id: true })).min(1).max(100).parse(req.body)
+    for (const [index, input] of inputs.entries()) {
+      assertUnit(req, input.unitId)
+      const errors = validateShift(getDb(), input)
+      if (errors.length) throw badRequest(`Row ${index + 1}: ${errors.join('; ')}`, errors)
+    }
+    const created = await mutate((state) => inputs.map((input) => {
+      const id = genId('shift')
+      const emp = getById(state.masters.employees, input.employeeId)
+      const entry: ShiftAttendance = {
+        id, unitId: input.unitId, date: input.date, shiftNo: input.shiftNo,
+        employeeId: input.employeeId, fromTime: input.fromTime, toTime: input.toTime,
+        shiftRateSnapshotPaise: emp?.standardShiftRatePaise ?? (0 as Paise),
+        otHours: input.otHours, otRateSnapshotPaise: input.otRatePaise as Paise | undefined,
+        createdBy: req.auth!.user.id, createdAt: nowISO(),
+      }
+      putEntity(state.hr.shifts, entry)
+      return entry
+    }))
+    res.status(201).json({ data: created, cascade: [`${created.length} shift entries saved`] })
   })
 )
 

@@ -102,6 +102,17 @@ describe('inward lifecycle', () => {
 })
 
 describe('dispatch → stock cascade', () => {
+  it('numbers D/Cs by their selected financial year', async () => {
+    const t = await tokenFor()
+    const first = await request(app).post('/api/dispatch/next-dc').set(auth(t)).send({ date: '2025-04-01' })
+    const second = await request(app).post('/api/dispatch/next-dc').set(auth(t)).send({ date: '2026-03-31' })
+    const nextFy = await request(app).post('/api/dispatch/next-dc').set(auth(t)).send({ date: '2026-04-01' })
+    assert.equal(first.status, 201)
+    assert.equal(first.body.data.dcNo, '01/2025-26')
+    assert.equal(second.body.data.dcNo, '02/2025-26')
+    assert.equal(nextFy.body.data.dcNo, '01/2026-27')
+  })
+
   it('reduces stock on dispatch and restores it on delete', async () => {
     const t = await tokenFor()
     const p6 = async () => (await request(app).get('/api/stock').set(auth(t))).body.data.find((r: { partId: string }) => r.partId === 'p6').available
