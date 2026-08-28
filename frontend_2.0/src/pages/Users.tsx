@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { cn } from '@/lib/cn'
-import { ShieldCheck, Plus, Pencil, UserCheck, UserX, KeyRound, RotateCcw, Trash2, Shield, Users as UsersIcon, Copy } from 'lucide-react'
+import { ShieldCheck, Plus, Pencil, UserCheck, UserX, KeyRound, RotateCcw, Trash2, Shield, Users as UsersIcon, Copy, Eye, EyeOff } from 'lucide-react'
 import type { Id, User } from '@/types/domain'
 import {
   ACTIONS,
@@ -235,6 +235,8 @@ function UserFormDrawer({ user, unitOpts, onClose }: { user: User | null; unitOp
   const [email, setEmail] = useState(user?.email ?? '')
   const [role, setRole] = useState<RoleId>(user?.role ?? 'operator')
   const [units, setUnits] = useState<Set<Id>>(new Set(user?.assignedUnitIds ?? []))
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   function toggleUnit(id: Id) {
@@ -251,10 +253,10 @@ function UserFormDrawer({ user, unitOpts, onClose }: { user: User | null; unitOp
     try {
       const assignedUnitIds = [...units]
       if (user) {
-        runUpdateUser({ id: user.id, name: name.trim(), email: email.trim(), role, assignedUnitIds })
+        runUpdateUser({ id: user.id, name: name.trim(), email: email.trim(), role, assignedUnitIds, password: password || undefined })
         toastCommandSuccess('User updated', [`${name.trim()} · ${role}`])
       } else {
-        runCreateUser({ name: name.trim(), email: email.trim(), role, assignedUnitIds })
+        runCreateUser({ name: name.trim(), email: email.trim(), role, assignedUnitIds, password })
         toastCommandSuccess('User created', [`${name.trim()} · ${role}`])
       }
       onClose()
@@ -275,7 +277,7 @@ function UserFormDrawer({ user, unitOpts, onClose }: { user: User | null; unitOp
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button onClick={onSave} loading={submitting} disabled={!name.trim() || !email.trim() || (role !== 'admin' && units.size === 0)}>
+          <Button onClick={onSave} loading={submitting} disabled={!name.trim() || !email.trim() || (!user && password.length < 8) || (!!password && password.length < 8) || (role !== 'admin' && units.size === 0)}>
             {user ? 'Save changes' : 'Create user'}
           </Button>
         </>
@@ -286,6 +288,24 @@ function UserFormDrawer({ user, unitOpts, onClose }: { user: User | null; unitOp
           <label className="flex flex-col gap-1.5">
             <span className="text-[11.5px] font-medium text-muted-fg">Name</span>
             <input className="input h-9" value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
+          </label>
+          <label className="flex flex-col gap-1.5 sm:col-span-2">
+            <span className="text-[11.5px] font-medium text-muted-fg">{user ? 'New password' : 'Password'} {!user ? <span className="text-danger">*</span> : null}</span>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                className="input h-9 w-full pr-10"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={user ? 'Leave blank to keep current password' : 'Minimum 8 characters'}
+                autoComplete="new-password"
+              />
+              <button type="button" className="absolute inset-y-0 right-0 grid w-9 place-items-center text-muted-fg" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? 'Hide password' : 'Show password'}>
+                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
+            {password && password.length < 8 ? <span className="text-[11px] text-danger">Password must be at least 8 characters.</span> : null}
+            {user ? <span className="text-[11px] text-faint">For security, the current password cannot be viewed. Enter a new one only to reset it.</span> : null}
           </label>
           <label className="flex flex-col gap-1.5">
             <span className="text-[11.5px] font-medium text-muted-fg">Login ID / Email</span>

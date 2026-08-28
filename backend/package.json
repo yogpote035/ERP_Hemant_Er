@@ -12,6 +12,8 @@
     "seed": "tsx src/db/seed.ts",
     "seed:parts": "node --env-file=.env --import tsx scripts/seedParts.ts",
     "remove:demo": "node --env-file=.env --import tsx scripts/removeDemoData.ts",
+    "clear:keep-roles": "node --env-file=.env --import tsx scripts/clearAllExceptRoles.ts",
+    "create-admin": "node --env-file=.env --import tsx scripts/createAdmin.ts",
     "set-password": "node --env-file=.env --import tsx scripts/setPassword.ts",
     "smoke": "node scripts/smoke.mjs",
     "test": "tsx --test test/domain.test.ts test/api.test.ts",

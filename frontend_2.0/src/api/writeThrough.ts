@@ -174,8 +174,8 @@ const MODULE_SYNC: Partial<Record<CommandName, Handler>> = {
   saveShiftAttendance: (i, r) => attendanceApi.createShift(withId(i, r)),
   deleteShiftAttendance: (i, r) => attendanceApi.removeShift(idOf(i, r)),
   // Users (admin only).
-  createUser: (i, r) => usersApi.create({ id: idOf(i, r), name: i.name, email: i.email, password: i.password ?? 'demo', role: i.role, assignedUnitIds: i.assignedUnitIds, active: i.active ?? true }),
-  updateUser: (i) => usersApi.update(i.id, { name: i.name, email: i.email, role: i.role, assignedUnitIds: i.assignedUnitIds }),
+  createUser: (i, r) => usersApi.create({ id: idOf(i, r), name: i.name, email: i.email, password: i.password, role: i.role, assignedUnitIds: i.assignedUnitIds, active: i.active ?? true }),
+  updateUser: (i) => usersApi.update(i.id, { name: i.name, email: i.email, role: i.role, assignedUnitIds: i.assignedUnitIds, password: i.password }),
   toggleUserActive: (i, r) => usersApi.setActive(idOf(i, r), !!r?.active),
   setUserOverride: (i) => usersApi.setOverride(i.id, { add: i.overrides?.add ?? {}, remove: i.overrides?.remove ?? {} }),
   // Roles (admin only) — send the canonical stored role for create.

@@ -43,7 +43,7 @@ export interface CreateUserInput {
   role: RoleId
   assignedUnitIds: Id[]
   active?: boolean
-  /** Sign-in password. Defaults to the demo password so new users are usable. */
+  /** Sign-in password chosen by the administrator. */
   password?: string
 }
 
@@ -54,6 +54,7 @@ const createCmd: Command<CreateUserInput, { id: Id }> = {
   validate(s, input) {
     const errors: string[] = []
     commonChecks(s, input, undefined, errors)
+    if (input.password !== undefined && input.password.trim().length < 8) errors.push('Password must be at least 8 characters')
     return errors.length ? { ok: false, errors } : { ok: true }
   },
   apply(draft, input, ctx) {
@@ -62,7 +63,6 @@ const createCmd: Command<CreateUserInput, { id: Id }> = {
       id,
       name: input.name.trim(),
       email: input.email.trim(),
-      password: input.password?.trim() || 'demo',
       role: input.role,
       assignedUnitIds: input.role === 'admin' ? [] : [...input.assignedUnitIds],
       active: input.active ?? true,
@@ -89,6 +89,8 @@ export interface UpdateUserInput {
   email: string
   role: RoleId
   assignedUnitIds: Id[]
+  /** Blank/undefined keeps the existing password. */
+  password?: string
 }
 
 const updateCmd: Command<UpdateUserInput, { id: Id }> = {
@@ -100,6 +102,7 @@ const updateCmd: Command<UpdateUserInput, { id: Id }> = {
     const existing = getById(s.masters.users, input.id)
     if (!existing) return { ok: false, errors: ['User not found'] }
     commonChecks(s, input, input.id, errors)
+    if (input.password && input.password.trim().length < 8) errors.push('Password must be at least 8 characters')
     // Lockout guard: demoting the last active admin out of 'admin' is blocked.
     if (existing.role === 'admin' && input.role !== 'admin' && activeAdmins(s, input.id).length === 0) {
       errors.push('At least one active admin must remain')

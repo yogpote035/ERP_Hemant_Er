@@ -13,7 +13,6 @@ import { getDb, mutate, values, getById } from '../../db/repository.js'
 import { putEntity, patchEntity } from '../../db/normalized.js'
 import { asyncHandler, badRequest, notFound, forbidden } from '../../lib/http.js'
 import { authenticate, requirePermission } from '../../auth/middleware.js'
-import { config } from '../../config.js'
 import { resolveId, nowISO } from '../../lib/id.js'
 import { hashPassword } from '../../auth/password.js'
 import type { RootState } from '../../db/state.js'
@@ -70,7 +69,7 @@ const createSchema = z.object({
   id: z.string().optional(),
   name: z.string(),
   email: z.string(),
-  password: z.string().min(1).optional(),
+  password: z.string().trim().min(8, 'Password must be at least 8 characters'),
   role: z.string(),
   assignedUnitIds: z.array(z.string()).default([]),
   active: z.boolean().optional(),
@@ -81,7 +80,7 @@ const updateSchema = z.object({
   email: z.string(),
   role: z.string(),
   assignedUnitIds: z.array(z.string()).default([]),
-  password: z.string().min(1).optional(),
+  password: z.string().trim().min(8, 'Password must be at least 8 characters').optional(),
 })
 
 // ── router ───────────────────────────────────────────────────────────────────
@@ -110,13 +109,7 @@ usersRouter.post(
     commonChecks(s, input, undefined)
 
     const id = resolveId(input.id, (x) => !!getById(s.masters.users, x), 'usr')
-    // Demo convenience: dev seeds new users with the well-known `demo` password.
-    // In production that's a credential weakness — require a real, ≥8-char password.
-    const provided = input.password?.trim()
-    if (config.isProd && (!provided || provided.length < 8)) {
-      throw badRequest('A password of at least 8 characters is required')
-    }
-    const plain = provided || 'demo'
+    const plain = input.password.trim()
     const user: User = {
       id,
       name: input.name.trim(),
