@@ -9,11 +9,12 @@ import { Router, type Request } from 'express'
 import { z } from 'zod'
 import { getDb, mutate, values, getById, queryCollectionPage } from '../../db/repository.js'
 import { putEntity, removeEntity, patchEntity } from '../../db/normalized.js'
-import type { Normalized } from '../../types/domain.js'
+import type { Normalized, RmRate } from '../../types/domain.js'
 import { asyncHandler, badRequest, notFound } from '../../lib/http.js'
 import { genericSearchText } from '../../lib/list.js'
 import { authenticate, requirePermission, assertUnit } from '../../auth/middleware.js'
-import { resolveId } from '../../lib/id.js'
+import { genId, resolveId, todayISO } from '../../lib/id.js'
+import type { Paise } from '../../lib/money.js'
 import type { RootState } from '../../db/state.js'
 import type { Module } from '../../types/rbac.js'
 
@@ -21,6 +22,22 @@ interface Entity {
   id: string
   active?: boolean
   unitId?: string
+}
+
+/** Keep Part.RM Rate and Rate Masters as two entry points to one value. */
+function syncPartRmRate(s: RootState, part: Entity, previousRate: unknown): void {
+  const ratePaise = (part as unknown as Record<string, unknown>).rmRatePaise
+  if (typeof ratePaise !== 'number' || ratePaise === previousRate) return
+  const effectiveFrom = todayISO()
+  for (const rate of values(s.masters.rmRates)) {
+    if (rate.partId === part.id && !rate.supersededAt && rate.effectiveFrom <= effectiveFrom) {
+      patchEntity(s.masters.rmRates, rate.id, { supersededAt: effectiveFrom })
+    }
+  }
+  const rate: RmRate = {
+    id: genId('rm'), partId: part.id, ratePaise: ratePaise as Paise, effectiveFrom,
+  }
+  putEntity(s.masters.rmRates, rate)
 }
 
 interface MasterCfg {
@@ -232,7 +249,10 @@ mastersRouter.post(
     if (cfg.unitScoped) assertUnit(req, body.unitId as string)
     const providedId = typeof (req.body as { id?: unknown })?.id === 'string' ? (req.body as { id?: string }).id : undefined
     const entity: Entity = { ...body, id: resolveId(providedId, (id) => !!getById(cfg.collection(getDb()), id), cfg.idPrefix), ...(cfg.softDelete ? { active: true } : {}) }
-    await mutate((s) => putEntity(cfg.collection(s), entity))
+    await mutate((s) => {
+      putEntity(cfg.collection(s), entity)
+      if (req.params.entity === 'parts') syncPartRmRate(s, entity, undefined)
+    })
     res.status(201).json({ data: entity })
   })
 )
@@ -255,7 +275,12 @@ mastersRouter.put(
       if (k in sent) merged[k] = v
     }
     const next = { ...merged, id: cur.id } as Entity
-    await mutate((s) => putEntity(cfg.collection(s), next))
+    await mutate((s) => {
+      putEntity(cfg.collection(s), next)
+      if (req.params.entity === 'parts') {
+        syncPartRmRate(s, next, (cur as unknown as Record<string, unknown>).rmRatePaise)
+      }
+    })
     res.json({ data: next })
   })
 )

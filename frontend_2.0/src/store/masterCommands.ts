@@ -29,6 +29,7 @@ export interface MasterCommandConfig<T extends BaseEntity, F extends FieldValues
   extraValidate?: (values: F, s: RootState, existingId: Id | null) => string | null
   /** Runs after a CREATE upsert (inside the transaction) — e.g. supersede prior rates. */
   afterUpsert?: (draft: RootState, entity: T) => void
+  afterSave?: (draft: RootState, entity: T, ctx: { existing: T | null; today: string; newId: (prefix?: string) => string }) => void
 }
 
 export interface MasterCommands<F extends FieldValues> {
@@ -45,7 +46,7 @@ export function makeMasterCommands<T extends BaseEntity, F extends FieldValues>(
   const upsert = (
     draft: RootState,
     input: { values: F; existingId: Id | null },
-    ctx: { now: string; actorId: Id; newId: (p?: string) => string },
+    ctx: { now: string; today: string; actorId: Id; newId: (p?: string) => string },
     verb: 'created' | 'updated'
   ): { id: Id } => {
     const id = input.existingId ?? ctx.newId(cfg.idPrefix)
@@ -53,6 +54,7 @@ export function makeMasterCommands<T extends BaseEntity, F extends FieldValues>(
     const entity = cfg.toEntity(input.values, { id, now: ctx.now, actorId: ctx.actorId, existing })
     putEntity(cfg.collection(draft), entity)
     if (verb === 'created') cfg.afterUpsert?.(draft, entity)
+    cfg.afterSave?.(draft, entity, { existing, today: ctx.today, newId: ctx.newId })
     return { id }
   }
 
@@ -84,7 +86,7 @@ export function makeMasterCommands<T extends BaseEntity, F extends FieldValues>(
     action: 'create',
     validate: validateValues,
     apply(draft, input, ctx) {
-      const { id } = upsert(draft, input, { now: ctx.now, actorId: ctx.actor.id, newId: ctx.newId }, 'created')
+      const { id } = upsert(draft, input, { now: ctx.now, today: ctx.today, actorId: ctx.actor.id, newId: ctx.newId }, 'created')
       const entity = getById(cfg.collection(draft), id) as T
       return {
         result: { id },
@@ -100,7 +102,7 @@ export function makeMasterCommands<T extends BaseEntity, F extends FieldValues>(
     ...create,
     action: 'edit',
     apply(draft, input, ctx) {
-      const { id } = upsert(draft, input, { now: ctx.now, actorId: ctx.actor.id, newId: ctx.newId }, 'updated')
+      const { id } = upsert(draft, input, { now: ctx.now, today: ctx.today, actorId: ctx.actor.id, newId: ctx.newId }, 'updated')
       const entity = getById(cfg.collection(draft), id) as T
       return {
         result: { id },

@@ -60,6 +60,7 @@ export const attendanceApi = {
 }
 export const ratesApi = {
   createRm: (body: unknown) => api.post('/rates/rm', body),
+  updateRm: (id: string, body: unknown) => api.put(`/rates/rm/${id}`, body),
   createProduction: (body: unknown) => api.post('/rates/production', body),
 }
 export const usersApi = {

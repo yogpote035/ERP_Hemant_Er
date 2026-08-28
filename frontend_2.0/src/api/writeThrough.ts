@@ -108,11 +108,15 @@ function syncMaster(input: { existingId?: string | null; values?: unknown; id?: 
   const id = input.existingId ?? result?.id
   if (!id) return Promise.resolve()
   const prefix = prefixOf(id)
-  // Versioned rate masters use the dedicated /rates endpoints (create-only).
+  // Versioned rate masters use the dedicated /rates endpoints.
   if (prefix === 'rm' || prefix === 'pr') {
-    if (input.existingId) return skip('Editing a rate') // rates are append-only versions
     const r = storedEntity(prefix === 'rm' ? 'rmRates' : 'productionRates', id)
     if (!r) return Promise.resolve()
+    if (input.existingId) {
+      return prefix === 'rm'
+        ? ratesApi.updateRm(id, { partId: r.partId, ratePaise: r.ratePaise, effectiveFrom: r.effectiveFrom })
+        : skip('Editing a production rate')
+    }
     return prefix === 'rm'
       ? ratesApi.createRm({ partId: r.partId, ratePaise: r.ratePaise, effectiveFrom: r.effectiveFrom })
       : ratesApi.createProduction({ partId: r.partId, machineId: r.machineId, operationId: r.operationId, ratePaise: r.ratePaise, effectiveFrom: r.effectiveFrom })

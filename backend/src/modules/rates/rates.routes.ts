@@ -43,6 +43,18 @@ function assertPartExists(partId: Id): void {
   if (!getById(getDb().masters.parts, partId)) throw badRequest(`Unknown part ${partId}`)
 }
 
+function rebuildRmTimeline(s: Parameters<Parameters<typeof mutate>[0]>[0], partId: Id): void {
+  const versions = values(s.masters.rmRates)
+    .filter((r) => r.partId === partId)
+    .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom) || a.id.localeCompare(b.id))
+  versions.forEach((rate, index) => patchEntity(s.masters.rmRates, rate.id, {
+    supersededAt: versions[index + 1]?.effectiveFrom,
+  }))
+  const current = versions.filter((r) => r.effectiveFrom <= todayISO()).at(-1)
+  const part = getById(s.masters.parts, partId)
+  if (part && current) patchEntity(s.masters.parts, part.id, { rmRatePaise: current.ratePaise })
+}
+
 // ── RM rates ─────────────────────────────────────────────────────────────────
 ratesRouter.get(
   '/rm',
@@ -98,12 +110,41 @@ ratesRouter.post(
           superseded.push(r.id)
         }
       }
+      // Mirror the effective current rate onto the part record. Part editing and
+      // Rate Masters are two UIs over the same business value.
+      if (entity.effectiveFrom <= todayISO()) {
+        const part = getById(s.masters.parts, entity.partId)
+        if (part) patchEntity(s.masters.parts, part.id, { rmRatePaise: entity.ratePaise })
+      }
       return { row: getById(s.masters.rmRates, entity.id) as RmRate, superseded }
     })
 
     res
       .status(201)
       .json({ data: row, cascade: superseded.map((id) => `superseded ${id}`) })
+  })
+)
+
+ratesRouter.put(
+  '/rm/:id',
+  requirePermission('rates', 'edit'),
+  asyncHandler(async (req, res) => {
+    const v = rmRateSchema.parse(req.body)
+    assertPartExists(v.partId)
+    const existing = getById(getDb().masters.rmRates, req.params.id)
+    if (!existing) throw notFound('RM rate version not found')
+    const updated: RmRate = {
+      ...existing,
+      partId: v.partId,
+      ratePaise: v.ratePaise as Paise,
+      effectiveFrom: v.effectiveFrom,
+    }
+    await mutate((s) => {
+      putEntity(s.masters.rmRates, updated)
+      rebuildRmTimeline(s, existing.partId)
+      if (updated.partId !== existing.partId) rebuildRmTimeline(s, updated.partId)
+    })
+    res.json({ data: getById(getDb().masters.rmRates, updated.id) })
   })
 )
 

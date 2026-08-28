@@ -105,6 +105,9 @@ export interface MasterConfig<T extends BaseEntity, F extends FieldValues> {
   /** Runs inside the command transaction AFTER a CREATE upserts the new row —
    *  e.g. versioned rates supersede the prior current row. Edit/reactivate skip it. */
   afterUpsert?: (draft: RootState, entity: T) => void
+  /** Runs after both create and edit. Used when two entry points mirror one
+   * canonical value (for example Part RM Rate and versioned RM Rate Masters). */
+  afterSave?: (draft: RootState, entity: T, ctx: { existing: T | null; today: string; newId: (prefix?: string) => string }) => void
 }
 
 export interface ToEntityCtx<T> {

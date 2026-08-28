@@ -26,6 +26,7 @@ export function defineMaster<T extends BaseEntity, F extends FieldValues>(
     displayName: cfg.displayName,
     extraValidate: cfg.extraValidate,
     afterUpsert: cfg.afterUpsert,
+    afterSave: cfg.afterSave,
   })
 
   return {

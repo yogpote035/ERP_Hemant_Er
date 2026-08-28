@@ -31,7 +31,7 @@ import type {
 import { toPaise, fromPaise, formatINR } from '@/lib/money'
 import { todayISO } from '@/lib/date'
 import { Badge } from '@/components/ui'
-import { getById, patchEntity, values } from '@/store/normalized'
+import { getById, patchEntity, putEntity, values } from '@/store/normalized'
 import { defineMaster } from './defineMaster'
 import { unitOptions, partOptions, machineOptions, operationOptions, GST_OPTIONS } from './options'
 import type { MasterView } from './types'
@@ -225,6 +225,19 @@ const partMaster = defineMaster<Part, PartForm>({
     avgQtyPerBox: v.avgQtyPerBox, packingMode: opt(v.packingMode), active: ctx.existing?.active ?? true,
     defaultPoNo: opt(v.defaultPoNo), defaultPoDate: opt(v.defaultPoDate),
   }),
+  // Editing RM Rate on the part creates the same versioned record shown under
+  // Rate Masters, so the two screens can never maintain competing values.
+  afterSave: (draft, entity, ctx) => {
+    if (entity.rmRatePaise == null || ctx.existing?.rmRatePaise === entity.rmRatePaise) return
+    for (const r of values(draft.masters.rmRates)) {
+      if (r.partId === entity.id && !r.supersededAt && r.effectiveFrom <= ctx.today) {
+        patchEntity(draft.masters.rmRates, r.id, { supersededAt: ctx.today })
+      }
+    }
+    putEntity(draft.masters.rmRates, {
+      id: ctx.newId('rm'), partId: entity.id, ratePaise: entity.rmRatePaise, effectiveFrom: ctx.today,
+    })
+  },
   extraValidate: (v, s, existingId) => {
     // Part no. is unique within its unit — a dup silently mis-binds Excel imports.
     const dup = values(s.masters.parts).some(
@@ -670,6 +683,22 @@ const rmRateMaster = defineMaster<RmRate, RmRateForm>({
       if (r.id !== entity.id && r.partId === entity.partId && !r.supersededAt && r.effectiveFrom <= entity.effectiveFrom) {
         patchEntity(draft.masters.rmRates, r.id, { supersededAt: entity.effectiveFrom })
       }
+    }
+  },
+  // A rate entered here immediately becomes the part's RM Rate / pc whenever
+  // it is effective today; future-dated versions remain pending until effective.
+  afterSave: (draft, entity, ctx) => {
+    const affected = new Set([entity.partId, ctx.existing?.partId].filter((id): id is string => !!id))
+    for (const partId of affected) {
+      const versions = values(draft.masters.rmRates)
+        .filter((r) => r.partId === partId)
+        .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom) || a.id.localeCompare(b.id))
+      versions.forEach((rate, index) => patchEntity(draft.masters.rmRates, rate.id, {
+        supersededAt: versions[index + 1]?.effectiveFrom,
+      }))
+      const current = versions.filter((r) => r.effectiveFrom <= ctx.today).at(-1)
+      const part = getById(draft.masters.parts, partId)
+      if (part && current) patchEntity(draft.masters.parts, part.id, { rmRatePaise: current.ratePaise })
     }
   },
   displayName: (r) => r.id,

@@ -79,6 +79,14 @@ export function latestProductionRatePaise(s: RootState, partId: Id, asOf = today
   return candidates[0]?.ratePaise
 }
 
+/** Versioned RM Rate Masters is the canonical rate history used by inward entry. */
+export function latestRmRatePaise(s: RootState, partId: Id, asOf = todayISO()): Paise | undefined {
+  const candidates = values(s.masters.rmRates)
+    .filter((r) => r.partId === partId && r.effectiveFrom <= asOf && (!r.supersededAt || r.supersededAt > asOf))
+    .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))
+  return candidates[0]?.ratePaise ?? getById(s.masters.parts, partId)?.rmRatePaise
+}
+
 export interface StockRow {
   unitId: Id
   partId: Id

@@ -7,7 +7,7 @@
  */
 import { resolve } from 'node:path'
 import { config } from '../config.js'
-import { getById, values } from './normalized.js'
+import { getById, patchEntity, values } from './normalized.js'
 import { createEmptyState, type RootState } from './state.js'
 import { seedState, bootstrapState } from './seed.js'
 import { setRoleResolver } from '../types/rbac.js'
@@ -15,6 +15,7 @@ import { FileDriver, COLLECTIONS, type PageQuery, type PageResult, type Persiste
 import { MysqlDriver } from './mysqlDriver.js'
 import { genericSearchText } from '../lib/list.js'
 import { log } from '../lib/logging.js'
+import { todayISO } from '../lib/id.js'
 
 let state: RootState = createEmptyState()
 let driver: PersistenceDriver | null = null
@@ -73,6 +74,20 @@ export async function initRepository(): Promise<void> {
     state = config.seedDemo ? seedState() : bootstrapState(requireBootstrapAdmin())
     await driver.resetState(state)
   }
+  // Repair legacy mismatches: versioned Rate Masters is the canonical history,
+  // while Part.rmRatePaise is its current-value mirror for fast form prefills.
+  const asOf = todayISO()
+  let rateMirrorChanged = false
+  for (const part of values(state.masters.parts)) {
+    const current = values(state.masters.rmRates)
+      .filter((r) => r.partId === part.id && r.effectiveFrom <= asOf && (!r.supersededAt || r.supersededAt > asOf))
+      .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0]
+    if (current && part.rmRatePaise !== current.ratePaise) {
+      patchEntity(state.masters.parts, part.id, { rmRatePaise: current.ratePaise })
+      rateMirrorChanged = true
+    }
+  }
+  if (rateMirrorChanged) await driver.saveState(state)
   wireRoleResolver()
 }
 

@@ -21,7 +21,7 @@ import { formatDMY } from '@/lib/date'
 import type { Dispatch, Id, Inward } from '@/types/domain'
 import { useStore } from '@/store'
 import { runSaveInward, runDeleteInward, runDeleteDispatch } from '@/store/registerCommands'
-import { selectInwardRows, type DispatchChild, type InwardRow } from '@/selectors/register'
+import { latestRmRatePaise, selectInwardRows, type DispatchChild, type InwardRow } from '@/selectors/register'
 import { useCan } from '@/hooks/useCan'
 import { inwardApi } from '@/api/modules'
 import { apiEnabled } from '@/api/client'
@@ -416,12 +416,14 @@ export default function InwardRegister({
             // part. Missing master values become blank so the operator can enter
             // them manually and never accidentally retain another part's value.
             if (changed !== 'partId' || !values.partId) return
-            const part = getById(useStore.getState().masters.parts, values.partId as string)
+            const state = useStore.getState()
+            const part = getById(state.masters.parts, values.partId as string)
             if (!part) return
             const options = { shouldDirty: true, shouldValidate: true }
             setValue('unitId', part.unitId, options)
             setValue('poNo', part.defaultPoNo ?? '', options)
-            setValue('rmRate', part.rmRatePaise != null ? fromPaise(part.rmRatePaise) : undefined, options)
+            const currentRmRate = latestRmRatePaise(state, part.id)
+            setValue('rmRate', currentRmRate != null ? fromPaise(currentRmRate) : undefined, options)
             setValue('rmWtG', part.rmWtMg != null ? part.rmWtMg / 1000 : undefined, options)
             setValue('finishWtG', part.finishWtMg > 0 ? part.finishWtMg / 1000 : undefined, options)
           }}

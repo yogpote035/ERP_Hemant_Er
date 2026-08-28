@@ -1,8 +1,8 @@
-import { useId, useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useId, useMemo, useState, type ReactNode } from 'react'
 import { FormProvider, useForm, type FieldValues } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useShallow } from 'zustand/react/shallow'
-import { Pencil, Plus, Trash2, RotateCcw, Search, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, Pencil, Plus, Trash2, RotateCcw, Search, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useStore } from '@/store'
 import { allowedUnitIds } from '@/store/scope'
@@ -11,6 +11,7 @@ import { useCan } from '@/hooks/useCan'
 import { AutoField } from '@/components/form/AutoField'
 import { Button, Card, ConfirmDialog, Drawer, EmptyState, TablePager } from '@/components/ui'
 import { usePagedSource } from '@/hooks/usePagedSource'
+import { formatINR, type Paise } from '@/lib/money'
 
 /** Master spec key → its `/masters/:entity` segment (server-side DB pagination). */
 const MASTER_SEGMENT: Record<string, string> = {
@@ -48,6 +49,21 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
 
   const [editing, setEditing] = useState<{ row: BaseEntity | null } | null>(null)
   const [deleting, setDeleting] = useState<BaseEntity | null>(null)
+  const [expandedParts, setExpandedParts] = useState<Set<string>>(new Set())
+  type RmHistoryRow = BaseEntity & { partId: string; ratePaise: Paise; effectiveFrom: string; supersededAt?: string }
+  const rmGroups = useMemo(() => {
+    if (spec.key !== 'rmRate') return []
+    const grouped = new Map<string, RmHistoryRow[]>()
+    for (const row of scopedRows as RmHistoryRow[]) {
+      const list = grouped.get(row.partId) ?? []
+      list.push(row)
+      grouped.set(row.partId, list)
+    }
+    return [...grouped.entries()].map(([partId, versions]) => ({
+      partId,
+      versions: versions.sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom)),
+    })).sort((a, b) => helpers.partLabel(a.partId).localeCompare(helpers.partLabel(b.partId)))
+  }, [helpers, scopedRows, spec.key])
 
   function onDeleteConfirm() {
     if (!deleting) return
@@ -77,7 +93,9 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <p className="text-sm text-muted">
-            {paged.total} {paged.total === 1 ? spec.label.toLowerCase() : spec.labelPlural.toLowerCase()}
+            {spec.key === 'rmRate'
+              ? `${rmGroups.length} material${rmGroups.length === 1 ? '' : 's'} · ${scopedRows.length} rate version${scopedRows.length === 1 ? '' : 's'}`
+              : `${paged.total} ${paged.total === 1 ? spec.label.toLowerCase() : spec.labelPlural.toLowerCase()}`}
           </p>
           {spec.searchText && scopedRows.length > 0 ? (
             <div className="relative">
@@ -140,6 +158,48 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
               </Button>
             }
           />
+        </Card>
+      ) : spec.key === 'rmRate' ? (
+        <Card className="overflow-x-auto p-0">
+          <table className="w-full text-sm">
+            <thead><tr className="border-b border-border bg-muted text-left text-[10.5px] uppercase tracking-wide text-muted-fg">
+              <th className="w-10 px-3 py-2.5" />
+              <th className="px-3 py-2.5 font-semibold">Material / Part</th>
+              <th className="px-3 py-2.5 text-right font-semibold">Current rate</th>
+              <th className="px-3 py-2.5 font-semibold">Latest effective</th>
+              <th className="px-3 py-2.5 text-right font-semibold">Versions</th>
+            </tr></thead>
+            <tbody>
+              {rmGroups.map((group) => {
+                const expanded = expandedParts.has(group.partId)
+                const current = group.versions.find((r) => !r.supersededAt) ?? group.versions[0]
+                return (
+                  <Fragment key={group.partId}>
+                    <tr className="cursor-pointer border-b border-border/60 hover:bg-muted/50" onClick={() => setExpandedParts((prev) => {
+                      const next = new Set(prev); if (next.has(group.partId)) next.delete(group.partId); else next.add(group.partId); return next
+                    })}>
+                      <td className="px-3 py-3">{expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</td>
+                      <td className="px-3 py-3 font-medium">{helpers.partLabel(group.partId)}</td>
+                      <td className="px-3 py-3 text-right font-mono">{current ? formatINR(current.ratePaise) : '—'}</td>
+                      <td className="px-3 py-3">{current?.effectiveFrom ?? '—'}</td>
+                      <td className="px-3 py-3 text-right">{group.versions.length}</td>
+                    </tr>
+                    {expanded ? group.versions.map((rate) => (
+                      <tr key={rate.id} className="border-b border-border/40 bg-muted/20">
+                        <td />
+                        <td className="px-3 py-2 pl-8 text-muted-fg">Version effective {rate.effectiveFrom}</td>
+                        <td className="px-3 py-2 text-right font-mono">{formatINR(rate.ratePaise)}</td>
+                        <td className="px-3 py-2">{rate.supersededAt ? `Superseded ${rate.supersededAt}` : <span className="text-success">Current</span>}</td>
+                        <td className="px-3 py-2"><div className="flex justify-end gap-1">
+                          {canEdit ? <button type="button" className="btn btn-ghost h-8 w-8 p-0" aria-label={`Edit rate ${rate.id}`} onClick={() => setEditing({ row: rate })}><Pencil size={15} /></button> : null}
+                        </div></td>
+                      </tr>
+                    )) : null}
+                  </Fragment>
+                )
+              })}
+            </tbody>
+          </table>
         </Card>
       ) : (
         <Card className="overflow-x-auto p-0">
