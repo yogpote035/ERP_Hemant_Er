@@ -431,11 +431,7 @@ const customerMaster = defineMaster<Customer, CustomerForm>({
     freightTerms: opt(v.freightTerms), transitInsuranceTerms: opt(v.transitInsuranceTerms), sez: v.sez ?? false,
     active: ctx.existing?.active ?? true,
   }),
-  extraValidate: (v, s, existingId) => {
-    const dup = values(s.masters.customers).some(
-      (c) => c.id !== existingId && c.gstin.trim().toUpperCase() === v.gstin.trim().toUpperCase()
-    )
-    if (dup) return 'A customer with this GSTIN already exists'
+  extraValidate: (v) => {
     if (gstinStateMismatch(v.gstin, v.stateCode)) return "GSTIN's first 2 digits must match the state code"
     return null
   },

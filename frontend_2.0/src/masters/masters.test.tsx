@@ -128,16 +128,16 @@ describe('command-bus guards (review fixes)', () => {
     expect(() => customer.setActive(created, true)).not.toThrow() // reactivate → 'edit'
   })
 
-  it('rejects a malformed GSTIN, a state-code that disagrees with it, and a duplicate GSTIN', () => {
+  it('rejects malformed or state-mismatched GSTINs but allows companies to share a GSTIN', () => {
     login(roleId('admin'))
     const customer = spec('customer')
     // malformed GSTIN
     expect(() => customer.save({ name: 'Bad', gstin: '27ABCDE1234F1Z', stateCode: '27' }, null)).toThrow(CommandValidationError)
     // GSTIN leading digits (29) disagree with stateCode (27)
     expect(() => customer.save({ name: 'Mismatch', gstin: '29ABCDE1234F1Z5', stateCode: '27' }, null)).toThrow(CommandValidationError)
-    // first one is fine; a second customer with the SAME GSTIN is rejected
+    // Separate company/customer records may legitimately use the same GST registration.
     customer.save({ name: 'First', gstin: '27ZZZZZ1234F1Z5', stateCode: '27' }, null)
-    expect(() => customer.save({ name: 'Dup', gstin: '27ZZZZZ1234F1Z5', stateCode: '27' }, null)).toThrow(CommandValidationError)
+    expect(() => customer.save({ name: 'Second', gstin: '27ZZZZZ1234F1Z5', stateCode: '27' }, null)).not.toThrow()
   })
 
   it('enforces part-number uniqueness within a unit', () => {

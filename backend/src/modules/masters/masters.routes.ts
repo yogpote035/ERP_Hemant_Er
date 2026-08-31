@@ -51,6 +51,28 @@ interface MasterCfg {
 
 const addressLines = z.array(z.string()).default([])
 
+const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/
+const gstin = z.string().trim().transform((value) => value.toUpperCase()).pipe(
+  z.string().regex(GSTIN_RE, 'Invalid GSTIN (e.g. 27ABCDE1234F1Z5)'),
+)
+const optionalGstin = z.preprocess(
+  (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
+  gstin.optional(),
+)
+
+function validateGstinState(
+  value: { gstin?: string, stateCode?: string },
+  ctx: z.RefinementCtx,
+): void {
+  if (value.gstin && value.stateCode && value.gstin.slice(0, 2) !== value.stateCode) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['stateCode'],
+      message: 'Must match first 2 GSTIN digits',
+    })
+  }
+}
+
 const invoiceFormat = z.string()
   .trim()
   .min(1, 'Invoice format is required')
@@ -70,27 +92,28 @@ const REGISTRY: Record<string, MasterCfg> = {
     idPrefix: 'unit', module: 'masters', unitScoped: false, softDelete: true,
     collection: (s) => s.masters.units as unknown as Normalized<Entity>,
     schema: z.object({
-      name: z.string().min(1), code: z.string().min(1), gstin: z.string().default(''),
-      stateCode: z.string().min(1), addressLines, invoiceFormat: invoiceFormat.default('{seq}/{FY}'),
+      name: z.string().min(1), code: z.string().min(1), gstin,
+      stateCode: z.string().regex(/^\d{2}$/), addressLines, invoiceFormat: invoiceFormat.default('{seq}/{FY}'),
       seqPad: z.number().int().min(0).default(0),
       bankName: z.string().optional(), bankBranch: z.string().optional(), accountNo: z.string().optional(), ifsc: z.string().optional(),
       logoDataUrl: z.string().optional(),
-    }),
+    }).superRefine(validateGstinState),
   },
   customers: {
     idPrefix: 'cust', module: 'masters', unitScoped: false, softDelete: true,
     collection: (s) => s.masters.customers as unknown as Normalized<Entity>,
     schema: z.object({
-      name: z.string().min(1), gstin: z.string().default(''), stateCode: z.string().min(1),
+      name: z.string().min(1), gstin, stateCode: z.string().regex(/^\d{2}$/),
       addressLines, paymentTermsDays: z.number().int().min(0).optional(),
       shippingName: z.string().optional(), shippingAddressLines: addressLines,
-      shippingGstin: z.string().regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/).optional(), shippingStateCode: z.string().regex(/^\d{2}$/).optional(),
+      shippingGstin: optionalGstin, shippingStateCode: z.string().regex(/^\d{2}$/).optional(),
       contactPerson: z.string().optional(),
       phone: z.string().regex(/^[+()\d\s-]{7,20}$/).optional(),
       email: z.string().email().optional(),
       freightTerms: z.string().optional(), transitInsuranceTerms: z.string().optional(),
       sez: z.boolean().optional(),
     }).superRefine((v, ctx) => {
+      validateGstinState(v, ctx)
       if (v.shippingGstin && !v.shippingStateCode) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['shippingStateCode'], message: 'Required with consignee GSTIN' })
       if (v.shippingGstin && v.shippingStateCode && v.shippingGstin.slice(0, 2) !== v.shippingStateCode) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['shippingStateCode'], message: 'Must match first 2 consignee GSTIN digits' })
@@ -104,11 +127,11 @@ const REGISTRY: Record<string, MasterCfg> = {
       unitId: z.string().min(1),
       name: z.string().min(1), code: z.string().min(1), type: z.enum(['rm', 'service']),
       contactPerson: z.string().optional(), phone: z.string().optional(), email: z.string().optional(),
-      gstin: z.string().optional(), pan: z.string().optional(), stateCode: z.string().optional(),
+      gstin: optionalGstin, pan: z.string().optional(), stateCode: z.string().regex(/^\d{2}$/).optional(),
       addressLines, city: z.string().optional(), pincode: z.string().optional(),
       bankName: z.string().optional(), accountNo: z.string().optional(), ifsc: z.string().optional(),
       invoiceFormat: z.string().optional(), remarks: z.string().optional(),
-    }),
+    }).superRefine(validateGstinState),
   },
   parts: {
     idPrefix: 'part', module: 'masters', unitScoped: true, softDelete: true,

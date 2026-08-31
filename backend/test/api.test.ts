@@ -82,6 +82,30 @@ describe('masters CRUD', () => {
     const re = await request(app).patch(`/api/masters/customers/${id}/active`).set(auth(t)).send({ active: true })
     assert.equal(re.body.data.active, true)
   })
+
+  it('validates GSTIN structure and state but permits multiple companies to share one GSTIN', async () => {
+    const t = await tokenFor()
+    const malformed = await request(app).post('/api/masters/customers').set(auth(t)).send({
+      name: 'Malformed GST Co', gstin: '27ABCDE1234F1Z', stateCode: '27', addressLines: [],
+    })
+    assert.equal(malformed.status, 400)
+
+    const mismatch = await request(app).post('/api/masters/customers').set(auth(t)).send({
+      name: 'Mismatch GST Co', gstin: '29ABCDE1234F1Z5', stateCode: '27', addressLines: [],
+    })
+    assert.equal(mismatch.status, 400)
+
+    const sharedGstin = '27SHARE1234S1Z5'
+    const first = await request(app).post('/api/masters/customers').set(auth(t)).send({
+      name: 'Shared GST Company One', gstin: sharedGstin, stateCode: '27', addressLines: [],
+    })
+    const second = await request(app).post('/api/masters/customers').set(auth(t)).send({
+      name: 'Shared GST Company Two', gstin: sharedGstin, stateCode: '27', addressLines: [],
+    })
+    assert.equal(first.status, 201)
+    assert.equal(second.status, 201)
+    assert.notEqual(first.body.data.id, second.body.data.id)
+  })
 })
 
 describe('inward lifecycle', () => {
