@@ -83,6 +83,7 @@ export interface Customer {
   id: Id
   name: string
   gstin: string
+  pan?: string
   stateCode: string
   addressLines: string[]
   /** Net-N credit period driving 'overdue'. */

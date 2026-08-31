@@ -51,6 +51,8 @@ const STATE_HINT = '2-digit GST state code (e.g. 27 = MH)'
 // 1 alnum · 'Z' · 1 alnum checksum. Length-15 alone caught nothing on a legal invoice.
 const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/
 const GSTIN_MSG = 'Invalid GSTIN (e.g. 27ABCDE1234F1Z5)'
+const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/i
+const PAN_MSG = 'Invalid PAN (e.g. ABCDE1234F)'
 /** The GSTIN's leading 2 digits ARE the place-of-supply state — they must agree with
  *  the stored stateCode, else deriveTaxKind picks the wrong CGST/SGST-vs-IGST head. */
 const gstinStateMismatch = (gstin?: string, stateCode?: string): boolean =>
@@ -358,6 +360,7 @@ const vendorMaster = defineMaster<Vendor, VendorForm>({
 const customerSchema = z.object({
   name: z.string().min(1, 'Required'),
   gstin: z.string().regex(GSTIN_RE, GSTIN_MSG),
+  pan: z.union([z.literal(''), z.string().regex(PAN_RE, PAN_MSG)]).optional(),
   stateCode: z.string().regex(/^\d{2}$/, 'Two digits'),
   paymentTermsDays: z.number({ invalid_type_error: 'Number' }).int().min(0).optional(),
   addressLines: z.string().optional(),
@@ -400,6 +403,7 @@ const customerMaster = defineMaster<Customer, CustomerForm>({
     { kind: 'text', name: 'name', label: 'Customer name', required: true, colSpan: 2 },
     { kind: 'text', name: 'gstin', label: 'GSTIN', required: true },
     { kind: 'text', name: 'stateCode', label: 'State code', required: true, hint: STATE_HINT },
+    { kind: 'text', name: 'pan', label: 'PAN', placeholder: 'e.g. ABCDE1234F' },
     { kind: 'number', name: 'paymentTermsDays', label: 'Payment terms (days)', min: 0 },
     { kind: 'textarea', name: 'addressLines', label: 'Address (one line each)', colSpan: 2 },
     { kind: 'text', name: 'contactPerson', label: 'Kind attention (contact person)' },
@@ -415,7 +419,7 @@ const customerMaster = defineMaster<Customer, CustomerForm>({
   ],
   emptyForm: () => ({}),
   toForm: (c) => ({
-    name: c.name, gstin: c.gstin, stateCode: c.stateCode,
+    name: c.name, gstin: c.gstin, pan: c.pan ?? '', stateCode: c.stateCode,
     paymentTermsDays: c.paymentTermsDays, addressLines: joinLines(c.addressLines),
     shippingName: c.shippingName ?? '', shippingAddressLines: joinLines(c.shippingAddressLines ?? []),
     shippingGstin: c.shippingGstin ?? '', shippingStateCode: c.shippingStateCode ?? '',
@@ -423,7 +427,7 @@ const customerMaster = defineMaster<Customer, CustomerForm>({
     freightTerms: c.freightTerms ?? '', transitInsuranceTerms: c.transitInsuranceTerms ?? '', sez: c.sez ?? false,
   }),
   toEntity: (v, ctx) => ({
-    id: ctx.id, name: v.name.trim(), gstin: v.gstin.trim().toUpperCase(), stateCode: v.stateCode,
+    id: ctx.id, name: v.name.trim(), gstin: v.gstin.trim().toUpperCase(), pan: opt(v.pan)?.toUpperCase(), stateCode: v.stateCode,
     paymentTermsDays: v.paymentTermsDays, addressLines: splitLines(v.addressLines),
     shippingName: opt(v.shippingName), shippingAddressLines: splitLines(v.shippingAddressLines),
     shippingGstin: opt(v.shippingGstin)?.toUpperCase(), shippingStateCode: opt(v.shippingStateCode),

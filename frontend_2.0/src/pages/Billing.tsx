@@ -803,18 +803,13 @@ function InvoicePreview({ invoiceId, onClose, onPdf }: { invoiceId: Id; onClose:
             <KV k="GSTIN/UIN" v={m.issuerGstin || '—'} mono />
             <KV k="State Code" v={m.issuerState || '—'} />
             <KV k="PAN No" v={m.issuerPan || '—'} mono />
-            <KV k="MSME No" v="—" />
           </div>
           <div className="space-y-0.5 p-2.5">
             <KV k="Invoice No" v={m.invoiceNo} mono strong />
             <KV k="Invoice Date" v={m.invoiceDate} />
             <KV k="PO / Jobwork No" v={m.poJobworkNo || '—'} />
-            <KV k="Customer Tax Inv No" v={m.custTaxInvoiceNo || '—'} />
-            <KV k="E-Way Bill No" v={m.ewayBillNo || '—'} mono />
             <KV k="Motor Vehicle No" v={m.motorVehicleNo || '—'} mono />
-            <KV k="Transporter" v={m.transporter || '—'} />
             <KV k="Dispatched Through" v={m.dispatchedThrough || '—'} />
-            <KV k="Destination" v={m.destination || '—'} />
             <KV k="Terms of Payment" v={m.termsOfPayment || '—'} />
             <KV k="Due Date" v={m.dueDate || '—'} />
           </div>
@@ -829,10 +824,6 @@ function InvoicePreview({ invoiceId, onClose, onPdf }: { invoiceId: Id; onClose:
             <KV k="GSTIN/UIN" v={m.custGstin || '—'} mono />
             <KV k="State Code" v={m.custState || '—'} />
             <KV k="PAN No" v={m.custPan || '—'} mono />
-            <KV k="Kind Attn." v={m.contactPerson || '—'} />
-            <KV k="Contact No" v={m.contactPhone || '—'} />
-            <KV k="Freight Charges" v={m.freightTerms || '—'} />
-            <KV k="Transit Insurance" v={m.transitInsuranceTerms || '—'} />
           </div>
           <div className="space-y-0.5 p-2.5">
             <div className="text-[9px] font-semibold uppercase tracking-wide text-[#64748b]">Details of Consignee (Shipped To)</div>
@@ -843,7 +834,6 @@ function InvoicePreview({ invoiceId, onClose, onPdf }: { invoiceId: Id; onClose:
             <KV k="PAN No" v={m.shipPan || '—'} mono />
             <KV k="Email ID" v={m.contactEmail || '—'} />
             <KV k="GST Type" v={m.gstType} />
-            <KV k="SEZ" v={m.sez ? 'Yes' : 'No'} />
           </div>
         </div>
 

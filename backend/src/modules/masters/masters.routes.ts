@@ -52,12 +52,19 @@ interface MasterCfg {
 const addressLines = z.array(z.string()).default([])
 
 const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/
+const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/
 const gstin = z.string().trim().transform((value) => value.toUpperCase()).pipe(
   z.string().regex(GSTIN_RE, 'Invalid GSTIN (e.g. 27ABCDE1234F1Z5)'),
 )
 const optionalGstin = z.preprocess(
   (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
   gstin.optional(),
+)
+const optionalPan = z.preprocess(
+  (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
+  z.string().trim().transform((value) => value.toUpperCase()).pipe(
+    z.string().regex(PAN_RE, 'Invalid PAN (e.g. ABCDE1234F)'),
+  ).optional(),
 )
 
 function validateGstinState(
@@ -103,7 +110,7 @@ const REGISTRY: Record<string, MasterCfg> = {
     idPrefix: 'cust', module: 'masters', unitScoped: false, softDelete: true,
     collection: (s) => s.masters.customers as unknown as Normalized<Entity>,
     schema: z.object({
-      name: z.string().min(1), gstin, stateCode: z.string().regex(/^\d{2}$/),
+      name: z.string().min(1), gstin, pan: optionalPan, stateCode: z.string().regex(/^\d{2}$/),
       addressLines, paymentTermsDays: z.number().int().min(0).optional(),
       shippingName: z.string().optional(), shippingAddressLines: addressLines,
       shippingGstin: optionalGstin, shippingStateCode: z.string().regex(/^\d{2}$/).optional(),

@@ -95,18 +95,13 @@ function InvoicePage({ m, copyLabel }: { m: InvoiceDocModel; copyLabel: typeof C
             <KV k="GSTIN/UIN" v={m.issuerGstin || '—'} />
             <KV k="State Code" v={m.issuerState || '—'} />
             <KV k="PAN No" v={m.issuerPan || '—'} />
-            <KV k="MSME No" v="—" />
           </View>
           <View style={s.half}>
             <KV k="Invoice No" v={m.invoiceNo} />
             <KV k="Invoice Date" v={m.invoiceDate} />
             <KV k="PO / Jobwork No" v={m.poJobworkNo || '—'} />
-            <KV k="Customer Tax Inv" v={m.custTaxInvoiceNo || '—'} />
-            <KV k="E-Way Bill No" v={m.ewayBillNo || '—'} />
             <KV k="Motor Vehicle No" v={m.motorVehicleNo || '—'} />
-            <KV k="Transporter" v={m.transporter || '—'} />
             <KV k="Dispatched Through" v={m.dispatchedThrough || '—'} />
-            <KV k="Destination" v={m.destination || '—'} />
             <KV k="Terms of Payment" v={m.termsOfPayment || '—'} />
             <KV k="Due Date" v={m.dueDate || '—'} />
           </View>
@@ -121,10 +116,6 @@ function InvoicePage({ m, copyLabel }: { m: InvoiceDocModel; copyLabel: typeof C
             <KV k="GSTIN/UIN" v={m.custGstin || '—'} />
             <KV k="State Code" v={m.custState || '—'} />
             <KV k="PAN No" v={m.custPan || '—'} />
-            <KV k="Kind Attn." v={m.contactPerson || '—'} />
-            <KV k="Contact No" v={m.contactPhone || '—'} />
-            <KV k="Freight Charges" v={m.freightTerms || '—'} />
-            <KV k="Transit Insurance" v={m.transitInsuranceTerms || '—'} />
           </View>
           <View style={s.half}>
             <Text style={s.sectLabel}>Details of Consignee (Shipped To)</Text>
@@ -135,7 +126,6 @@ function InvoicePage({ m, copyLabel }: { m: InvoiceDocModel; copyLabel: typeof C
             <KV k="PAN No" v={m.shipPan || '—'} />
             <KV k="Email ID" v={m.contactEmail || '—'} />
             <KV k="GST Type" v={m.gstType} />
-            <KV k="SEZ" v={m.sez ? 'Yes' : 'No'} />
           </View>
         </View>
 

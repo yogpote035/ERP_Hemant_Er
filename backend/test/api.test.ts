@@ -106,6 +106,20 @@ describe('masters CRUD', () => {
     assert.equal(second.status, 201)
     assert.notEqual(first.body.data.id, second.body.data.id)
   })
+
+  it('validates and normalizes an optional customer PAN', async () => {
+    const t = await tokenFor()
+    const malformed = await request(app).post('/api/masters/customers').set(auth(t)).send({
+      name: 'Bad PAN Company', gstin: '27ABCDE1234F1Z5', pan: 'ABCDE123', stateCode: '27', addressLines: [],
+    })
+    assert.equal(malformed.status, 400)
+
+    const created = await request(app).post('/api/masters/customers').set(auth(t)).send({
+      name: 'PAN Company', gstin: '27ABCDE1234F1Z5', pan: 'abcde1234f', stateCode: '27', addressLines: [],
+    })
+    assert.equal(created.status, 201)
+    assert.equal(created.body.data.pan, 'ABCDE1234F')
+  })
 })
 
 describe('inward lifecycle', () => {

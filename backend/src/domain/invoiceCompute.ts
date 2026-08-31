@@ -371,7 +371,7 @@ export function selectInvoiceDocModel(s: RootState, invoiceId: Id): InvoiceDocMo
     remark: undefined,
     custName,
     custGstin,
-    custPan: panFromGstin(custGstin),
+    custPan: cust?.pan || panFromGstin(custGstin),
     custState: ps?.custStateCode ?? cust?.stateCode ?? '',
     custAddress,
     parts,
