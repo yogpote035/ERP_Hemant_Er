@@ -9,11 +9,11 @@ import type { InwardInput } from '@/store/registerCommands'
 export const inwardSchema = z.object({
   unitId: z.string().min(1, 'Required'),
   partId: z.string().min(1, 'Required'),
-  challanNo: z.string().min(1, 'Required'),
-  challanDate: z.string().min(1, 'Required'),
+  challanNo: z.string().optional().default(''),
+  challanDate: z.string().optional().default(''),
   poNo: z.string().optional(),
   dieNo: z.string().optional(),
-  batchHeatNo: z.string().min(1, 'Required'),
+  batchHeatNo: z.string().optional().default(''),
   binNo: z.string().optional(),
   vendorId: z.string().optional(),
   // Per-inward traceability (client Inward format): RM rate ₹/pc, RM & finish wt g/pc.
@@ -31,12 +31,12 @@ export type InwardFormValues = z.infer<typeof inwardSchema>
 // RM Supplier · RM Rate/pc · RM Wt/pc · Finish Wt/pc · Received QTY (+ Unit, Customer).
 export const inwardFields: FieldSpec[] = [
   { kind: 'select', name: 'unitId', label: 'Assigned Unit', required: true, options: unitOptions },
-  { kind: 'text', name: 'challanNo', label: 'Challan no.', required: true },
-  { kind: 'date', name: 'challanDate', label: 'Challan date', required: true },
+  { kind: 'text', name: 'challanNo', label: 'Challan no.' },
+  { kind: 'date', name: 'challanDate', label: 'Challan date' },
   { kind: 'select', name: 'partId', label: 'Catalogue part', required: true, options: partOptions, hint: 'Prefills assigned unit, PO, RM rate and weights when present; missing values remain editable.' },
   { kind: 'text', name: 'poNo', label: 'PO no.' },
   { kind: 'text', name: 'dieNo', label: 'Die no.' },
-  { kind: 'text', name: 'batchHeatNo', label: 'Batch / heat no.', required: true },
+  { kind: 'text', name: 'batchHeatNo', label: 'Batch / heat no.' },
   { kind: 'text', name: 'binNo', label: 'Bin no.' },
   { kind: 'select', name: 'vendorId', label: 'RM supplier', options: rmVendorOptions },
   { kind: 'number', name: 'rmRate', label: 'RM Rate / pc (₹)', step: 0.01, min: 0 },

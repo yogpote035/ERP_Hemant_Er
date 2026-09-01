@@ -119,14 +119,17 @@ function validateInward(s: RootState, input: InwardInput): { ok: true } | { ok: 
   const errors: string[] = []
   if (!input.unitId) errors.push('Unit is required')
   if (!input.partId) errors.push('Part is required')
-  if (!input.challanNo.trim()) errors.push('Challan no. is required')
-  if (!input.challanDate) errors.push('Challan date is required')
-  if (!input.batchHeatNo.trim()) errors.push('Batch / heat no. is required')
   if (!(input.receivedQty > 0)) errors.push('Received qty must be greater than 0')
   if (input.unitId && !writableUnitIds(s).has(input.unitId)) errors.push("You don't have access to that unit")
+  const part = getById(s.masters.parts, input.partId)
+  if (part && part.unitId !== input.unitId) errors.push('Catalogue part does not belong to the selected unit')
+  const vendor = input.vendorId ? getById(s.masters.vendors, input.vendorId) : undefined
+  if (input.vendorId && (!vendor || !vendor.active)) errors.push('RM supplier is unknown or inactive')
+  else if (vendor?.unitId && vendor.unitId !== input.unitId) errors.push('RM supplier does not belong to the selected unit')
+  if (input.customerId && !getById(s.masters.customers, input.customerId)) errors.push('Customer / owner is unknown')
   // Duplicate-challan guard: one (unit, challan, part) row only.
   const dup = values(s.inventory.inwards).some(
-    (i) => i.id !== input.id && i.unitId === input.unitId && i.partId === input.partId && i.challanNo === input.challanNo
+    (i) => Boolean(input.challanNo.trim()) && i.id !== input.id && i.unitId === input.unitId && i.partId === input.partId && i.challanNo === input.challanNo.trim()
   )
   if (dup) errors.push(`Challan ${input.challanNo} already exists for this part`)
   // On edit, can't shrink received below what's already dispatched, and the row

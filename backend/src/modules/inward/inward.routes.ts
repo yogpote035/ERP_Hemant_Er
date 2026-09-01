@@ -40,15 +40,15 @@ const createSchema = z.object({
   partId: z.string().min(1, 'Part is required'),
   vendorId: z.string().optional(),
   customerId: z.string().optional(),
-  challanNo: z.string().trim().min(1, 'Challan no. is required'),
-  challanDate: z.string().min(1, 'Challan date is required'),
+  challanNo: z.string().trim().optional().default(''),
+  challanDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').optional().or(z.literal('')).default(''),
   poNo: z.string().optional(),
   dieNo: z.string().optional(),
-  batchHeatNo: z.string().trim().min(1, 'Batch / heat no. is required'),
+  batchHeatNo: z.string().trim().optional().default(''),
   binNo: z.string().optional(),
-  rmRatePaise: z.number().int().optional(),
-  rmWtMg: z.number().int().optional(),
-  finishWtMg: z.number().int().optional(),
+  rmRatePaise: z.number().int().nonnegative().optional(),
+  rmWtMg: z.number().int().nonnegative().optional(),
+  finishWtMg: z.number().int().nonnegative().optional(),
   receivedQty: z.number().int().positive('Received qty must be greater than 0'),
   attachmentName: z.string().optional(),
   remarks: z.string().optional(),
@@ -136,13 +136,17 @@ inwardRouter.post(
     // Referential checks the frontend gets for free via the masters store.
     const db = getDb()
     if (!getById(db.masters.units, body.unitId)) throw badRequest('Unknown unit')
-    if (!getById(db.masters.parts, body.partId)) throw badRequest('Unknown part')
-    if (body.vendorId && !getById(db.masters.vendors, body.vendorId)) throw badRequest('Unknown vendor')
+    const part = getById(db.masters.parts, body.partId)
+    if (!part) throw badRequest('Unknown part')
+    if (part.unitId !== body.unitId) throw badRequest('Catalogue part does not belong to the selected unit')
+    const vendor = body.vendorId ? getById(db.masters.vendors, body.vendorId) : undefined
+    if (body.vendorId && (!vendor || !vendor.active)) throw badRequest('Unknown or inactive vendor')
+    if (vendor?.unitId && vendor.unitId !== body.unitId) throw badRequest('RM supplier does not belong to the selected unit')
     if (body.customerId && !getById(db.masters.customers, body.customerId)) throw badRequest('Unknown customer')
 
     // Duplicate-challan guard: one (unit, challan, part) row only.
     const dup = values(db.inventory.inwards).some(
-      (i) => i.unitId === body.unitId && i.partId === body.partId && i.challanNo === body.challanNo
+      (i) => Boolean(body.challanNo) && i.unitId === body.unitId && i.partId === body.partId && i.challanNo === body.challanNo
     )
     if (dup) throw conflict(`Challan ${body.challanNo} already exists for this part`)
 
@@ -194,12 +198,16 @@ inwardRouter.put(
 
     const db = getDb()
     if (!getById(db.masters.units, body.unitId)) throw badRequest('Unknown unit')
-    if (!getById(db.masters.parts, body.partId)) throw badRequest('Unknown part')
-    if (body.vendorId && !getById(db.masters.vendors, body.vendorId)) throw badRequest('Unknown vendor')
+    const part = getById(db.masters.parts, body.partId)
+    if (!part) throw badRequest('Unknown part')
+    if (part.unitId !== body.unitId) throw badRequest('Catalogue part does not belong to the selected unit')
+    const vendor = body.vendorId ? getById(db.masters.vendors, body.vendorId) : undefined
+    if (body.vendorId && (!vendor || !vendor.active)) throw badRequest('Unknown or inactive vendor')
+    if (vendor?.unitId && vendor.unitId !== body.unitId) throw badRequest('RM supplier does not belong to the selected unit')
     if (body.customerId && !getById(db.masters.customers, body.customerId)) throw badRequest('Unknown customer')
 
     const dup = values(db.inventory.inwards).some(
-      (i) => i.id !== cur.id && i.unitId === body.unitId && i.partId === body.partId && i.challanNo === body.challanNo
+      (i) => Boolean(body.challanNo) && i.id !== cur.id && i.unitId === body.unitId && i.partId === body.partId && i.challanNo === body.challanNo
     )
     if (dup) throw conflict(`Challan ${body.challanNo} already exists for this part`)
 
