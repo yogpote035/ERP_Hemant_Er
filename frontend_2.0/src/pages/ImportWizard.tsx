@@ -17,6 +17,8 @@ import {
 import { runImportMio, previewImportIssues, partitionInwards } from '@/store/importCommands'
 import { useCan } from '@/hooks/useCan'
 import { toastCommandError, toastCommandSuccess } from '@/lib/commandToast'
+import { exportRowsToXlsx } from '@/lib/exportXlsx'
+import { INWARD_REGISTER_COLUMNS, INWARD_REGISTER_SAMPLE_ROWS } from '@/lib/inwardRegisterWorkbook'
 import { Button, Card, EmptyState, SearchableDropdown } from '@/components/ui'
 
 type Step = 1 | 2 | 3
@@ -47,6 +49,14 @@ export default function ImportWizard({
   const [parseError, setParseError] = useState('')
   const [importing, setImporting] = useState(false)
   const [done, setDone] = useState<{ inwards: number; dispatches: number; invoices: number; partsCreated: number } | null>(null)
+
+  async function downloadSampleWorkbook() {
+    try {
+      await exportRowsToXlsx('HEW-inward-outward-import-template.xlsx', 'Inward Outward Register', INWARD_REGISTER_COLUMNS, INWARD_REGISTER_SAMPLE_ROWS)
+    } catch (error) {
+      toastCommandError(error)
+    }
+  }
 
   const rows = useMemo(() => (sheet ? workbookRows[sheet] ?? [] : []), [sheet, workbookRows])
   const header = rows[headerRowIdx] ?? []
@@ -145,22 +155,14 @@ export default function ImportWizard({
               Drop the MIO register &rarr; map columns &rarr; preview &rarr; one undoable import.
             </p>
           </div>
-          <a
-            href="/sample/HEW-sample-MIO.xlsx"
-            download
-            className="btn btn-secondary h-9 text-[13px]"
-          >
-            <FileSpreadsheet size={15} /> Download sample workbook
-          </a>
+          <Button variant="secondary" leftIcon={<FileSpreadsheet size={15} />} onClick={downloadSampleWorkbook}>
+            Download sample workbook
+          </Button>
         </div>
       ) : (
-        <a
-          href="/sample/HEW-sample-MIO.xlsx"
-          download
-          className="btn btn-secondary h-9 text-[13px]"
-        >
-          <FileSpreadsheet size={15} /> Download sample workbook
-        </a>
+        <Button variant="secondary" leftIcon={<FileSpreadsheet size={15} />} onClick={downloadSampleWorkbook}>
+          Download sample workbook
+        </Button>
       )}
 
       {/* Stepper */}

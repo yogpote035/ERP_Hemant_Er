@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { autoDetectColumns, groupMioRows, summarize, type MioColumnMap } from './mioImport'
+import { INWARD_REGISTER_COLUMNS, INWARD_REGISTER_SAMPLE_ROWS } from './inwardRegisterWorkbook'
 
 // The real 26-column MIO header.
 const HEADER = [
@@ -28,6 +29,24 @@ describe('autoDetectColumns', () => {
     expect(m.mrQty).toBe(12)
     expect(m.mfQty).toBe(13)
     expect(m.ratePerPc).toBe(15)
+  })
+
+  it('round-trips the shared export/import template including a continuation dispatch', () => {
+    const header = INWARD_REGISTER_COLUMNS.map((column) => column.label)
+    const rows = INWARD_REGISTER_SAMPLE_ROWS.map((row) =>
+      INWARD_REGISTER_COLUMNS.map((column) => row[column.key] ?? '')
+    )
+    const map = autoDetectColumns(header)
+    expect(map.challanNo).toBeGreaterThanOrEqual(0)
+    expect(map.challanDate).toBeGreaterThanOrEqual(0)
+    expect(map.partNo).toBeGreaterThanOrEqual(0)
+    expect(map.batchHeatNo).toBeGreaterThanOrEqual(0)
+    expect(map.receivedQty).toBeGreaterThanOrEqual(0)
+
+    const result = groupMioRows(rows, map)
+    expect(result.issues.filter((issue) => issue.level === 'error')).toHaveLength(0)
+    expect(result.inwards).toHaveLength(1)
+    expect(result.inwards[0]!.dispatches).toHaveLength(2)
   })
 })
 

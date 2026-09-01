@@ -6,6 +6,7 @@ import {
   ArrowUpFromLine,
   ChevronRight,
   ChevronDown,
+  Download,
   FileSpreadsheet,
   FileText,
   Paperclip,
@@ -26,6 +27,8 @@ import { useCan } from '@/hooks/useCan'
 import { inwardApi } from '@/api/modules'
 import { apiEnabled } from '@/api/client'
 import { toastCommandError, toastCommandSuccess } from '@/lib/commandToast'
+import { exportRowsToXlsx } from '@/lib/exportXlsx'
+import { buildInwardRegisterExportRows, INWARD_REGISTER_COLUMNS } from '@/lib/inwardRegisterWorkbook'
 import { ActionMenu, Badge, Button, Card, Chip, ConfirmDialog, Drawer, EmptyState, Kpi, KpiGrid, SearchableDropdown, TablePager, Tabs, type ActionMenuItem } from '@/components/ui'
 import { usePagedSource } from '@/hooks/usePagedSource'
 import ImportWizard from '@/pages/ImportWizard'
@@ -82,6 +85,7 @@ export default function InwardRegister({
   const [inwardModal, setInwardModal] = useState<{ inward: Inward | null } | null>(null)
   const [dispatchModal, setDispatchModal] = useState<{ inward: Inward; dispatch: Dispatch | null } | null>(null)
   const [deleting, setDeleting] = useState<DeleteTarget | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   const canInwardCreate = can('inward', 'create')
   const canInwardEdit = can('inward', 'edit')
@@ -229,6 +233,24 @@ export default function InwardRegister({
     }
   }
 
+  async function exportRegister() {
+    if (shown.length === 0) {
+      toastCommandError(new Error('No inward records match the current filters'))
+      return
+    }
+    setExporting(true)
+    try {
+      const exportRows = buildInwardRegisterExportRows(shown)
+      const stamp = new Date().toISOString().slice(0, 10)
+      await exportRowsToXlsx(`inward-outward-register-${stamp}.xlsx`, 'Inward Outward Register', INWARD_REGISTER_COLUMNS, exportRows)
+      toastCommandSuccess(`Exported ${exportRows.length} register row${exportRows.length === 1 ? '' : 's'}`, [])
+    } catch (error) {
+      toastCommandError(error)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* Page head */}
@@ -242,6 +264,9 @@ export default function InwardRegister({
           </div>
         ) : null}
         <div className="ml-auto flex items-center gap-2">
+          <Button variant="secondary" leftIcon={<Download size={15} />} loading={exporting} onClick={exportRegister}>
+            Export
+          </Button>
           {canImport ? (
             <Button variant="secondary" leftIcon={<FileSpreadsheet size={15} />} onClick={() => setImportOpen(true)}>
               Import
