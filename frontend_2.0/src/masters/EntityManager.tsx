@@ -2,7 +2,7 @@ import { Fragment, useId, useMemo, useState, type ReactNode } from 'react'
 import { FormProvider, useForm, type FieldValues } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useShallow } from 'zustand/react/shallow'
-import { ChevronDown, ChevronRight, Pencil, Plus, Trash2, RotateCcw, Search, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, Download, Pencil, Plus, Trash2, RotateCcw, Search, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useStore } from '@/store'
 import { allowedUnitIds } from '@/store/scope'
@@ -12,6 +12,9 @@ import { AutoField } from '@/components/form/AutoField'
 import { Button, Card, ConfirmDialog, Drawer, EmptyState, TablePager } from '@/components/ui'
 import { usePagedSource } from '@/hooks/usePagedSource'
 import { formatINR, type Paise } from '@/lib/money'
+import { exportRowsToXlsx } from '@/lib/exportXlsx'
+import { excelBoolean, excelNumber, excelText, excelValue, type ImportedRow } from '@/lib/importXlsx'
+import { ExcelImportButton, type ExcelImportColumn } from '@/components/ExcelImportButton'
 
 /** Master spec key → its `/masters/:entity` segment (server-side DB pagination). */
 const MASTER_SEGMENT: Record<string, string> = {
@@ -27,6 +30,7 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
   const canCreate = can(spec.module, 'create')
   const canEdit = can(spec.module, 'edit')
   const canDelete = can(spec.module, 'delete')
+  const canExport = can(spec.module, 'export') || can(spec.module, 'view')
 
   // useShallow: these selectors build a fresh array/Set each call, so without a
   // shallow equality check the always-listening manager would re-render on every
@@ -86,6 +90,60 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
     }
   }
 
+  async function exportMaster() {
+    if (scopedRows.length === 0) {
+      toast.error(`No ${spec.labelPlural.toLowerCase()} to export`)
+      return
+    }
+    const columns = spec.fields.map((field) => ({ key: field.name, label: field.label }))
+    const rows = scopedRows.map((row) => spec.toForm(row) as Record<string, unknown>)
+    await exportRowsToXlsx(`${spec.key}-${new Date().toISOString().slice(0, 10)}.xlsx`, spec.labelPlural, columns, rows)
+    toast.success(`Exported ${rows.length} ${spec.labelPlural.toLowerCase()}`)
+  }
+
+  async function importMaster(rows: ImportedRow[]) {
+    const parsed = rows.map((row, index) => parseImportRow(row, index + 2))
+    for (const values of parsed) spec.save(values, null)
+    toast.success(`Imported ${parsed.length} ${spec.labelPlural.toLowerCase()}`)
+  }
+
+  function parseImportRow(row: ImportedRow, rowNumber: number): FieldValues {
+    const formValues = { ...spec.emptyForm() } as Record<string, unknown>
+    for (const field of spec.fields) {
+      const raw = excelValue(row, field.label, field.name)
+      if (raw === undefined) continue
+      if (field.kind === 'number' || field.kind === 'money') formValues[field.name] = excelNumber(raw)
+      else if (field.kind === 'checkbox') formValues[field.name] = excelBoolean(raw)
+      else formValues[field.name] = excelText(raw)
+    }
+    const result = spec.schema.safeParse(formValues)
+    if (!result.success) {
+      const issue = result.error.issues[0]
+      throw new Error(`Row ${rowNumber}: ${issue?.path.join('.') || 'value'} ${issue?.message || 'is invalid'}`)
+    }
+    return result.data
+  }
+
+  const importColumns: ExcelImportColumn[] = spec.fields.map((field) => ({ key: field.name, label: field.label, required: 'required' in field ? field.required : false }))
+  const duplicateKey = (form: Record<string, unknown>) => {
+    const val = (name: string) => String(form[name] ?? '').trim().toLowerCase()
+    if (spec.key === 'unit') return val('shortCode')
+    if (spec.key === 'customer') return `${val('name')}|${val('gstin')}`
+    if (spec.key === 'vendor') return val('code')
+    if (spec.key === 'part') return `${val('unitId')}|${val('partNo')}`
+    if (spec.key === 'machine') return `${val('unitId')}|${val('machineNo')}`
+    if (spec.key === 'operation') return val('code')
+    if (spec.key === 'employee') return val('empCode')
+    if (spec.key === 'opening') return `${val('unitId')}|${val('partId')}`
+    return spec.fields.filter((field) => 'required' in field && field.required).map((field) => val(field.name)).join('|')
+  }
+  const existingKeys = new Set(scopedRows.map((row) => duplicateKey(spec.toForm(row) as Record<string, unknown>)))
+  const rowDuplicateKey = (row: ImportedRow) => duplicateKey(Object.fromEntries(spec.fields.map((field) => [field.name, excelValue(row, field.label, field.name)])))
+  const validateImportRow = (row: ImportedRow, rowNumber: number) => {
+    try { parseImportRow(row, rowNumber); return undefined }
+    catch (error) { return error instanceof Error ? error.message.replace(/^Row \d+:\s*/, '') : 'Invalid row' }
+  }
+
   const showActions = canEdit || canDelete
 
   return (
@@ -123,6 +181,10 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
         </div>
         <div className="flex items-center gap-2">
           {actions}
+          {canExport && !actions ? (
+            <Button className="w-24 shrink-0 justify-center" variant="secondary" size="sm" leftIcon={<Download size={15} />} onClick={exportMaster}>Export</Button>
+          ) : null}
+          {canCreate ? <ExcelImportButton size="sm" title={`Import ${spec.labelPlural}`} columns={importColumns} existingKeys={existingKeys} rowKey={rowDuplicateKey} validateRow={validateImportRow} onRows={importMaster} /> : null}
           {canCreate && scopedRows.length > 0 ? (
             <Button size="sm" leftIcon={<Plus size={15} />} onClick={() => setEditing({ row: null })}>
               New {spec.label}

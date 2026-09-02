@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { ReceiptText, FileDown, Ban, FileSignature, Eye, Printer, IndianRupee, Pencil, Trash2, Plus } from 'lucide-react'
+import { ReceiptText, FileDown, Ban, FileSignature, Eye, Printer, IndianRupee, Pencil, Trash2, Plus, Download, FileSpreadsheet } from 'lucide-react'
 import { formatINR, formatINRSymbol, formatINRCompact, fromPaise, toPaise, type Paise } from '@/lib/money'
 import { formatDMY, todayISO } from '@/lib/date'
 import type { Id, Invoice, IssuerKind, PaymentMode } from '@/types/domain'
@@ -26,6 +26,8 @@ import { toastCommandError, toastCommandSuccess } from '@/lib/commandToast'
 import { ActionMenu, Badge, Button, Card, Drawer, EmptyState, Kpi, KpiGrid, Modal, SearchableDropdown, TablePager, Tabs, type ActionMenuItem, type BadgeTone } from '@/components/ui'
 import { usePagedSource } from '@/hooks/usePagedSource'
 import { toast } from 'sonner'
+import { exportRowsToXlsx } from '@/lib/exportXlsx'
+import ImportWizard from '@/pages/ImportWizard'
 
 type StatusFilter = 'all' | 'draft' | 'sent' | 'paid' | 'overdue'
 const FILTERS = [
@@ -57,6 +59,8 @@ export default function Billing() {
   const [selected, setSelected] = useState<Set<Id>>(new Set())
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
+  const [importOpen, setImportOpen] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   const canEdit = can('billing', 'edit')
 
@@ -146,6 +150,32 @@ export default function Billing() {
     }
   }
 
+  async function exportInvoices() {
+    if (shown.length === 0) { toast.error('No invoices match the current filters'); return }
+    setExporting(true)
+    try {
+      const data = shown.map((row) => ({
+        billNo: row.invoice.billNo ?? '', customer: row.customerName, invoiceDate: row.invoice.invoiceDate,
+        financialYear: row.invoice.fy, lifecycle: row.invoice.lifecycle, paymentStatus: row.status,
+        lineCount: row.lineCount, taxable: row.invoice.totals ? fromPaise(row.invoice.totals.assessable) : '',
+        cgst: row.invoice.totals ? fromPaise(row.invoice.totals.cgst) : '',
+        sgst: row.invoice.totals ? fromPaise(row.invoice.totals.sgst) : '',
+        igst: row.invoice.totals ? fromPaise(row.invoice.totals.igst) : '',
+        grandTotal: fromPaise(row.grand), outstanding: fromPaise(row.outstanding),
+      }))
+      await exportRowsToXlsx(`billing-${todayISO()}.xlsx`, 'Billing', [
+        { key: 'billNo', label: 'Bill No' }, { key: 'customer', label: 'Customer' },
+        { key: 'invoiceDate', label: 'Invoice Date' }, { key: 'financialYear', label: 'Financial Year' },
+        { key: 'lifecycle', label: 'Lifecycle' }, { key: 'paymentStatus', label: 'Payment Status' },
+        { key: 'lineCount', label: 'Lines' }, { key: 'taxable', label: 'Taxable Amount' },
+        { key: 'cgst', label: 'CGST' }, { key: 'sgst', label: 'SGST' }, { key: 'igst', label: 'IGST' },
+        { key: 'grandTotal', label: 'Grand Total' }, { key: 'outstanding', label: 'Outstanding' },
+      ], data)
+      toast.success(`Exported ${data.length} invoices`)
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'Export failed') }
+    finally { setExporting(false) }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start gap-3">
@@ -153,7 +183,15 @@ export default function Billing() {
           <h1 className="text-[22px] font-bold tracking-tight">Billing &amp; Invoice</h1>
           <p className="mt-0.5 text-[13px] text-muted-fg">Auto-generated GST tax invoices per Bill No — finalize drafts, issue, preview and export.</p>
         </div>
+        <div className="ml-auto flex items-center gap-2">
+          <Button className="w-24 shrink-0 justify-center" variant="secondary" leftIcon={<Download size={15} />} loading={exporting} onClick={exportInvoices}>Export</Button>
+          {can('import', 'view') ? <Button className="w-24 shrink-0 justify-center" variant="secondary" leftIcon={<FileSpreadsheet size={15} />} onClick={() => setImportOpen(true)}>Import</Button> : null}
+        </div>
       </div>
+
+      <Drawer open={importOpen} onClose={() => setImportOpen(false)} size="xl" title="Import billing and dispatch workbook" description="Uses the same validated inward/outward workbook format." defaultMaximized>
+        <ImportWizard embedded onClose={() => setImportOpen(false)} />
+      </Drawer>
 
       <KpiGrid>
         <Kpi tone="blue" label="Invoices Issued" value={kpis.issued.toLocaleString('en-IN')} sub={`${kpis.draft} draft`} />

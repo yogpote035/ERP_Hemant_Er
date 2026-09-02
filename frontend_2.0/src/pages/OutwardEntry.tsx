@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, ArrowUpFromLine, ReceiptText, X } from 'lucide-react'
+import { ArrowLeft, ArrowUpFromLine, ReceiptText, X, Download, FileSpreadsheet } from 'lucide-react'
 import { addP, formatINRSymbol, mulQty, pctOfPaise, toPaise, fromPaise, type Paise } from '@/lib/money'
 import { todayISO } from '@/lib/date'
 import { useStore } from '@/store'
-import { latestProductionRatePaise, selectOpenInwardRows } from '@/selectors/register'
+import { latestProductionRatePaise, selectInwardRows, selectOpenInwardRows } from '@/selectors/register'
 import { runSaveDispatchBatch, type DispatchBatchLine } from '@/store/registerCommands'
 import { useCan } from '@/hooks/useCan'
 import { dispatchApi } from '@/api/modules'
 import { toastCommandError, toastCommandSuccessLink } from '@/lib/commandToast'
-import { Button, Card, EmptyState, MultiSelectDropdown } from '@/components/ui'
+import { Button, Card, Drawer, EmptyState, MultiSelectDropdown } from '@/components/ui'
+import { exportRowsToXlsx } from '@/lib/exportXlsx'
+import { buildInwardRegisterExportRows, INWARD_REGISTER_COLUMNS } from '@/lib/inwardRegisterWorkbook'
+import ImportWizard from '@/pages/ImportWizard'
+import { toast } from 'sonner'
 
 interface LineState {
   key: string
@@ -49,6 +53,7 @@ export default function OutwardEntry({
   const navigate = useNavigate()
   const canCreate = can('dispatch', 'create')
   const openRows = useStore(useShallow(selectOpenInwardRows))
+  const registerRows = useStore(useShallow(selectInwardRows))
   const partsById = useStore((s) => s.masters.parts.byId)
   // Subscribe so blank/automatic line rates react when Rate Master data refreshes.
   const productionRates = useStore((s) => s.masters.productionRates)
@@ -67,7 +72,32 @@ export default function OutwardEntry({
   const [submitting, setSubmitting] = useState(false)
   const [dcNo, setDcNo] = useState('')
   const [dcLoading, setDcLoading] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const selectedIds = useMemo(() => lines.map((l) => l.challanId), [lines])
+
+  async function exportRegister() {
+    if (registerRows.length === 0) { toast.error('No inward/outward rows to export'); return }
+    setExporting(true)
+    try {
+      const data = buildInwardRegisterExportRows(registerRows)
+      await exportRowsToXlsx(`inward-outward-register-${todayISO()}.xlsx`, 'Inward Outward Register', INWARD_REGISTER_COLUMNS, data)
+      toast.success(`Exported ${data.length} register rows`)
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'Export failed') }
+    finally { setExporting(false) }
+  }
+
+  const excelActions = embedded ? null : (
+    <div className="flex items-center gap-2">
+      <Button className="w-24 shrink-0 justify-center" variant="secondary" leftIcon={<Download size={15} />} loading={exporting} onClick={exportRegister}>Export</Button>
+      {can('import', 'view') ? <Button className="w-24 shrink-0 justify-center" variant="secondary" leftIcon={<FileSpreadsheet size={15} />} onClick={() => setImportOpen(true)}>Import</Button> : null}
+    </div>
+  )
+  const importDrawer = can('import', 'view') ? (
+    <Drawer open={importOpen} onClose={() => setImportOpen(false)} size="xl" title="Import inward/outward workbook" description="Uses the same columns as the register export." defaultMaximized>
+      <ImportWizard embedded onClose={() => setImportOpen(false)} />
+    </Drawer>
+  ) : null
 
   // First selected challan drives the reference card's auto-fields.
   const primary = selectedIds[0] ? challanById.get(selectedIds[0]) : undefined
@@ -240,10 +270,11 @@ export default function OutwardEntry({
   if (openRows.length === 0) {
     return (
       <div className="space-y-4">
-        <PageHead embedded={embedded} />
+        <PageHead embedded={embedded} actions={excelActions} />
         <Card>
           <EmptyState icon={ArrowUpFromLine} title="No open challans" description="Every challan in your scope is fully dispatched. Record an inward challan first." />
         </Card>
+        {importDrawer}
       </div>
     )
   }
@@ -255,7 +286,7 @@ export default function OutwardEntry({
           <ArrowLeft size={15} /> Back to Inward
         </button>
       ) : null}
-      <PageHead embedded={embedded} />
+      <PageHead embedded={embedded} actions={excelActions} />
 
       <div className="rounded-lg border border-primary/30 bg-primary/10 px-3.5 py-2.5 text-[12px] text-primary">
         Pick <b>one or more inward challans</b> — each becomes a dispatch line below. <b>Create draft invoice</b>
@@ -394,16 +425,18 @@ export default function OutwardEntry({
           <span className="text-[12px] font-semibold text-warning">⚠ A line total exceeds the challan's available stock</span>
         ) : null}
       </div>
+      {importDrawer}
     </div>
   )
 }
 
-function PageHead({ embedded }: { embedded?: boolean }) {
+function PageHead({ embedded, actions }: { embedded?: boolean; actions?: ReactNode }) {
   if (embedded) return null
   return (
-    <div>
-      <h1 className="text-xl font-bold tracking-tight">Create Invoice</h1>
-      <p className="mt-0.5 text-[13px] text-muted-fg">Select one or more inward challans, fill the lines, and create a draft invoice (the outward is recorded automatically).</p>
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div><h1 className="text-xl font-bold tracking-tight">Create Invoice</h1>
+      <p className="mt-0.5 text-[13px] text-muted-fg">Select one or more inward challans, fill the lines, and create a draft invoice (the outward is recorded automatically).</p></div>
+      {actions}
     </div>
   )
 }

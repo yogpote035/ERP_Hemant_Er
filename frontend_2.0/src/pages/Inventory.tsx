@@ -53,12 +53,18 @@ export default function Inventory() {
         <p className="mt-0.5 text-[13px] text-muted-fg">Raw material, inward and live stock — one workspace.</p>
       </div>
 
-      {tabs.length > 1 ? (
+      {tabs.length > 1 && active !== 'inward' ? (
         <Tabs items={tabs.map(({ value, label }) => ({ value, label }))} value={active} onChange={setTab} ariaLabel="Inventory section" />
       ) : null}
 
       {active === 'inward' ? (
-        <InwardRegister embedded onOpenOutward={canInvoice ? setInvoiceInwardId : undefined} />
+        <InwardRegister
+          embedded
+          onOpenOutward={canInvoice ? setInvoiceInwardId : undefined}
+          toolbarStart={tabs.length > 1 ? (
+            <Tabs items={tabs.map(({ value, label }) => ({ value, label }))} value={active} onChange={setTab} ariaLabel="Inventory section" />
+          ) : undefined}
+        />
       ) : (
         <Stock embedded />
       )}

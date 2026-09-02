@@ -1,13 +1,10 @@
 import { useMemo } from 'react'
-import { Download } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
-import { toast } from 'sonner'
 import { useStore } from '@/store'
 import { values } from '@/store/normalized'
 import { MASTER_SPECS } from '@/masters/registry'
 import { EntityManager } from '@/masters/EntityManager'
-import { exportRowsToXlsx } from '@/lib/exportXlsx'
-import { Button, Kpi, KpiGrid } from '@/components/ui'
+import { Kpi, KpiGrid } from '@/components/ui'
 import type { MasterView } from '@/masters/types'
 
 const customerSpec = MASTER_SPECS.find((s) => s.key === 'customer') as MasterView
@@ -26,28 +23,6 @@ export default function Customers() {
     return { active: active.length, onHold: onHold.length, gstVerified: gstVerified.length, interState: interState.length }
   }, [customersColl])
 
-  async function onExport() {
-    const rows = customersColl.map((c) => ({
-      name: c.name,
-      gstin: c.gstin ?? '',
-      state: c.stateCode ?? '',
-      terms: c.paymentTermsDays != null ? `Net ${c.paymentTermsDays}` : '',
-      status: c.active === false ? 'Hold' : 'Active',
-    }))
-    if (rows.length === 0) {
-      toast.error('No customers to export')
-      return
-    }
-    await exportRowsToXlsx('customers.xlsx', 'Customers', [
-      { key: 'name', label: 'Customer' },
-      { key: 'gstin', label: 'GSTIN' },
-      { key: 'state', label: 'State' },
-      { key: 'terms', label: 'Payment Terms' },
-      { key: 'status', label: 'Status' },
-    ], rows)
-    toast.success(`Exported ${rows.length} customers`)
-  }
-
   return (
     <div className="space-y-4">
       <div className="min-w-0">
@@ -64,14 +39,7 @@ export default function Customers() {
         <Kpi tone="purple" label="Inter-state" value={stats.interState} sub="IGST billing" />
       </KpiGrid>
 
-      <EntityManager
-        spec={customerSpec}
-        actions={
-          <Button variant="secondary" size="sm" leftIcon={<Download size={15} />} onClick={onExport}>
-            Export
-          </Button>
-        }
-      />
+      <EntityManager spec={customerSpec} />
     </div>
   )
 }

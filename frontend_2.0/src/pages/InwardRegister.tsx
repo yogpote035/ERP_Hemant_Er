@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useShallow } from 'zustand/react/shallow'
 import {
@@ -57,10 +57,13 @@ const intFmt = (n: number) => n.toLocaleString('en-IN')
 export default function InwardRegister({
   embedded = false,
   onOpenOutward,
+  toolbarStart,
 }: {
   embedded?: boolean
   /** When set, rows show an "Outward" action that opens the full Outward Entry screen for that challan. */
   onOpenOutward?: (inwardId: Id) => void
+  /** Parent controls rendered in the action row (for example Inventory tabs). */
+  toolbarStart?: ReactNode
 }) {
   const can = useCan()
   const rows = useStore(useShallow(selectInwardRows))
@@ -254,7 +257,8 @@ export default function InwardRegister({
   return (
     <div className="space-y-4">
       {/* Page head */}
-      <div className="flex flex-wrap items-start gap-3">
+      <div className="flex flex-wrap items-center gap-3">
+        {toolbarStart}
         {!embedded ? (
           <div className="min-w-0">
             <h1 className="text-xl font-bold tracking-tight">Inward / Outward register</h1>
@@ -264,11 +268,11 @@ export default function InwardRegister({
           </div>
         ) : null}
         <div className="ml-auto flex items-center gap-2">
-          <Button variant="secondary" leftIcon={<Download size={15} />} loading={exporting} onClick={exportRegister}>
+          <Button className="w-24 shrink-0 justify-center" variant="secondary" leftIcon={<Download size={15} />} loading={exporting} onClick={exportRegister}>
             Export
           </Button>
           {canImport ? (
-            <Button variant="secondary" leftIcon={<FileSpreadsheet size={15} />} onClick={() => setImportOpen(true)}>
+            <Button className="w-24 shrink-0 justify-center" variant="secondary" leftIcon={<FileSpreadsheet size={15} />} onClick={() => setImportOpen(true)}>
               Import
             </Button>
           ) : null}

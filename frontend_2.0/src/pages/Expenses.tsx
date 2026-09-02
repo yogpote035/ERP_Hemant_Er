@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { Banknote, Plus, IndianRupee, Pencil, Trash2 } from 'lucide-react'
+import { Banknote, Plus, IndianRupee, Pencil, Trash2, Download } from 'lucide-react'
 import { formatINRSymbol, formatINRCompact, fromPaise, toPaise, type Paise } from '@/lib/money'
 import { formatDMY, todayISO } from '@/lib/date'
 import type { Expense, PaymentMode } from '@/types/domain'
@@ -12,6 +12,11 @@ import { useCan } from '@/hooks/useCan'
 import { toastCommandError, toastCommandSuccess } from '@/lib/commandToast'
 import { ActionMenu, Badge, Button, Card, ConfirmDialog, Drawer, EmptyState, Kpi, KpiGrid, SearchableDropdown, TablePager, type ActionMenuItem, type BadgeTone } from '@/components/ui'
 import { usePagedSource } from '@/hooks/usePagedSource'
+import { values } from '@/store/normalized'
+import { exportRowsToXlsx } from '@/lib/exportXlsx'
+import { excelNumber, excelText, excelValue, type ImportedRow } from '@/lib/importXlsx'
+import { ExcelImportButton } from '@/components/ExcelImportButton'
+import { toast } from 'sonner'
 
 const numOf = (v: string) => {
   const n = Number(v)
@@ -20,6 +25,17 @@ const numOf = (v: string) => {
 const STATUS_TONE: Record<ExpenseStatus, BadgeTone> = { unpaid: 'primary', partial: 'warning', overdue: 'danger', paid: 'success' }
 const MODES: PaymentMode[] = ['rtgs', 'neft', 'cheque', 'upi', 'cash', 'bank']
 const PAYMENT_MODE_OPTIONS = MODES.map((mode) => ({ value: mode, label: mode.toUpperCase() }))
+const EXPENSE_COLUMNS = [
+  { key: 'unit', label: 'Unit', required: true }, { key: 'vendor', label: 'Vendor', required: true },
+  { key: 'category', label: 'Category', required: true }, { key: 'description', label: 'Description' },
+  { key: 'date', label: 'Date', required: true }, { key: 'dueDate', label: 'Due Date' },
+  { key: 'supplierInvoiceNo', label: 'Supplier Invoice No' }, { key: 'hsnSac', label: 'HSN/SAC' },
+  { key: 'quantity', label: 'Quantity' }, { key: 'rate', label: 'Rate' },
+  { key: 'subtotal', label: 'Subtotal' }, { key: 'igst', label: 'IGST %' },
+  { key: 'cgst', label: 'CGST %' }, { key: 'sgst', label: 'SGST %' },
+  { key: 'tcs', label: 'TCS %' }, { key: 'total', label: 'Total', required: true },
+  { key: 'paid', label: 'Paid' }, { key: 'balance', label: 'Balance' }, { key: 'status', label: 'Status' },
+]
 
 export default function Expenses() {
   const can = useCan()
@@ -50,6 +66,13 @@ export default function Expenses() {
       return { expense: e, vendorName: e.vendorName ?? '—', paid: e.paidPaise, balance: e.balancePaise, status: e.status }
     },
   })
+  const expenseRefs = (row: ImportedRow) => {
+    const state = useStore.getState(); const unitText=excelText(excelValue(row,'Unit')).toLowerCase(); const vendorText=excelText(excelValue(row,'Vendor')).toLowerCase()
+    const unit=values(state.masters.units).find((v)=>[v.id,v.code,v.name].some((k)=>k.toLowerCase()===unitText)); const vendor=values(state.masters.vendors).find((v)=>[v.id,v.code,v.name].some((k)=>k.toLowerCase()===vendorText)); return {unit,vendor}
+  }
+  const expenseKey = (row: ImportedRow) => { const {unit,vendor}=expenseRefs(row); return [unit?.id ?? '',vendor?.id ?? '',excelText(excelValue(row,'Supplier Invoice No'))||excelText(excelValue(row,'Category')),excelText(excelValue(row,'Date')),excelText(excelValue(row,'Total'))].join('|').toLowerCase() }
+  const existingExpenseKeys = new Set(rows.map(({ expense }) => [expense.unitId,expense.vendorId ?? '',expense.supplierInvoiceNo || expense.category,expense.date,String(fromPaise(expense.totalPaise))].join('|').toLowerCase()))
+  const validateExpenseImport = (row: ImportedRow) => { const {unit,vendor}=expenseRefs(row); if(!unit) return 'Unit does not exist or is not accessible'; if(!vendor) return 'Vendor does not exist'; if(!(excelNumber(excelValue(row,'Total'))! > 0)) return 'Total must be greater than zero'; return undefined }
 
   function onDelete() {
     if (!deleting) return
@@ -66,6 +89,51 @@ export default function Expenses() {
     }
   }
 
+  async function exportExpenses() {
+    if (rows.length === 0) { toast.error('No expenses to export'); return }
+    const state = useStore.getState()
+    const data = rows.map(({ expense, vendorName, paid, balance, status }) => ({
+      unit: state.masters.units.byId[expense.unitId]?.code ?? expense.unitId,
+      vendor: state.masters.vendors.byId[expense.vendorId ?? '']?.code ?? vendorName,
+      category: expense.category, description: expense.description ?? '', date: expense.date, dueDate: expense.dueDate ?? '',
+      supplierInvoiceNo: expense.supplierInvoiceNo ?? '', hsnSac: expense.hsnSac ?? '', quantity: expense.quantity ?? '',
+      rate: expense.ratePaise != null ? fromPaise(expense.ratePaise) : '', subtotal: expense.subTotalPaise != null ? fromPaise(expense.subTotalPaise) : '',
+      igst: expense.igstPct ?? '', cgst: expense.cgstPct ?? '', sgst: expense.sgstPct ?? '', tcs: expense.tcsPct ?? '',
+      total: fromPaise(expense.totalPaise), paid: fromPaise(paid), balance: fromPaise(balance), status,
+    }))
+    await exportRowsToXlsx(`expenses-${todayISO()}.xlsx`, 'Expenses', EXPENSE_COLUMNS, data)
+    toast.success(`Exported ${data.length} expenses`)
+  }
+
+  async function importExpenses(imported: ImportedRow[]) {
+    const state = useStore.getState()
+    const unitsByKey = new Map(values(state.masters.units).flatMap((unit) => [[unit.id.toLowerCase(), unit], [unit.code.toLowerCase(), unit], [unit.name.toLowerCase(), unit]]))
+    const vendorsByKey = new Map(values(state.masters.vendors).flatMap((vendor) => [[vendor.id.toLowerCase(), vendor], [vendor.code.toLowerCase(), vendor], [vendor.name.toLowerCase(), vendor]]))
+    const inputs = imported.map((row, index) => {
+      const unit = unitsByKey.get(excelText(excelValue(row, 'Unit')).toLowerCase())
+      const vendor = vendorsByKey.get(excelText(excelValue(row, 'Vendor')).toLowerCase())
+      const category = excelText(excelValue(row, 'Category'))
+      const date = excelText(excelValue(row, 'Date'))
+      const total = excelNumber(excelValue(row, 'Total'))
+      if (!unit || !vendor || !category || !date || !total) throw new Error(`Row ${index + 2}: Unit, Vendor, Category, Date and Total are required`)
+      return {
+        unitId: unit.id, vendorId: vendor.id, category, date, totalPaise: toPaise(total),
+        description: excelText(excelValue(row, 'Description')) || undefined,
+        dueDate: excelText(excelValue(row, 'Due Date')) || undefined,
+        supplierInvoiceNo: excelText(excelValue(row, 'Supplier Invoice No')) || undefined,
+        hsnSac: excelText(excelValue(row, 'HSN/SAC')) || undefined,
+        quantity: excelNumber(excelValue(row, 'Quantity')),
+        ratePaise: excelNumber(excelValue(row, 'Rate')) != null ? toPaise(excelNumber(excelValue(row, 'Rate'))!) : undefined,
+        subTotalPaise: excelNumber(excelValue(row, 'Subtotal')) != null ? toPaise(excelNumber(excelValue(row, 'Subtotal'))!) : undefined,
+        igstPct: excelNumber(excelValue(row, 'IGST %')), cgstPct: excelNumber(excelValue(row, 'CGST %')),
+        sgstPct: excelNumber(excelValue(row, 'SGST %')), tcsPct: excelNumber(excelValue(row, 'TCS %')),
+      }
+    })
+    for (const input of inputs) runSaveExpense(input)
+    toast.success(`Imported ${inputs.length} expenses`)
+    bumpRefresh()
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start gap-3">
@@ -80,6 +148,8 @@ export default function Expenses() {
           value={paged.search}
           onChange={(e) => paged.setSearch(e.target.value)}
         />
+        <Button className="w-24 shrink-0 justify-center" variant="secondary" leftIcon={<Download size={15} />} onClick={exportExpenses}>Export</Button>
+        {can('expenses', 'create') ? <ExcelImportButton size="md" title="Import expenses" columns={EXPENSE_COLUMNS} existingKeys={existingExpenseKeys} rowKey={expenseKey} validateRow={validateExpenseImport} onRows={importExpenses} /> : null}
         {can('expenses', 'create') ? (
           <Button leftIcon={<Plus size={15} />} onClick={() => setCreating(true)}>Record Expense</Button>
         ) : null}

@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { Recycle, Pencil, Trash2 } from 'lucide-react'
+import { Recycle, Pencil, Trash2, Download } from 'lucide-react'
 import { formatINRSymbol, fromPaise, toPaise } from '@/lib/money'
 import { formatDMY, todayISO } from '@/lib/date'
 import { computeScrap } from '@/lib/scrapMath'
@@ -14,11 +14,24 @@ import { useCan } from '@/hooks/useCan'
 import { toastCommandError, toastCommandSuccess } from '@/lib/commandToast'
 import { Badge, Button, Card, ConfirmDialog, EmptyState, Kpi, KpiGrid, SearchableDropdown, TablePager } from '@/components/ui'
 import { usePagedSource } from '@/hooks/usePagedSource'
+import { values } from '@/store/normalized'
+import { exportRowsToXlsx } from '@/lib/exportXlsx'
+import { excelNumber, excelText, excelValue, type ImportedRow } from '@/lib/importXlsx'
+import { ExcelImportButton } from '@/components/ExcelImportButton'
+import { toast } from 'sonner'
 
 const numOf = (v: string) => {
   const n = Number(v)
   return Number.isFinite(n) && n > 0 ? n : 0
 }
+const SCRAP_COLUMNS = [
+  { key: 'unit', label: 'Unit', required: true }, { key: 'customer', label: 'Customer', required: true },
+  { key: 'invoiceNo', label: 'Invoice No', required: true }, { key: 'invoiceDate', label: 'Invoice Date', required: true },
+  { key: 'periodFrom', label: 'Period From' }, { key: 'periodTo', label: 'Period To' },
+  { key: 'weightKg', label: 'Weight Kg', required: true }, { key: 'ratePerKg', label: 'Rate Per Kg', required: true },
+  { key: 'gst', label: 'GST %' }, { key: 'tcs', label: 'TCS %' },
+  { key: 'status', label: 'Status' }, { key: 'grandTotal', label: 'Grand Total' },
+]
 
 export default function Scrap() {
   const can = useCan()
@@ -63,6 +76,10 @@ export default function Scrap() {
       return { bill: b, customerName: b.customerName ?? '—', grand: b.totals.grand }
     },
   })
+  const scrapRefs = (row: ImportedRow) => { const state=useStore.getState(); const unitText=excelText(excelValue(row,'Unit')).toLowerCase(); const customerText=excelText(excelValue(row,'Customer')).toLowerCase(); return {unit:values(state.masters.units).find((v)=>[v.id,v.code,v.name].some((k)=>k.toLowerCase()===unitText)),customer:values(state.masters.customers).find((v)=>[v.id,v.name,v.gstin].filter(Boolean).some((k)=>String(k).toLowerCase()===customerText))} }
+  const scrapKey = (row: ImportedRow) => { const {unit}=scrapRefs(row); return `${unit?.id ?? ''}|${excelText(excelValue(row,'Invoice No')).toLowerCase()}` }
+  const existingScrapKeys = new Set(rows.map(({ bill }) => `${bill.unitId.toLowerCase()}|${bill.scrapInvoiceNo.toLowerCase()}`))
+  const validateScrapImport = (row: ImportedRow) => { const {unit,customer}=scrapRefs(row); if(!unit) return 'Unit does not exist or is not accessible'; if(!customer) return 'Customer does not exist'; if(!(excelNumber(excelValue(row,'Weight Kg'))! > 0)) return 'Weight must be greater than zero'; if(!(excelNumber(excelValue(row,'Rate Per Kg'))! > 0)) return 'Rate must be greater than zero'; return undefined }
 
   // After a fresh CREATE we keep unit/customer/period so several bills for the same
   // customer-period can be entered quickly — only the per-bill fields clear.
@@ -144,11 +161,56 @@ export default function Scrap() {
     }
   }
 
+  async function exportScrap() {
+    if (rows.length === 0) { toast.error('No scrap bills to export'); return }
+    const state = useStore.getState()
+    const data = rows.map(({ bill, grand }) => ({
+      unit: state.masters.units.byId[bill.unitId]?.code ?? bill.unitId,
+      customer: state.masters.customers.byId[bill.customerId]?.name ?? bill.customerId,
+      invoiceNo: bill.scrapInvoiceNo, invoiceDate: bill.invoiceDate,
+      periodFrom: bill.periodFrom, periodTo: bill.periodTo,
+      weightKg: bill.weightGrams / 1000, ratePerKg: fromPaise(bill.ratePerKgPaise),
+      gst: bill.gstPct, tcs: bill.tcsPct, status: bill.status, grandTotal: fromPaise(grand),
+    }))
+    await exportRowsToXlsx(`scrap-bills-${todayISO()}.xlsx`, 'Scrap Bills', SCRAP_COLUMNS, data)
+    toast.success(`Exported ${data.length} scrap bills`)
+  }
+
+  async function importScrap(imported: ImportedRow[]) {
+    const state = useStore.getState()
+    const unitMap = new Map(values(state.masters.units).flatMap((v) => [v.id, v.code, v.name].map((key) => [key.toLowerCase(), v] as const)))
+    const customerMap = new Map(values(state.masters.customers).flatMap((v) => [v.id, v.name, v.gstin].filter(Boolean).map((key) => [String(key).toLowerCase(), v] as const)))
+    const inputs = imported.map((row, index) => {
+      const unit = unitMap.get(excelText(excelValue(row, 'Unit')).toLowerCase())
+      const customer = customerMap.get(excelText(excelValue(row, 'Customer')).toLowerCase())
+      const invoiceNo = excelText(excelValue(row, 'Invoice No'))
+      const invoiceDate = excelText(excelValue(row, 'Invoice Date'))
+      const weightKg = excelNumber(excelValue(row, 'Weight Kg'))
+      const rate = excelNumber(excelValue(row, 'Rate Per Kg'))
+      if (!unit || !customer || !invoiceNo || !invoiceDate || !weightKg || !rate) throw new Error(`Row ${index + 2}: Unit, Customer, Invoice No, Invoice Date, Weight Kg and Rate Per Kg are required`)
+      return {
+        unitId: unit.id, customerId: customer.id, scrapInvoiceNo: invoiceNo, invoiceDate,
+        periodFrom: excelText(excelValue(row, 'Period From')) || invoiceDate,
+        periodTo: excelText(excelValue(row, 'Period To')) || invoiceDate,
+        weightGrams: Math.round(weightKg * 1000), ratePerKgPaise: toPaise(rate),
+        gstPct: excelNumber(excelValue(row, 'GST %')) ?? 18,
+        tcsPct: excelNumber(excelValue(row, 'TCS %')) ?? 1,
+      }
+    })
+    for (const input of inputs) runSaveScrapBill(input)
+    toast.success(`Imported ${inputs.length} scrap bills`)
+    bumpRefresh()
+  }
+
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight">Scrap bills</h1>
-        <p className="mt-0.5 text-[13px] text-muted-fg">Period-wise scrap sales · GST + TCS @ 1%.</p>
+      <div className="flex flex-wrap items-start gap-3">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight">Scrap bills</h1>
+          <p className="mt-0.5 text-[13px] text-muted-fg">Period-wise scrap sales · GST + TCS @ 1%.</p>
+        </div>
+        <Button className="ml-auto w-24 shrink-0 justify-center" variant="secondary" leftIcon={<Download size={15} />} onClick={exportScrap}>Export</Button>
+        {canCreate ? <ExcelImportButton title="Import scrap bills" columns={SCRAP_COLUMNS} existingKeys={existingScrapKeys} rowKey={scrapKey} validateRow={validateScrapImport} onRows={importScrap} /> : null}
       </div>
 
       <KpiGrid className="lg:grid-cols-3">
