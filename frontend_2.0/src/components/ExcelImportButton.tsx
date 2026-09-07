@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { ArrowLeft, FileSpreadsheet, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { readRowsFromXlsx, type ImportedRow } from '@/lib/importXlsx'
+import { exportRowsToXlsx } from '@/lib/exportXlsx'
 import { Button, Card, Drawer } from '@/components/ui'
 
 export interface ExcelImportColumn { key: string; label: string; required?: boolean }
@@ -9,7 +10,7 @@ interface PreviewIssue { row: number; kind: 'error' | 'existing' | 'duplicate'; 
 const norm = (value: unknown) => String(value ?? '').trim().toLowerCase()
 
 /** Shared three-step import used outside the specialist inward-register importer. */
-export function ExcelImportButton({ onRows, columns, existingKeys, rowKey, validateRow, prefill, contextMessage, label = 'Import', title = 'Import Excel workbook', size = 'md' }: {
+export function ExcelImportButton({ onRows, columns, existingKeys, rowKey, validateRow, prefill, contextMessage, sampleRows, sampleFilename = 'import-sample.xlsx', label = 'Import', title = 'Import Excel workbook', size = 'md' }: {
   onRows: (rows: ImportedRow[], file: File) => void | Promise<void>
   columns: ExcelImportColumn[]
   existingKeys?: ReadonlySet<string>
@@ -17,6 +18,8 @@ export function ExcelImportButton({ onRows, columns, existingKeys, rowKey, valid
   validateRow?: (row: ImportedRow, rowNumber: number) => string | undefined
   prefill?: Record<string, unknown>
   contextMessage?: string
+  sampleRows?: Record<string, unknown>[]
+  sampleFilename?: string
   label?: string; title?: string; size?: 'sm' | 'md' | 'lg'
 }) {
   const ref = useRef<HTMLInputElement>(null)
@@ -76,6 +79,7 @@ export function ExcelImportButton({ onRows, columns, existingKeys, rowKey, valid
     <Drawer open={open} onClose={close} size="xl" title={title} description="Map columns, validate records, and import only new rows." defaultMaximized>
       <div className="space-y-4 p-4">
         {contextMessage ? <div className="rounded-md border border-info/30 bg-info/10 px-3 py-2 text-[12px] text-fg">{contextMessage}</div> : null}
+        {sampleRows ? <Button variant="secondary" size="sm" leftIcon={<FileSpreadsheet size={14} />} onClick={() => void exportRowsToXlsx(sampleFilename, 'Sample', columns, sampleRows)}>Download sample workbook</Button> : null}
         <div className="flex flex-wrap items-center gap-2 text-[12px] text-muted-fg">{[['1','File'],['2','Map columns'],['3','Preview & import']].map(([number, text], index) => <span key={number} className={step === index + 1 ? 'font-semibold text-primary' : ''}><b className="mr-1 rounded-full bg-muted px-2 py-1">{number}</b>{text}{index < 2 ? <span className="ml-2">/</span> : null}</span>)}</div>
         {step === 1 ? <Card className="flex min-h-64 flex-col items-center justify-center gap-3 border-dashed"><FileSpreadsheet size={36} className="text-muted-fg"/><div className="font-semibold">Choose an .xlsx or .xls workbook</div><input ref={ref} type="file" accept=".xlsx,.xls" className="hidden" onChange={(event) => { const picked=event.target.files?.[0]; event.target.value=''; void selected(picked) }}/><Button leftIcon={<Upload size={15}/>} loading={loading} onClick={() => ref.current?.click()}>Choose workbook</Button></Card> : null}
         {step === 2 ? <Card className="space-y-4"><p className="text-[13px] text-muted-fg">Headers are auto-detected. Map only the columns you want to import; unmapped columns stay empty.</p><div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">{columns.map((column) => <label key={column.key} className="space-y-1.5 text-[12px]"><span className="font-medium">{column.label}</span><select className="input h-9" value={mapping[column.key] ?? ''} onChange={(event) => setMapping((current) => ({...current,[column.key]:event.target.value}))}><option value="">Not mapped</option>{headers.map((header) => <option key={header} value={header}>{header}</option>)}</select></label>)}</div><div className="flex justify-between"><Button variant="secondary" leftIcon={<ArrowLeft size={14}/>} onClick={() => setStep(1)}>Back</Button><Button onClick={() => setStep(3)}>Preview & validate</Button></div></Card> : null}

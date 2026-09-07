@@ -27,16 +27,33 @@ const STATUS_TONE: Record<ExpenseStatus, BadgeTone> = { unpaid: 'primary', parti
 const MODES: PaymentMode[] = ['rtgs', 'neft', 'cheque', 'upi', 'cash', 'bank']
 const PAYMENT_MODE_OPTIONS = MODES.map((mode) => ({ value: mode, label: mode.toUpperCase() }))
 const EXPENSE_COLUMNS = [
-  { key: 'unit', label: 'Unit' }, { key: 'vendor', label: 'Vendor' },
-  { key: 'category', label: 'Category' }, { key: 'description', label: 'Description' },
-  { key: 'date', label: 'Date' }, { key: 'dueDate', label: 'Due Date' },
-  { key: 'supplierInvoiceNo', label: 'Supplier Invoice No' }, { key: 'hsnSac', label: 'HSN/SAC' },
-  { key: 'quantity', label: 'Quantity' }, { key: 'rate', label: 'Rate' },
-  { key: 'subtotal', label: 'Subtotal' }, { key: 'igst', label: 'IGST %' },
-  { key: 'cgst', label: 'CGST %' }, { key: 'sgst', label: 'SGST %' },
-  { key: 'tcs', label: 'TCS %' }, { key: 'total', label: 'Total' },
-  { key: 'paid', label: 'Paid' }, { key: 'balance', label: 'Balance' }, { key: 'status', label: 'Status' },
+  { key: 'unit', label: 'Unit' }, { key: 'supplierName', label: 'Supplier Name' },
+  { key: 'supplierGstin', label: 'Supplier GST Number' }, { key: 'hsnSac', label: 'SAC/HSN Code' },
+  { key: 'supplierInvoiceNo', label: 'Supplier Invoice Number' }, { key: 'invoiceDate', label: 'Invoice Date' },
+  { key: 'quantity', label: 'Quantity' }, { key: 'ratePerPc', label: 'Rate/Pc' },
+  { key: 'subtotal', label: 'Subtotal' }, { key: 'cgstAmount', label: 'CGST' },
+  { key: 'sgstAmount', label: 'SGST' }, { key: 'igstAmount', label: 'IGST' },
+  { key: 'tcsAmount', label: 'TCS' }, { key: 'grandTotal', label: 'Grand Total' },
+  { key: 'cgstPct', label: 'CGST (%)' }, { key: 'sgstPct', label: 'SGST (%)' },
+  { key: 'igstPct', label: 'IGST (%)' }, { key: 'tcsPct', label: 'TCS (%)' },
+  { key: 'paymentMode', label: 'Mode of Payment' }, { key: 'paymentDate', label: 'Payment Date' },
+  { key: 'paidAmount', label: 'Paid Amount' }, { key: 'balance', label: 'Balance' },
 ]
+const EXPENSE_SAMPLE = [{
+  unit: 'HI', supplierName: 'ABC Industrial Supplies', supplierGstin: '27ABCDE1234F1Z5', hsnSac: '84669390',
+  supplierInvoiceNo: 'ABC/2026-27/001', invoiceDate: '2026-09-07', quantity: 10, ratePerPc: 100,
+  subtotal: 1000, cgstAmount: 90, sgstAmount: 90, igstAmount: 0, tcsAmount: 10,
+  grandTotal: 1190, cgstPct: 9, sgstPct: 9, igstPct: 0, tcsPct: 1,
+  paymentMode: 'NEFT', paymentDate: '2026-09-07', paidAmount: 500, balance: 690,
+}]
+const amount = (row: ImportedRow, label: string) => excelNumber(excelValue(row, label)) ?? 0
+const expenseImportMath = (row: ImportedRow) => {
+  const quantity = amount(row, 'Quantity'); const rate = amount(row, 'Rate/Pc')
+  const subtotal = quantity * rate
+  const cgstPct = amount(row, 'CGST (%)'); const sgstPct = amount(row, 'SGST (%)'); const igstPct = amount(row, 'IGST (%)'); const tcsPct = amount(row, 'TCS (%)')
+  const cgst = subtotal * cgstPct / 100; const sgst = subtotal * sgstPct / 100; const igst = subtotal * igstPct / 100; const tcs = subtotal * tcsPct / 100
+  return { quantity, rate, subtotal, cgstPct, sgstPct, igstPct, tcsPct, cgst, sgst, igst, tcs, total: subtotal + cgst + sgst + igst + tcs }
+}
 
 export default function Expenses() {
   const entryUnit = useEntryUnitContext()
@@ -69,12 +86,12 @@ export default function Expenses() {
     },
   })
   const expenseRefs = (row: ImportedRow) => {
-    const state = useStore.getState(); const unitText=excelText(excelValue(row,'Unit')).toLowerCase(); const vendorText=excelText(excelValue(row,'Vendor')).toLowerCase()
-    const unit=values(state.masters.units).find((v)=>[v.id,v.code,v.name].some((k)=>k.toLowerCase()===unitText)); const vendor=values(state.masters.vendors).find((v)=>[v.id,v.code,v.name].some((k)=>k.toLowerCase()===vendorText)); return {unit,vendor}
+    const state = useStore.getState(); const unitText=excelText(excelValue(row,'Unit')).toLowerCase(); const vendorText=excelText(excelValue(row,'Supplier Name')).toLowerCase(); const gstin=excelText(excelValue(row,'Supplier GST Number')).toLowerCase()
+    const unit=values(state.masters.units).find((v)=>[v.id,v.code,v.name].some((k)=>k.toLowerCase()===unitText)); const vendor=values(state.masters.vendors).find((v)=>[v.id,v.code,v.name,v.gstin].filter(Boolean).some((k)=>String(k).toLowerCase()===vendorText || String(k).toLowerCase()===gstin)); return {unit,vendor}
   }
-  const expenseKey = (row: ImportedRow) => { const {unit,vendor}=expenseRefs(row); return [unit?.id ?? '',vendor?.id ?? '',excelText(excelValue(row,'Supplier Invoice No'))||excelText(excelValue(row,'Category')),excelText(excelValue(row,'Date')),excelText(excelValue(row,'Total'))].join('|').toLowerCase() }
+  const expenseKey = (row: ImportedRow) => { const {unit,vendor}=expenseRefs(row); return [unit?.id ?? '',vendor?.id ?? '',excelText(excelValue(row,'Supplier Invoice Number')),excelText(excelValue(row,'Invoice Date')),excelText(excelValue(row,'Grand Total'))].join('|').toLowerCase() }
   const existingExpenseKeys = new Set(rows.map(({ expense }) => [expense.unitId,expense.vendorId ?? '',expense.supplierInvoiceNo || expense.category,expense.date,String(fromPaise(expense.totalPaise))].join('|').toLowerCase()))
-  const validateExpenseImport = (row: ImportedRow) => { const {unit,vendor}=expenseRefs(row); if(!unit) return 'Unit does not exist or is not accessible'; if(!vendor) return 'Vendor does not exist'; if(!(excelNumber(excelValue(row,'Total'))! > 0)) return 'Total must be greater than zero'; return undefined }
+  const validateExpenseImport = (row: ImportedRow) => { const {unit,vendor}=expenseRefs(row); const math=expenseImportMath(row); const paid=amount(row,'Paid Amount'); if(!unit) return 'Unit does not exist or is not accessible'; if(!vendor) return 'Supplier does not exist (match by name or GST number)'; if(math.igstPct>0&&(math.cgstPct>0||math.sgstPct>0)) return 'Use either IGST or CGST + SGST'; if(paid>math.total) return 'Paid amount cannot exceed grand total'; const suppliedTotal=amount(row,'Grand Total'); if(suppliedTotal>0&&Math.abs(suppliedTotal-math.total)>0.01) return 'Grand Total does not match quantity, rate and tax percentages'; return undefined }
 
   function onDelete() {
     if (!deleting) return
@@ -94,14 +111,15 @@ export default function Expenses() {
   async function exportExpenses() {
     if (rows.length === 0) { toast.error('No expenses to export'); return }
     const state = useStore.getState()
-    const data = rows.map(({ expense, vendorName, paid, balance, status }) => ({
+    const data = rows.map(({ expense, vendorName, paid, balance }) => ({
       unit: state.masters.units.byId[expense.unitId]?.code ?? expense.unitId,
-      vendor: state.masters.vendors.byId[expense.vendorId ?? '']?.code ?? vendorName,
-      category: expense.category, description: expense.description ?? '', date: expense.date, dueDate: expense.dueDate ?? '',
-      supplierInvoiceNo: expense.supplierInvoiceNo ?? '', hsnSac: expense.hsnSac ?? '', quantity: expense.quantity ?? '',
-      rate: expense.ratePaise != null ? fromPaise(expense.ratePaise) : '', subtotal: expense.subTotalPaise != null ? fromPaise(expense.subTotalPaise) : '',
-      igst: expense.igstPct ?? '', cgst: expense.cgstPct ?? '', sgst: expense.sgstPct ?? '', tcs: expense.tcsPct ?? '',
-      total: fromPaise(expense.totalPaise), paid: fromPaise(paid), balance: fromPaise(balance), status,
+      supplierName: vendorName, supplierGstin: state.masters.vendors.byId[expense.vendorId ?? '']?.gstin ?? '',
+      hsnSac: expense.hsnSac ?? '', supplierInvoiceNo: expense.supplierInvoiceNo ?? '', invoiceDate: expense.date,
+      quantity: expense.quantity ?? '', ratePerPc: expense.ratePaise != null ? fromPaise(expense.ratePaise) : '', subtotal: expense.subTotalPaise != null ? fromPaise(expense.subTotalPaise) : '',
+      cgstAmount: expense.subTotalPaise != null ? fromPaise(Math.round(expense.subTotalPaise*(expense.cgstPct??0)/100) as Paise) : '', sgstAmount: expense.subTotalPaise != null ? fromPaise(Math.round(expense.subTotalPaise*(expense.sgstPct??0)/100) as Paise) : '',
+      igstAmount: expense.subTotalPaise != null ? fromPaise(Math.round(expense.subTotalPaise*(expense.igstPct??0)/100) as Paise) : '', tcsAmount: expense.subTotalPaise != null ? fromPaise(Math.round(expense.subTotalPaise*(expense.tcsPct??0)/100) as Paise) : '',
+      grandTotal: fromPaise(expense.totalPaise), cgstPct: expense.cgstPct ?? '', sgstPct: expense.sgstPct ?? '', igstPct: expense.igstPct ?? '', tcsPct: expense.tcsPct ?? '',
+      paymentMode: expense.instalments.at(-1)?.mode?.toUpperCase() ?? '', paymentDate: expense.instalments.at(-1)?.date ?? '', paidAmount: fromPaise(paid), balance: fromPaise(balance),
     }))
     await exportRowsToXlsx(`expenses-${todayISO()}.xlsx`, 'Expenses', EXPENSE_COLUMNS, data)
     toast.success(`Exported ${data.length} expenses`)
@@ -113,22 +131,16 @@ export default function Expenses() {
     const vendorsByKey = new Map(values(state.masters.vendors).flatMap((vendor) => [[vendor.id.toLowerCase(), vendor], [vendor.code.toLowerCase(), vendor], [vendor.name.toLowerCase(), vendor]]))
     const inputs = imported.map((row, index) => {
       const unit = unitsByKey.get(excelText(excelValue(row, 'Unit')).toLowerCase())
-      const vendor = vendorsByKey.get(excelText(excelValue(row, 'Vendor')).toLowerCase())
-      const category = excelText(excelValue(row, 'Category'))
-      const date = excelText(excelValue(row, 'Date'))
-      const total = excelNumber(excelValue(row, 'Total'))
-      if (!unit || !vendor || !category || !date || !total) throw new Error(`Row ${index + 2}: Unit, Vendor, Category, Date and Total are required`)
+      const supplierText=excelText(excelValue(row,'Supplier Name')).toLowerCase(); const gstin=excelText(excelValue(row,'Supplier GST Number')).toLowerCase()
+      const vendor = vendorsByKey.get(supplierText) ?? values(state.masters.vendors).find((v)=>v.gstin?.toLowerCase()===gstin)
+      const date = excelText(excelValue(row, 'Invoice Date')) || todayISO(); const math=expenseImportMath(row); const paid=amount(row,'Paid Amount'); const mode=excelText(excelValue(row,'Mode of Payment')).toLowerCase() as PaymentMode
+      if (!unit || !vendor) throw new Error(`Row ${index + 2}: Unit and Supplier must match existing records`)
       return {
-        unitId: unit.id, vendorId: vendor.id, category, date, totalPaise: toPaise(total),
-        description: excelText(excelValue(row, 'Description')) || undefined,
-        dueDate: excelText(excelValue(row, 'Due Date')) || undefined,
-        supplierInvoiceNo: excelText(excelValue(row, 'Supplier Invoice No')) || undefined,
-        hsnSac: excelText(excelValue(row, 'HSN/SAC')) || undefined,
-        quantity: excelNumber(excelValue(row, 'Quantity')),
-        ratePaise: excelNumber(excelValue(row, 'Rate')) != null ? toPaise(excelNumber(excelValue(row, 'Rate'))!) : undefined,
-        subTotalPaise: excelNumber(excelValue(row, 'Subtotal')) != null ? toPaise(excelNumber(excelValue(row, 'Subtotal'))!) : undefined,
-        igstPct: excelNumber(excelValue(row, 'IGST %')), cgstPct: excelNumber(excelValue(row, 'CGST %')),
-        sgstPct: excelNumber(excelValue(row, 'SGST %')), tcsPct: excelNumber(excelValue(row, 'TCS %')),
+        unitId: unit.id, vendorId: vendor.id, category: excelText(excelValue(row,'SAC/HSN Code')) || 'Expense', date, totalPaise: toPaise(math.total),
+        supplierInvoiceNo: excelText(excelValue(row, 'Supplier Invoice Number')) || undefined, hsnSac: excelText(excelValue(row, 'SAC/HSN Code')) || undefined,
+        quantity: math.quantity || undefined, ratePaise: math.rate ? toPaise(math.rate) : undefined, subTotalPaise: math.subtotal ? toPaise(math.subtotal) : undefined,
+        igstPct: math.igstPct || undefined, cgstPct: math.cgstPct || undefined, sgstPct: math.sgstPct || undefined, tcsPct: math.tcsPct || undefined,
+        instalments: paid > 0 ? [{ date: excelText(excelValue(row,'Payment Date')) || date, amountPaise: toPaise(paid), mode: MODES.includes(mode) ? mode : 'bank' }] : undefined,
       }
     })
     for (const input of inputs) runSaveExpense(input)
@@ -151,7 +163,7 @@ export default function Expenses() {
           onChange={(e) => paged.setSearch(e.target.value)}
         />
         <Button className="w-24 shrink-0 justify-center" variant="secondary" leftIcon={<Download size={15} />} onClick={exportExpenses}>Export</Button>
-        {can('expenses', 'create') ? <ExcelImportButton size="md" title="Import expenses" columns={EXPENSE_COLUMNS} existingKeys={existingExpenseKeys} rowKey={expenseKey} validateRow={validateExpenseImport} onRows={importExpenses} prefill={entryUnit.preferredUnitId ? { unit: entryUnit.preferredUnitId } : undefined} contextMessage={entryUnit.message} /> : null}
+        {can('expenses', 'create') ? <ExcelImportButton size="md" title="Import expenses" columns={EXPENSE_COLUMNS} existingKeys={existingExpenseKeys} rowKey={expenseKey} validateRow={validateExpenseImport} onRows={importExpenses} prefill={entryUnit.preferredUnitId ? { unit: entryUnit.preferredUnitId } : undefined} contextMessage={entryUnit.message} sampleRows={EXPENSE_SAMPLE} sampleFilename="expense-import-sample.xlsx" /> : null}
         {can('expenses', 'create') ? (
           <Button leftIcon={<Plus size={15} />} onClick={() => setCreating(true)}>Record Expense</Button>
         ) : null}
@@ -364,7 +376,7 @@ function ExpenseForm({
           <Fld label="Supplier invoice number"><input className="input h-9 mono" value={supplierInvoiceNo} onChange={(e) => setSupplierInvoiceNo(e.target.value)} placeholder="Supplier's bill no." /></Fld>
           <Fld label="Invoice date"><input type="date" className="input h-9" value={date} onChange={(e) => { const next = e.target.value; setDate(next); setDueDate(addDaysISO(next, 45)) }} /></Fld>
           <Fld label="SAC / HSN code"><input className="input h-9 mono" value={hsnSac} onChange={(e) => setHsnSac(e.target.value)} placeholder="e.g. 27101990" /></Fld>
-          <Fld label="Qty"><input type="number" min={0} step="any" className="input h-9" value={quantity} onChange={(e) => setQuantity(e.target.value)} /></Fld>
+          <Fld label="Quantity"><input type="number" min={0} step="any" className="input h-9" value={quantity} onChange={(e) => setQuantity(e.target.value)} /></Fld>
           <Fld label="Rate / pc (₹)"><input type="number" min={0} step="0.01" className="input h-9" value={rate} onChange={(e) => setRate(e.target.value)} /></Fld>
           <Fld label="Subtotal"><Computed value={subTotalPaise} /></Fld>
           <Fld label="Description"><input className="input h-9" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Item / service description" /></Fld>
@@ -375,6 +387,12 @@ function ExpenseForm({
           <Fld label={`SGST % · ${formatINRSymbol(sgstAmt)}`}><input type="number" min={0} max={100} step="0.01" className="input h-9" value={sgstPct} onChange={(e) => setSgstPct(e.target.value)} /></Fld>
           <Fld label={`IGST % · ${formatINRSymbol(igstAmt)}`}><input type="number" min={0} max={100} step="0.01" className="input h-9" value={igstPct} onChange={(e) => setIgstPct(e.target.value)} /></Fld>
           <Fld label={`TCS % · ${formatINRSymbol(tcsAmt)}`}><input type="number" min={0} max={100} step="0.01" className="input h-9" value={tcsPct} onChange={(e) => setTcsPct(e.target.value)} /></Fld>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Fld label="CGST"><Computed value={cgstAmt} /></Fld>
+          <Fld label="SGST"><Computed value={sgstAmt} /></Fld>
+          <Fld label="IGST"><Computed value={igstAmt} /></Fld>
+          <Fld label="TCS"><Computed value={tcsAmt} /></Fld>
         </div>
         {gstTotal > 0 ? (
           <p className="text-[12px] text-muted-fg" aria-live="polite">
