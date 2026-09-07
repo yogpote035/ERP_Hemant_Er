@@ -30,7 +30,7 @@ describe('ExcelImportButton wizard', () => {
     const file = new File([bytes], 'records.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     Object.defineProperty(file, 'arrayBuffer', { value: async () => bytes })
     fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [file] } })
-    await screen.findByText('Headers are auto-detected. Confirm or correct each mapping.')
+    await screen.findByText('Headers are auto-detected. Map only the columns you want to import; unmapped columns stay empty.')
     fireEvent.click(screen.getByRole('button', { name: 'Preview & validate' }))
     expect(await screen.findByText('existing')).toBeInTheDocument()
     expect(document.body.textContent).toContain('Record already exists and will be skipped')

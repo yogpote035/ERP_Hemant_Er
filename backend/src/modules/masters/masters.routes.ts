@@ -191,6 +191,20 @@ function cfgOf(entity: string): MasterCfg {
   return cfg
 }
 
+/** Accept omitted/blank business fields, but retain validation for supplied data. */
+function parseOptionalFields(schema: z.ZodType<Record<string, unknown>>, input: unknown): Record<string, unknown> {
+  const source = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>
+  const parsed = schema.safeParse(source)
+  if (parsed.success) return parsed.data
+  const suppliedIssues = parsed.error.issues.filter((issue) => {
+    const key = issue.path[0]
+    const value = typeof key === 'string' ? source[key] : undefined
+    return !(value == null || (typeof value === 'string' && value.trim() === ''))
+  })
+  if (suppliedIssues.length) throw new z.ZodError(suppliedIssues)
+  return source
+}
+
 /** entity url-segment → its `documents` collection path (for DB-level paging). */
 const PATH_OF: Record<string, string> = {
   units: 'masters.units',
@@ -276,8 +290,8 @@ mastersRouter.post(
   asyncHandler(async (req, res) => {
     const cfg = cfgOf(req.params.entity)
     requireAction(req, cfg, 'create')
-    const body = cfg.schema.parse(req.body)
-    if (cfg.unitScoped) assertUnit(req, body.unitId as string)
+    const body = parseOptionalFields(cfg.schema, req.body)
+    if (cfg.unitScoped && body.unitId) assertUnit(req, body.unitId as string)
     const providedId = typeof (req.body as { id?: unknown })?.id === 'string' ? (req.body as { id?: string }).id : undefined
     const entity: Entity = { ...body, id: resolveId(providedId, (id) => !!getById(cfg.collection(getDb()), id), cfg.idPrefix), ...(cfg.softDelete ? { active: true } : {}) }
     await mutate((s) => {
@@ -296,8 +310,8 @@ mastersRouter.put(
     const cur = getById(cfg.collection(getDb()), req.params.id)
     if (!cur) throw notFound()
     if (cfg.unitScoped) assertUnit(req, cur.unitId)
-    const body = cfg.schema.parse(req.body)
-    if (cfg.unitScoped) assertUnit(req, body.unitId as string)
+    const body = parseOptionalFields(cfg.schema, req.body)
+    if (cfg.unitScoped && body.unitId) assertUnit(req, body.unitId as string)
     // Only overwrite fields the caller actually sent; keep stored values for omitted
     // ones (the create schema fills defaults for optionals, which would clobber them).
     const sent = (req.body ?? {}) as Record<string, unknown>

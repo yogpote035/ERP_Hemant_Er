@@ -24,6 +24,7 @@ import { useStore } from '@/store'
 import { runSaveInward, runDeleteInward, runDeleteDispatch } from '@/store/registerCommands'
 import { latestRmRatePaise, selectInwardRows, type DispatchChild, type InwardRow } from '@/selectors/register'
 import { useCan } from '@/hooks/useCan'
+import { useEntryUnitContext } from '@/hooks/useEntryUnitContext'
 import { inwardApi } from '@/api/modules'
 import { apiEnabled } from '@/api/client'
 import { toastCommandError, toastCommandSuccess } from '@/lib/commandToast'
@@ -66,6 +67,7 @@ export default function InwardRegister({
   toolbarStart?: ReactNode
 }) {
   const can = useCan()
+  const entryUnit = useEntryUnitContext()
   const rows = useStore(useShallow(selectInwardRows))
   const [params, setParams] = useSearchParams()
   const qRaw = params.get('q') ?? ''
@@ -425,12 +427,15 @@ export default function InwardRegister({
 
       {inwardModal !== null ? (
         <RecordFormModal
-          key={inwardModal.inward?.id ?? '__new__'}
+          key={`${inwardModal.inward?.id ?? '__new__'}:${entryUnit.preferredUnitId}`}
           title={inwardModal.inward ? 'Edit inward challan' : 'New inward challan'}
           fields={inwardFields}
           schema={inwardSchema}
-          defaultValues={inwardModal.inward ? inwardToValues(inwardModal.inward) : inwardDefaults()}
+          defaultValues={inwardModal.inward
+            ? { ...inwardToValues(inwardModal.inward), ...(entryUnit.isSingleUnit ? { unitId: entryUnit.preferredUnitId } : {}) }
+            : { ...inwardDefaults(), unitId: entryUnit.preferredUnitId }}
           submitLabel={inwardModal.inward ? 'Save changes' : 'Save inward'}
+          fieldOverrides={{ unitId: { disabled: entryUnit.isSingleUnit, hint: !inwardModal.inward ? entryUnit.message || undefined : undefined } }}
           beforeFields={!inwardModal.inward ? (
             <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs">
               <span className="text-muted-fg">Part not in the catalogue?</span>

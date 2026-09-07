@@ -144,6 +144,7 @@ const finalizeSchema = z.object({
   issuerKind: z.enum(['unit', 'supplier']),
   issuerVendorId: z.string().optional(),
   invoiceDate: isoDate.optional(),
+  dueDate: isoDate.optional(),
   paymentTerms: z.string().optional(),
   ...dispatchMetaShape,
 })
@@ -213,8 +214,7 @@ invoicesRouter.post(
 
       const invoiceDate = input.invoiceDate || d.invoiceDate || todayISO()
       const fy = fyOf(invoiceDate)
-      const terms = c?.paymentTermsDays
-      const dueDate = terms != null ? addDaysISO(invoiceDate, terms) : undefined
+      const dueDate = input.dueDate || addDaysISO(invoiceDate, 45)
       const issuerId =
         input.issuerKind === 'supplier' && input.issuerVendorId ? input.issuerVendorId : d.unitId
 
@@ -319,6 +319,7 @@ const editDraftSchema = z.object({
   issuerKind: z.enum(['unit', 'supplier']),
   issuerVendorId: z.string().optional(),
   invoiceDate: isoDate.optional(),
+  dueDate: isoDate.optional(),
   paymentTerms: z.string().optional(),
   ...dispatchMetaShape,
 })
@@ -343,6 +344,7 @@ invoicesRouter.post(
         issuerKind: input.issuerKind,
         issuerId,
         invoiceDate: input.invoiceDate || inv.invoiceDate,
+        dueDate: input.dueDate || addDaysISO(input.invoiceDate || inv.invoiceDate, 45),
         paymentTerms: input.paymentTerms,
         ...dispatchMeta(input),
       })

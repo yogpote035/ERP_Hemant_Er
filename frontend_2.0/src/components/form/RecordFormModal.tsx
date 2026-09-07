@@ -23,6 +23,7 @@ export function RecordFormModal({
   onValid,
   deriveOnChange,
   beforeFields,
+  fieldOverrides,
 }: {
   onClose: () => void
   title: string
@@ -35,6 +36,7 @@ export function RecordFormModal({
    *  RM rate/weight when a part is picked). Guard on `changed` to avoid feedback loops. */
   deriveOnChange?: (changed: string, values: FieldValues, setValue: UseFormSetValue<FieldValues>) => void
   beforeFields?: ReactNode
+  fieldOverrides?: Record<string, { disabled?: boolean; hint?: string }>
 }) {
   const formId = useId()
   const methods = useForm<FieldValues>({ resolver: zodResolver(schema), defaultValues })
@@ -76,7 +78,7 @@ export function RecordFormModal({
         <form id={formId} onSubmit={methods.handleSubmit(submit)} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {beforeFields ? <div className="sm:col-span-2">{beforeFields}</div> : null}
           {fields.map((f) => (
-            <AutoField key={f.name} field={f} />
+            <AutoField key={f.name} field={f} {...fieldOverrides?.[f.name]} />
           ))}
         </form>
       </FormProvider>

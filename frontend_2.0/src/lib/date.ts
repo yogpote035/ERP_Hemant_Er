@@ -1,4 +1,4 @@
-import { format, isValid, parse } from 'date-fns'
+import { addDays, format, isValid, parse } from 'date-fns'
 
 /** Display format used across the app: `dd-MM-yyyy`. */
 export function formatDMY(iso: string | Date | null | undefined): string {
@@ -15,6 +15,12 @@ export function toISODate(d: Date): string {
 /** Today as `yyyy-MM-dd`. */
 export function todayISO(): string {
   return toISODate(new Date())
+}
+
+/** Add calendar days to an ISO date without changing the displayed date format. */
+export function addDaysISO(iso: string, days: number): string {
+  const date = new Date(iso)
+  return isValid(date) ? toISODate(addDays(date, days)) : ''
 }
 
 const FLEX_FORMATS = ['dd.MM.yyyy', 'dd-MM-yyyy', 'dd/MM/yyyy', 'd.M.yyyy', 'yyyy-MM-dd']

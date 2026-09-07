@@ -9,12 +9,14 @@ interface PreviewIssue { row: number; kind: 'error' | 'existing' | 'duplicate'; 
 const norm = (value: unknown) => String(value ?? '').trim().toLowerCase()
 
 /** Shared three-step import used outside the specialist inward-register importer. */
-export function ExcelImportButton({ onRows, columns, existingKeys, rowKey, validateRow, label = 'Import', title = 'Import Excel workbook', size = 'md' }: {
+export function ExcelImportButton({ onRows, columns, existingKeys, rowKey, validateRow, prefill, contextMessage, label = 'Import', title = 'Import Excel workbook', size = 'md' }: {
   onRows: (rows: ImportedRow[], file: File) => void | Promise<void>
   columns: ExcelImportColumn[]
   existingKeys?: ReadonlySet<string>
   rowKey?: (row: ImportedRow) => string
   validateRow?: (row: ImportedRow, rowNumber: number) => string | undefined
+  prefill?: Record<string, unknown>
+  contextMessage?: string
   label?: string; title?: string; size?: 'sm' | 'md' | 'lg'
 }) {
   const ref = useRef<HTMLInputElement>(null)
@@ -27,14 +29,14 @@ export function ExcelImportButton({ onRows, columns, existingKeys, rowKey, valid
   const headers = useMemo(() => Object.keys(sourceRows[0] ?? {}), [sourceRows])
   const mappedRows = useMemo(() => sourceRows.map((source) => Object.fromEntries(columns.map((column) => {
     const sourceKey = mapping[column.key]
-    return [column.label, sourceKey ? source[sourceKey] : '']
-  }))), [columns, mapping, sourceRows])
+    const sourceValue = sourceKey ? source[sourceKey] : undefined
+    const isBlank = sourceValue == null || (typeof sourceValue === 'string' && sourceValue.trim() === '')
+    return [column.label, isBlank ? (prefill?.[column.key] ?? prefill?.[column.label] ?? '') : sourceValue]
+  }))), [columns, mapping, prefill, sourceRows])
   const preview = useMemo(() => {
     const issues: PreviewIssue[] = []; const accepted: ImportedRow[] = []; const seen = new Set<string>()
     mappedRows.forEach((row, index) => {
       const rowNumber = index + 2
-      const missing = columns.find((column) => column.required && norm(row[column.label]) === '')
-      if (missing) { issues.push({ row: rowNumber, kind: 'error', message: `${missing.label} is required` }); return }
       const validation = validateRow?.(row, rowNumber)
       if (validation) { issues.push({ row: rowNumber, kind: 'error', message: validation }); return }
       const key = norm(rowKey?.(row))
@@ -44,7 +46,7 @@ export function ExcelImportButton({ onRows, columns, existingKeys, rowKey, valid
       accepted.push(row)
     })
     return { issues, accepted }
-  }, [columns, existingKeys, mappedRows, rowKey, validateRow])
+  }, [existingKeys, mappedRows, rowKey, validateRow])
   function reset() { setStep(1); setFile(null); setSourceRows([]); setMapping({}); setLoading(false) }
   function close() { setOpen(false); reset() }
   async function selected(selectedFile?: File) {
@@ -73,9 +75,10 @@ export function ExcelImportButton({ onRows, columns, existingKeys, rowKey, valid
     <Button className="w-24 shrink-0 justify-center" variant="secondary" size={size} leftIcon={<FileSpreadsheet size={15} />} onClick={() => setOpen(true)}>{label}</Button>
     <Drawer open={open} onClose={close} size="xl" title={title} description="Map columns, validate records, and import only new rows." defaultMaximized>
       <div className="space-y-4 p-4">
+        {contextMessage ? <div className="rounded-md border border-info/30 bg-info/10 px-3 py-2 text-[12px] text-fg">{contextMessage}</div> : null}
         <div className="flex flex-wrap items-center gap-2 text-[12px] text-muted-fg">{[['1','File'],['2','Map columns'],['3','Preview & import']].map(([number, text], index) => <span key={number} className={step === index + 1 ? 'font-semibold text-primary' : ''}><b className="mr-1 rounded-full bg-muted px-2 py-1">{number}</b>{text}{index < 2 ? <span className="ml-2">/</span> : null}</span>)}</div>
         {step === 1 ? <Card className="flex min-h-64 flex-col items-center justify-center gap-3 border-dashed"><FileSpreadsheet size={36} className="text-muted-fg"/><div className="font-semibold">Choose an .xlsx or .xls workbook</div><input ref={ref} type="file" accept=".xlsx,.xls" className="hidden" onChange={(event) => { const picked=event.target.files?.[0]; event.target.value=''; void selected(picked) }}/><Button leftIcon={<Upload size={15}/>} loading={loading} onClick={() => ref.current?.click()}>Choose workbook</Button></Card> : null}
-        {step === 2 ? <Card className="space-y-4"><p className="text-[13px] text-muted-fg">Headers are auto-detected. Confirm or correct each mapping.</p><div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">{columns.map((column) => <label key={column.key} className="space-y-1.5 text-[12px]"><span className="font-medium">{column.label}{column.required ? ' *' : ''}</span><select className="input h-9" value={mapping[column.key] ?? ''} onChange={(event) => setMapping((current) => ({...current,[column.key]:event.target.value}))}><option value="">Not mapped</option>{headers.map((header) => <option key={header} value={header}>{header}</option>)}</select></label>)}</div><div className="flex justify-between"><Button variant="secondary" leftIcon={<ArrowLeft size={14}/>} onClick={() => setStep(1)}>Back</Button><Button disabled={columns.some((column) => column.required && !mapping[column.key])} onClick={() => setStep(3)}>Preview & validate</Button></div></Card> : null}
+        {step === 2 ? <Card className="space-y-4"><p className="text-[13px] text-muted-fg">Headers are auto-detected. Map only the columns you want to import; unmapped columns stay empty.</p><div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">{columns.map((column) => <label key={column.key} className="space-y-1.5 text-[12px]"><span className="font-medium">{column.label}</span><select className="input h-9" value={mapping[column.key] ?? ''} onChange={(event) => setMapping((current) => ({...current,[column.key]:event.target.value}))}><option value="">Not mapped</option>{headers.map((header) => <option key={header} value={header}>{header}</option>)}</select></label>)}</div><div className="flex justify-between"><Button variant="secondary" leftIcon={<ArrowLeft size={14}/>} onClick={() => setStep(1)}>Back</Button><Button onClick={() => setStep(3)}>Preview & validate</Button></div></Card> : null}
         {step === 3 ? <div className="space-y-4"><div className="grid grid-cols-3 gap-3"><Card><div className="text-xs text-muted-fg">Ready</div><div className="text-2xl font-bold text-success">{preview.accepted.length}</div></Card><Card><div className="text-xs text-muted-fg">Existing / duplicate</div><div className="text-2xl font-bold text-warning">{skipped.length}</div></Card><Card><div className="text-xs text-muted-fg">Errors</div><div className="text-2xl font-bold text-danger">{errors.length}</div></Card></div>{preview.issues.length ? <Card className="max-h-72 overflow-auto p-0"><div className="border-b border-border px-4 py-3 text-sm font-semibold">Validation results</div>{preview.issues.map((issue) => <div key={`${issue.row}-${issue.kind}`} className="border-b border-border/60 px-4 py-2 text-[12px]"><b className={issue.kind === 'error' ? 'text-danger' : 'text-warning'}>{issue.kind}</b> · row {issue.row} · {issue.message}</div>)}</Card> : <Card className="border-success/30 bg-success/10 text-sm text-success">All rows are valid and new.</Card>}<div className="flex justify-between"><Button variant="secondary" leftIcon={<ArrowLeft size={14}/>} onClick={() => setStep(2)}>Back</Button><Button loading={loading} disabled={errors.length > 0 || preview.accepted.length === 0} onClick={commit}>Import {preview.accepted.length} new record{preview.accepted.length === 1 ? '' : 's'}</Button></div></div> : null}
       </div>
     </Drawer>

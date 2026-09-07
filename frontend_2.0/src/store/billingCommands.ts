@@ -27,6 +27,7 @@ export interface FinalizeInput extends DispatchMeta {
   issuerKind: IssuerKind
   issuerVendorId?: Id
   invoiceDate?: string
+  dueDate?: string
   paymentTerms?: string
 }
 
@@ -61,8 +62,7 @@ function applyFinalize(draft: RootState, input: FinalizeInput, ctx: CommandConte
   const taxKind = deriveTaxKind(issuerState, cust?.shippingStateCode || cust?.stateCode)
   const { totals, packing, lines } = computeInvoice(draft, inv, taxKind)
   const invoiceDate = input.invoiceDate || inv.invoiceDate || ctx.today
-  const terms = cust?.paymentTermsDays
-  const dueDate = terms != null ? toISODate(addDays(new Date(invoiceDate), terms)) : undefined
+  const dueDate = input.dueDate || toISODate(addDays(new Date(invoiceDate), 45))
   const issuerId = input.issuerKind === 'supplier' && input.issuerVendorId ? input.issuerVendorId : inv.unitId
 
   // Freeze the issuer + consignee + line identity NOW. A later edit to the customer,
@@ -141,6 +141,7 @@ export interface EditDraftInput extends DispatchMeta {
   issuerKind: IssuerKind
   issuerVendorId?: Id
   invoiceDate?: string
+  dueDate?: string
   paymentTerms?: string
 }
 const dispatchMeta = (i: DispatchMeta) => ({
@@ -173,6 +174,7 @@ function applyEditDraft(draft: RootState, input: EditDraftInput): ApplyOut<{ id:
     issuerKind: input.issuerKind,
     issuerId,
     invoiceDate: input.invoiceDate || inv.invoiceDate,
+    dueDate: input.dueDate || toISODate(addDays(new Date(input.invoiceDate || inv.invoiceDate), 45)),
     paymentTerms: input.paymentTerms,
     ...dispatchMeta(input),
   })

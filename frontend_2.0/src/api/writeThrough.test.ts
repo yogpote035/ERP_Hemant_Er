@@ -50,6 +50,7 @@ describe('write-through routing (non-admin → module endpoints)', () => {
     const id = runSaveInward({ unitId: 'u1', partId: 'p1', challanNo: 'WT-1', challanDate: '2025-04-01', batchHeatNo: 'H', receivedQty: 100 }).data.id
     await flush()
     expect(M.inwardApi.create).toHaveBeenCalledTimes(1)
+    expect(M.inwardApi.create).toHaveBeenCalledWith(expect.objectContaining({ unitId: 'u1' }))
 
     runSaveInward({ id, unitId: 'u1', partId: 'p1', challanNo: 'WT-1', challanDate: '2025-04-01', batchHeatNo: 'H', receivedQty: 120 })
     await flush()
@@ -79,8 +80,11 @@ describe('write-through routing (non-admin → module endpoints)', () => {
     runSaveRejectionAdvice({ unitId: 'u1', customerId: 'c1', partId: 'p1', sourceInwardId: 'i2', rejDcNo: 'WT-RJ', rejDate: '2025-04-01', mrQty: 5, frQty: 0, weightBasis: 'scrap' })
     await flush()
     expect(M.scrapApi.create).toHaveBeenCalledTimes(1)
+    expect(M.scrapApi.create).toHaveBeenCalledWith(expect.objectContaining({ unitId: 'u1' }))
     expect(M.expensesApi.create).toHaveBeenCalledTimes(1)
+    expect(M.expensesApi.create).toHaveBeenCalledWith(expect.objectContaining({ unitId: 'u1' }))
     expect(M.rejectionApi.create).toHaveBeenCalledTimes(1)
+    expect(M.rejectionApi.create).toHaveBeenCalledWith(expect.objectContaining({ unitId: 'u1' }))
   })
 
   it('routes a master save to /masters/:entity by id prefix', async () => {
@@ -89,6 +93,13 @@ describe('write-through routing (non-admin → module endpoints)', () => {
     await flush()
     expect(M.mastersApi.create).toHaveBeenCalledTimes(1)
     expect(M.mastersApi.create).toHaveBeenCalledWith('customers', expect.objectContaining({ name: 'WT Customer' }))
+  })
+
+  it('passes a unit-scoped master unitId through to the backend client', async () => {
+    const part = MASTER_SPECS.find((s) => s.key === 'part')!
+    part.save({ partNo: 'WT-PART', materialCode: 'WT-RM', unitId: 'u1', uom: 'NOS', hsnSac: '7318', gstPct: '18', finishWtG: 1, scrapWtG: 0.1, avgQtyPerBox: 10 }, null)
+    await flush()
+    expect(M.mastersApi.create).toHaveBeenCalledWith('parts', expect.objectContaining({ unitId: 'u1' }))
   })
 
   it('routes attendance + expense-edit + rejection-edit (previously local-only)', async () => {

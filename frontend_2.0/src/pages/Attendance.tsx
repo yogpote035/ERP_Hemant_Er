@@ -56,8 +56,8 @@ const SHIFT_OPTIONS = [
   { value: 'C', label: 'Shift C' },
   { value: 'G', label: 'General' },
 ]
-const PRODUCTION_IMPORT_COLUMNS = [{key:'date',label:'Date',required:true},{key:'shift',label:'Shift No'},{key:'employee',label:'Employee',required:true},{key:'machine',label:'Machine',required:true},{key:'part',label:'Part',required:true},{key:'operation',label:'Operation'},{key:'standard',label:'Standard'},{key:'plan',label:'Plan'},{key:'total',label:'Total Make',required:true},{key:'ok',label:'OK Qty',required:true},{key:'scrap',label:'Scrap Qty'},{key:'rework',label:'Rework Qty'},{key:'mf',label:'MF Qty'},{key:'downtimeFrom',label:'Downtime From'},{key:'downtimeTo',label:'Downtime To'},{key:'remark',label:'Remark'},{key:'rate',label:'Rate'}]
-const SHIFT_IMPORT_COLUMNS = [{key:'date',label:'Date',required:true},{key:'shift',label:'Shift No'},{key:'employee',label:'Employee',required:true},{key:'from',label:'From Time',required:true},{key:'to',label:'To Time',required:true},{key:'shiftRate',label:'Shift Rate'},{key:'otHours',label:'OT Hours'},{key:'otRate',label:'OT Rate'}]
+const PRODUCTION_IMPORT_COLUMNS = [{key:'date',label:'Date'},{key:'shift',label:'Shift No'},{key:'employee',label:'Employee'},{key:'machine',label:'Machine'},{key:'part',label:'Part'},{key:'operation',label:'Operation'},{key:'standard',label:'Standard'},{key:'plan',label:'Plan'},{key:'total',label:'Total Make'},{key:'ok',label:'OK Qty'},{key:'scrap',label:'Scrap Qty'},{key:'rework',label:'Rework Qty'},{key:'mf',label:'MF Qty'},{key:'downtimeFrom',label:'Downtime From'},{key:'downtimeTo',label:'Downtime To'},{key:'remark',label:'Remark'},{key:'rate',label:'Rate'}]
+const SHIFT_IMPORT_COLUMNS = [{key:'date',label:'Date'},{key:'shift',label:'Shift No'},{key:'employee',label:'Employee'},{key:'from',label:'From Time'},{key:'to',label:'To Time'},{key:'shiftRate',label:'Shift Rate'},{key:'otHours',label:'OT Hours'},{key:'otRate',label:'OT Rate'}]
 
 const intOf = (v: string) => {
   const n = Number(v)
@@ -127,7 +127,7 @@ export default function Attendance() {
     toast.success(`Imported ${rows.length} attendance entries`)
   }
   function validateAttendanceImport(row: ImportedRow) {
-    const s=useStore.getState(); const find=(items: unknown[], text:string, keys:(value:any)=>unknown[]) => items.some((value)=>keys(value).filter(Boolean).some((key)=>String(key).trim().toLowerCase()===text.trim().toLowerCase()))
+    const s=useStore.getState(); const find=<T,>(items: T[], text:string, keys:(value:T)=>unknown[]) => items.some((value)=>keys(value).filter(Boolean).some((key)=>String(key).trim().toLowerCase()===text.trim().toLowerCase()))
     if(!find(values(s.masters.employees),excelText(excelValue(row,'Employee')),(v)=>[v.id,v.name,v.empCode])) return 'Employee does not exist'
     if(tab==='production') {
       if(!find(values(s.masters.machines),excelText(excelValue(row,'Machine')),(v)=>[v.id,v.machineNo,v.description])) return 'Machine does not exist'

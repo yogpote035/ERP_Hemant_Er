@@ -1,5 +1,5 @@
 import { Fragment, useId, useMemo, useState, type ReactNode } from 'react'
-import { FormProvider, useForm, type FieldValues } from 'react-hook-form'
+import { FormProvider, useForm, type FieldValues, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useShallow } from 'zustand/react/shallow'
 import { ChevronDown, ChevronRight, Download, Pencil, Plus, Trash2, RotateCcw, Search, X } from 'lucide-react'
@@ -15,6 +15,7 @@ import { formatINR, type Paise } from '@/lib/money'
 import { exportRowsToXlsx } from '@/lib/exportXlsx'
 import { excelBoolean, excelNumber, excelText, excelValue, type ImportedRow } from '@/lib/importXlsx'
 import { ExcelImportButton, type ExcelImportColumn } from '@/components/ExcelImportButton'
+import { useEntryUnitContext } from '@/hooks/useEntryUnitContext'
 
 /** Master spec key → its `/masters/:entity` segment (server-side DB pagination). */
 const MASTER_SEGMENT: Record<string, string> = {
@@ -26,6 +27,7 @@ import type { BaseEntity, MasterView, RenderHelpers } from './types'
 /** Generic master manager: scoped list + create/edit modal + (soft) delete.
  *  `actions` renders extra buttons (e.g. Export) next to "New …" on the toolbar. */
 export function EntityManager({ spec, actions }: { spec: MasterView; actions?: ReactNode }) {
+  const entryUnit = useEntryUnitContext()
   const can = useCan()
   const canCreate = can(spec.module, 'create')
   const canEdit = can(spec.module, 'edit')
@@ -109,6 +111,7 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
 
   function parseImportRow(row: ImportedRow, rowNumber: number): FieldValues {
     const formValues = { ...spec.emptyForm() } as Record<string, unknown>
+    if (spec.fields.some((field) => field.name === 'unitId') && entryUnit.preferredUnitId) formValues.unitId = entryUnit.preferredUnitId
     for (const field of spec.fields) {
       const raw = excelValue(row, field.label, field.name)
       if (raw === undefined) continue
@@ -118,8 +121,13 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
     }
     const result = spec.schema.safeParse(formValues)
     if (!result.success) {
-      const issue = result.error.issues[0]
-      throw new Error(`Row ${rowNumber}: ${issue?.path.join('.') || 'value'} ${issue?.message || 'is invalid'}`)
+      const issue = result.error.issues.find((candidate) => {
+        const key = candidate.path[0]
+        const value = typeof key === 'string' ? formValues[key] : undefined
+        return !(value == null || (typeof value === 'string' && value.trim() === ''))
+      })
+      if (issue) throw new Error(`Row ${rowNumber}: ${issue.path.join('.') || 'value'} ${issue.message || 'is invalid'}`)
+      return formValues
     }
     return result.data
   }
@@ -184,7 +192,7 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
           {canExport && !actions ? (
             <Button className="w-24 shrink-0 justify-center" variant="secondary" size="sm" leftIcon={<Download size={15} />} onClick={exportMaster}>Export</Button>
           ) : null}
-          {canCreate ? <ExcelImportButton size="sm" title={`Import ${spec.labelPlural}`} columns={importColumns} existingKeys={existingKeys} rowKey={rowDuplicateKey} validateRow={validateImportRow} onRows={importMaster} /> : null}
+          {canCreate ? <ExcelImportButton size="sm" title={`Import ${spec.labelPlural}`} columns={importColumns} existingKeys={existingKeys} rowKey={rowDuplicateKey} validateRow={validateImportRow} onRows={importMaster} prefill={entryUnit.preferredUnitId ? { unitId: entryUnit.preferredUnitId } : undefined} contextMessage={spec.fields.some((field) => field.name === 'unitId') ? entryUnit.message : undefined} /> : null}
           {canCreate && scopedRows.length > 0 ? (
             <Button size="sm" leftIcon={<Plus size={15} />} onClick={() => setEditing({ row: null })}>
               New {spec.label}
@@ -340,7 +348,7 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
 
       {editing !== null ? (
         <MasterFormModal
-          key={editing.row?.id ?? '__new__'}
+          key={`${editing.row?.id ?? '__new__'}:${entryUnit.preferredUnitId}`}
           spec={spec}
           existing={editing.row}
           onClose={() => setEditing(null)}
@@ -375,10 +383,27 @@ function MasterFormModal({
   existing: BaseEntity | null
   onClose: () => void
 }) {
+  const entryUnit = useEntryUnitContext()
   const formId = useId()
+  const resolver = useMemo<Resolver<FieldValues>>(() => {
+    const base = zodResolver(spec.schema) as Resolver<FieldValues>
+    return async (values, context, options) => {
+      const result = await base(values, context, options)
+      const errors = { ...result.errors }
+      for (const key of Object.keys(errors)) {
+        const value = values[key]
+        if (value == null || (typeof value === 'string' && value.trim() === '')) delete errors[key]
+      }
+      return Object.keys(errors).length ? { values: {}, errors } : { values, errors: {} }
+    }
+  }, [spec.schema])
+  const emptyValues = existing ? spec.toForm(existing) : spec.emptyForm()
+  if (spec.fields.some((field) => field.name === 'unitId') && entryUnit.preferredUnitId && (!existing || entryUnit.isSingleUnit || !emptyValues.unitId)) {
+    emptyValues.unitId = entryUnit.preferredUnitId
+  }
   const methods = useForm<FieldValues>({
-    resolver: zodResolver(spec.schema),
-    defaultValues: existing ? spec.toForm(existing) : spec.emptyForm(),
+    resolver,
+    defaultValues: emptyValues,
   })
 
   function onValid(values: FieldValues) {
@@ -411,7 +436,7 @@ function MasterFormModal({
       <FormProvider {...methods}>
         <form id={formId} onSubmit={methods.handleSubmit(onValid)} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {spec.fields.map((f) => (
-            <AutoField key={f.name} field={f} />
+            <AutoField key={f.name} field={f} disabled={f.name === 'unitId' && entryUnit.isSingleUnit} hint={!existing && f.name === 'unitId' && entryUnit.message ? entryUnit.message : undefined} />
           ))}
         </form>
       </FormProvider>

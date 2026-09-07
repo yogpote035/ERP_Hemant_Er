@@ -24,6 +24,12 @@ import type { Id, Expense, ExpenseInstalment, PaymentMode } from '../../types/do
 
 const PAYMENT_MODES = ['cash', 'cheque', 'rtgs', 'neft', 'upi', 'bank'] as const
 
+function dueIn45Days(date: string): string {
+  const value = new Date(date)
+  value.setDate(value.getDate() + 45)
+  return value.toISOString().slice(0, 10)
+}
+
 // ── schemas ──────────────────────────────────────────────────────────────────
 const instalmentSchema = z.object({
   date: z.string().min(1, 'Date is required'),
@@ -37,9 +43,9 @@ const createExpenseSchema = z.object({
   unitId: z.string().min(1),
   vendorId: z.string().min(1).optional(),
   vendorName: z.string().optional(),
-  category: z.string().min(1, 'Description is required'),
+  category: z.string(),
   description: z.string().optional(),
-  date: z.string().min(1, 'Date is required'),
+  date: z.string(),
   dueDate: z.string().optional(),
   hsnSac: z.string().optional(),
   quantity: z.number().nonnegative().optional(),
@@ -146,8 +152,7 @@ expensesRouter.post(
     assertUnit(req, input.unitId)
     validateVendorUnit(s, input.vendorId, input.unitId)
     if ((input.igstPct ?? 0) > 0 && ((input.cgstPct ?? 0) > 0 || (input.sgstPct ?? 0) > 0)) throw badRequest('Use either IGST or CGST + SGST, not both')
-    if (!input.category.trim()) throw badRequest('Description is required')
-    if (!(input.totalPaise > 0)) throw badRequest('Total payable must be greater than 0')
+    if (input.totalPaise < 0) throw badRequest('Total payable cannot be negative')
     if (input.totalPaise > 1e13) throw badRequest('Amount is implausibly large')
 
     const instalments: ExpenseInstalment[] = (input.instalments ?? []).map((i) => ({
@@ -167,7 +172,7 @@ expensesRouter.post(
       category: input.category.trim(),
       description: input.description,
       date: input.date,
-      dueDate: input.dueDate,
+      dueDate: input.dueDate || dueIn45Days(input.date),
       ...lineItemFields(input),
       totalPaise: input.totalPaise as Paise,
       instalments,
@@ -204,8 +209,7 @@ expensesRouter.put(
     assertUnit(req, input.unitId)
     validateVendorUnit(s, input.vendorId, input.unitId)
     if ((input.igstPct ?? 0) > 0 && ((input.cgstPct ?? 0) > 0 || (input.sgstPct ?? 0) > 0)) throw badRequest('Use either IGST or CGST + SGST, not both')
-    if (!input.category.trim()) throw badRequest('Description is required')
-    if (!(input.totalPaise > 0)) throw badRequest('Total payable must be greater than 0')
+    if (input.totalPaise < 0) throw badRequest('Total payable cannot be negative')
     if (input.totalPaise > 1e13) throw badRequest('Amount is implausibly large')
 
     // An edit keeps the recorded instalments; they may not exceed the new total.
@@ -220,7 +224,7 @@ expensesRouter.put(
       category: input.category.trim(),
       description: input.description,
       date: input.date,
-      dueDate: input.dueDate,
+      dueDate: input.dueDate || dueIn45Days(input.date),
       ...lineItemFields(input),
       totalPaise: input.totalPaise as Paise,
       instalments: existing.instalments,

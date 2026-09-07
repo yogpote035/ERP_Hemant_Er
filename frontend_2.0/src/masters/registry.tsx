@@ -108,12 +108,12 @@ const unitMaster = defineMaster<Unit, UnitForm>({
     { key: 'active', header: 'Status', render: activeCell },
   ],
   fields: [
-    { kind: 'text', name: 'name', label: 'Unit name', required: true, colSpan: 2 },
-    { kind: 'text', name: 'code', label: 'Short code', required: true, placeholder: 'HEW', hint: 'Example: HEW for Hemant Engineering Works' },
-    { kind: 'text', name: 'gstin', label: 'GSTIN', required: true },
-    { kind: 'text', name: 'stateCode', label: 'State code', required: true, hint: STATE_HINT },
-    { kind: 'number', name: 'seqPad', label: 'Invoice seq padding', required: true, min: 1, max: 8, hint: 'Example: padding 3 turns invoice sequence 7 into 007' },
-    { kind: 'text', name: 'invoiceFormat', label: 'Invoice format', required: true, lockable: true, hint: 'Default: {seq}/{FY}. Unlock only if you need a custom format, e.g. HEW/{FY}/{seq} becomes HEW/2026-27/007', colSpan: 2 },
+    { kind: 'text', name: 'name', label: 'Unit name', colSpan: 2 },
+    { kind: 'text', name: 'code', label: 'Short code', placeholder: 'HEW', hint: 'Example: HEW for Hemant Engineering Works' },
+    { kind: 'text', name: 'gstin', label: 'GSTIN' },
+    { kind: 'text', name: 'stateCode', label: 'State code', hint: STATE_HINT },
+    { kind: 'number', name: 'seqPad', label: 'Invoice seq padding', min: 1, max: 8, hint: 'Example: padding 3 turns invoice sequence 7 into 007' },
+    { kind: 'text', name: 'invoiceFormat', label: 'Invoice format', lockable: true, hint: 'Default: {seq}/{FY}. Unlock only if you need a custom format, e.g. HEW/{FY}/{seq} becomes HEW/2026-27/007', colSpan: 2 },
     { kind: 'textarea', name: 'addressLines', label: 'Address (one line each)', colSpan: 2 },
     { kind: 'text', name: 'bankName', label: 'Bank name' },
     { kind: 'text', name: 'bankBranch', label: 'Bank branch' },
@@ -127,15 +127,15 @@ const unitMaster = defineMaster<Unit, UnitForm>({
     bankName: u.bankName ?? '', bankBranch: u.bankBranch ?? '', accountNo: u.accountNo ?? '', ifsc: u.ifsc ?? '',
   }),
   toEntity: (v, ctx) => ({
-    id: ctx.id, name: v.name.trim(), code: v.code.trim(), gstin: v.gstin.trim().toUpperCase(),
+    id: ctx.id, name: (v.name ?? '').trim(), code: (v.code ?? '').trim(), gstin: (v.gstin ?? '').trim().toUpperCase(),
     stateCode: v.stateCode, addressLines: splitLines(v.addressLines),
-    invoiceFormat: v.invoiceFormat.trim(), seqPad: v.seqPad,
+    invoiceFormat: (v.invoiceFormat ?? '').trim(), seqPad: v.seqPad ?? 0,
     bankName: opt(v.bankName), bankBranch: opt(v.bankBranch), accountNo: opt(v.accountNo), ifsc: opt(v.ifsc),
     logoDataUrl: ctx.existing?.logoDataUrl,
     active: ctx.existing?.active ?? true,
   }),
   extraValidate: (v, s, existingId) => {
-    const dup = values(s.masters.units).some(
+    const dup = !!v.code?.trim() && values(s.masters.units).some(
       (u) => u.id !== existingId && u.code.trim().toLowerCase() === v.code.trim().toLowerCase()
     )
     if (dup) return 'A unit with this code already exists'
@@ -160,7 +160,6 @@ const partSchema = z.object({
   rmWtG: z.number({ invalid_type_error: 'Number' }).nonnegative().optional(),
   avgQtyPerBox: z.number({ invalid_type_error: 'Number' }).int().positive(),
   packingMode: z.string().optional(),
-  category: z.string().optional(),
   editionNo: z.string().optional(),
   defaultPoNo: z.string().optional(),
   defaultPoDate: z.string().optional(),
@@ -189,19 +188,18 @@ const partMaster = defineMaster<Part, PartForm>({
     { key: 'active', header: 'Status', render: activeCell },
   ],
   fields: [
-    { kind: 'text', name: 'partNo', label: 'Part number', required: true },
-    { kind: 'text', name: 'materialCode', label: 'Material code', required: true },
-    { kind: 'select', name: 'unitId', label: 'Assigned Unit', required: true, options: unitOptions },
-    { kind: 'text', name: 'uom', label: 'UOM', required: true, placeholder: 'NOS / KG' },
-    { kind: 'text', name: 'hsnSac', label: 'HSN/SAC', required: true },
-    { kind: 'select', name: 'gstPct', label: 'GST %', required: true, options: GST_OPTIONS },
-    { kind: 'number', name: 'finishWtG', label: 'Finish Wt / pc (g)', required: true, step: 0.001, min: 0 },
-    { kind: 'number', name: 'scrapWtG', label: 'Scrap weight (g)', required: true, step: 0.001, min: 0 },
+    { kind: 'text', name: 'partNo', label: 'Part number' },
+    { kind: 'text', name: 'materialCode', label: 'Material code' },
+    { kind: 'select', name: 'unitId', label: 'Assigned Unit', options: unitOptions },
+    { kind: 'text', name: 'uom', label: 'UOM', placeholder: 'NOS / KG' },
+    { kind: 'text', name: 'hsnSac', label: 'HSN/SAC' },
+    { kind: 'select', name: 'gstPct', label: 'GST %', options: GST_OPTIONS },
+    { kind: 'number', name: 'finishWtG', label: 'Finish Wt / pc (g)', step: 0.001, min: 0 },
+    { kind: 'number', name: 'scrapWtG', label: 'Scrap weight (g)', step: 0.001, min: 0 },
     { kind: 'number', name: 'rmRate', label: 'RM Rate / pc (₹)', step: 0.01, min: 0 },
     { kind: 'number', name: 'rmWtG', label: 'RM Wt / pc (g)', step: 0.001, min: 0 },
-    { kind: 'number', name: 'avgQtyPerBox', label: 'Avg Qty per Box', required: true, min: 1 },
+    { kind: 'number', name: 'avgQtyPerBox', label: 'Avg Qty per Box', min: 1 },
     { kind: 'text', name: 'packingMode', label: 'Packing Mode', placeholder: 'GSP-2' },
-    { kind: 'text', name: 'category', label: 'Category' },
     { kind: 'text', name: 'editionNo', label: 'Edition no.' },
     { kind: 'text', name: 'defaultPoNo', label: 'Default PO no.' },
     { kind: 'date', name: 'defaultPoDate', label: 'PO date' },
@@ -214,17 +212,17 @@ const partMaster = defineMaster<Part, PartForm>({
     finishWtG: p.finishWtMg / 1000, scrapWtG: p.scrapWtMg / 1000, avgQtyPerBox: p.avgQtyPerBox,
     rmRate: p.rmRatePaise != null ? fromPaise(p.rmRatePaise) : undefined,
     rmWtG: p.rmWtMg != null ? p.rmWtMg / 1000 : undefined,
-    packingMode: p.packingMode ?? '', category: p.category ?? '', editionNo: p.editionNo ?? '',
+    packingMode: p.packingMode ?? '', editionNo: p.editionNo ?? '',
     defaultPoNo: p.defaultPoNo ?? '', defaultPoDate: p.defaultPoDate ?? '',
   }),
   toEntity: (v, ctx) => ({
-    id: ctx.id, partNo: v.partNo.trim(), materialCode: v.materialCode.trim(),
-    description: opt(v.description), category: opt(v.category), editionNo: opt(v.editionNo),
-    unitId: v.unitId, uom: v.uom.trim(), hsnSac: v.hsnSac.trim(), gstPct: Number(v.gstPct),
-    finishWtMg: Math.round(v.finishWtG * 1000), scrapWtMg: Math.round(v.scrapWtG * 1000),
+    id: ctx.id, partNo: (v.partNo ?? '').trim(), materialCode: (v.materialCode ?? '').trim(),
+    description: opt(v.description), category: ctx.existing?.category, editionNo: opt(v.editionNo),
+    unitId: v.unitId ?? '', uom: (v.uom ?? '').trim(), hsnSac: (v.hsnSac ?? '').trim(), gstPct: Number(v.gstPct ?? 0),
+    finishWtMg: Math.round((v.finishWtG ?? 0) * 1000), scrapWtMg: Math.round((v.scrapWtG ?? 0) * 1000),
     rmRatePaise: v.rmRate != null ? toPaise(v.rmRate) : undefined,
     rmWtMg: v.rmWtG != null ? Math.round(v.rmWtG * 1000) : undefined,
-    avgQtyPerBox: v.avgQtyPerBox, packingMode: opt(v.packingMode), active: ctx.existing?.active ?? true,
+    avgQtyPerBox: v.avgQtyPerBox ?? 0, packingMode: opt(v.packingMode), active: ctx.existing?.active ?? true,
     defaultPoNo: opt(v.defaultPoNo), defaultPoDate: opt(v.defaultPoDate),
   }),
   // Editing RM Rate on the part creates the same versioned record shown under
@@ -242,7 +240,7 @@ const partMaster = defineMaster<Part, PartForm>({
   },
   extraValidate: (v, s, existingId) => {
     // Part no. is unique within its unit — a dup silently mis-binds Excel imports.
-    const dup = values(s.masters.parts).some(
+    const dup = !!v.partNo?.trim() && values(s.masters.parts).some(
       (p) => p.id !== existingId && p.unitId === v.unitId && p.partNo.trim().toLowerCase() === v.partNo.trim().toLowerCase()
     )
     if (dup) return 'Part number already exists in this unit'
@@ -310,10 +308,10 @@ const vendorMaster = defineMaster<Vendor, VendorForm>({
     { key: 'active', header: 'Status', render: activeCell },
   ],
   fields: [
-    { kind: 'text', name: 'name', label: 'Vendor name', required: true, colSpan: 2 },
-    { kind: 'select', name: 'unitId', label: 'Assigned Unit', required: true, options: unitOptions },
-    { kind: 'text', name: 'code', label: 'Code', required: true },
-    { kind: 'select', name: 'type', label: 'Type', required: true, options: [{ value: 'rm', label: 'Raw material' }, { value: 'service', label: 'Service' }] },
+    { kind: 'text', name: 'name', label: 'Vendor name', colSpan: 2 },
+    { kind: 'select', name: 'unitId', label: 'Assigned Unit', options: unitOptions },
+    { kind: 'text', name: 'code', label: 'Code' },
+    { kind: 'select', name: 'type', label: 'Type', options: [{ value: 'rm', label: 'Raw material' }, { value: 'service', label: 'Service' }] },
     { kind: 'text', name: 'contactPerson', label: 'Contact person' },
     { kind: 'text', name: 'phone', label: 'Phone' },
     { kind: 'text', name: 'email', label: 'Email' },
@@ -337,7 +335,7 @@ const vendorMaster = defineMaster<Vendor, VendorForm>({
     accountNo: v.accountNo ?? '', ifsc: v.ifsc ?? '', remarks: v.remarks ?? '',
   }),
   toEntity: (v, ctx) => ({
-    id: ctx.id, unitId: v.unitId, name: v.name.trim(), code: v.code.trim(), type: v.type,
+    id: ctx.id, unitId: v.unitId ?? '', name: (v.name ?? '').trim(), code: (v.code ?? '').trim(), type: v.type ?? 'service',
     contactPerson: opt(v.contactPerson), phone: opt(v.phone), email: opt(v.email),
     gstin: opt(v.gstin), pan: opt(v.pan), stateCode: opt(v.stateCode), city: opt(v.city),
     pincode: opt(v.pincode), addressLines: splitLines(v.addressLines), bankName: opt(v.bankName),
@@ -346,7 +344,7 @@ const vendorMaster = defineMaster<Vendor, VendorForm>({
     active: ctx.existing?.active ?? true,
   }),
   extraValidate: (v, s, existingId) => {
-    const dup = values(s.masters.vendors).some(
+    const dup = !!v.code?.trim() && values(s.masters.vendors).some(
       (x) => x.id !== existingId && x.code.trim().toLowerCase() === v.code.trim().toLowerCase()
     )
     if (dup) return 'A vendor with this code already exists'
@@ -400,9 +398,9 @@ const customerMaster = defineMaster<Customer, CustomerForm>({
     { key: 'active', header: 'Status', render: activeCell },
   ],
   fields: [
-    { kind: 'text', name: 'name', label: 'Customer name', required: true, colSpan: 2 },
-    { kind: 'text', name: 'gstin', label: 'GSTIN', required: true },
-    { kind: 'text', name: 'stateCode', label: 'State code', required: true, hint: STATE_HINT },
+    { kind: 'text', name: 'name', label: 'Customer name', colSpan: 2 },
+    { kind: 'text', name: 'gstin', label: 'GSTIN' },
+    { kind: 'text', name: 'stateCode', label: 'State code', hint: STATE_HINT },
     { kind: 'text', name: 'pan', label: 'PAN', placeholder: 'e.g. ABCDE1234F' },
     { kind: 'number', name: 'paymentTermsDays', label: 'Payment terms (days)', min: 0 },
     { kind: 'textarea', name: 'addressLines', label: 'Address (one line each)', colSpan: 2 },
@@ -427,7 +425,7 @@ const customerMaster = defineMaster<Customer, CustomerForm>({
     freightTerms: c.freightTerms ?? '', transitInsuranceTerms: c.transitInsuranceTerms ?? '', sez: c.sez ?? false,
   }),
   toEntity: (v, ctx) => ({
-    id: ctx.id, name: v.name.trim(), gstin: v.gstin.trim().toUpperCase(), pan: opt(v.pan)?.toUpperCase(), stateCode: v.stateCode,
+    id: ctx.id, name: (v.name ?? '').trim(), gstin: (v.gstin ?? '').trim().toUpperCase(), pan: opt(v.pan)?.toUpperCase(), stateCode: v.stateCode ?? '',
     paymentTermsDays: v.paymentTermsDays, addressLines: splitLines(v.addressLines),
     shippingName: opt(v.shippingName), shippingAddressLines: splitLines(v.shippingAddressLines),
     shippingGstin: opt(v.shippingGstin)?.toUpperCase(), shippingStateCode: opt(v.shippingStateCode),
@@ -470,18 +468,18 @@ const machineMaster = defineMaster<Machine, MachineForm>({
     { key: 'active', header: 'Status', render: activeCell },
   ],
   fields: [
-    { kind: 'text', name: 'machineNo', label: 'Machine number', required: true },
-    { kind: 'select', name: 'unitId', label: 'Unit', required: true, options: unitOptions },
+    { kind: 'text', name: 'machineNo', label: 'Machine number' },
+    { kind: 'select', name: 'unitId', label: 'Unit', options: unitOptions },
     { kind: 'textarea', name: 'description', label: 'Description', colSpan: 2 },
   ],
   emptyForm: () => ({}),
   toForm: (m) => ({ machineNo: m.machineNo, description: m.description ?? '', unitId: m.unitId }),
   toEntity: (v, ctx) => ({
-    id: ctx.id, machineNo: v.machineNo.trim(), description: opt(v.description), unitId: v.unitId,
+    id: ctx.id, machineNo: (v.machineNo ?? '').trim(), description: opt(v.description), unitId: v.unitId ?? '',
     active: ctx.existing?.active ?? true,
   }),
   extraValidate: (v, s, existingId) =>
-    values(s.masters.machines).some(
+    !!v.machineNo?.trim() && values(s.masters.machines).some(
       (m) => m.id !== existingId && m.unitId === v.unitId && m.machineNo.trim().toLowerCase() === v.machineNo.trim().toLowerCase()
     )
       ? 'A machine with this number already exists in this unit'
@@ -514,16 +512,16 @@ const operationMaster = defineMaster<Operation, OperationForm>({
     { key: 'active', header: 'Status', render: activeCell },
   ],
   fields: [
-    { kind: 'text', name: 'code', label: 'Operation code', required: true },
+    { kind: 'text', name: 'code', label: 'Operation code' },
     { kind: 'textarea', name: 'description', label: 'Description', colSpan: 2 },
   ],
   emptyForm: () => ({}),
   toForm: (o) => ({ code: o.code, description: o.description ?? '' }),
   toEntity: (v, ctx) => ({
-    id: ctx.id, code: v.code.trim(), description: opt(v.description), active: ctx.existing?.active ?? true,
+    id: ctx.id, code: (v.code ?? '').trim(), description: opt(v.description), active: ctx.existing?.active ?? true,
   }),
   extraValidate: (v, s, existingId) =>
-    values(s.masters.operations).some(
+    !!v.code?.trim() && values(s.masters.operations).some(
       (o) => o.id !== existingId && o.code.trim().toLowerCase() === v.code.trim().toLowerCase()
     )
       ? 'An operation with this code already exists'
@@ -564,14 +562,14 @@ const employeeMaster = defineMaster<Employee, EmployeeForm>({
     { key: 'active', header: 'Status', render: activeCell },
   ],
   fields: [
-    { kind: 'text', name: 'name', label: 'Employee name', required: true },
-    { kind: 'text', name: 'empCode', label: 'Employee code', required: true },
+    { kind: 'text', name: 'name', label: 'Employee name' },
+    { kind: 'text', name: 'empCode', label: 'Employee code' },
     { kind: 'text', name: 'phone', label: 'Phone' },
-    { kind: 'select', name: 'labourType', label: 'Labour type', required: true, options: [
+    { kind: 'select', name: 'labourType', label: 'Labour type', options: [
       { value: 'production', label: 'Production' }, { value: 'shift', label: 'Shift' }, { value: 'both', label: 'Both' },
     ] },
-    { kind: 'money', name: 'standardShiftRate', label: 'Standard shift rate', required: true },
-    { kind: 'select', name: 'unitId', label: 'Unit', required: true, options: unitOptions },
+    { kind: 'money', name: 'standardShiftRate', label: 'Standard shift rate' },
+    { kind: 'select', name: 'unitId', label: 'Unit', options: unitOptions },
   ],
   emptyForm: () => ({ labourType: 'shift' }),
   toForm: (e) => ({
@@ -579,12 +577,12 @@ const employeeMaster = defineMaster<Employee, EmployeeForm>({
     standardShiftRate: fromPaise(e.standardShiftRatePaise), unitId: e.unitId,
   }),
   toEntity: (v, ctx) => ({
-    id: ctx.id, name: v.name.trim(), empCode: v.empCode.trim(), phone: opt(v.phone),
-    labourType: v.labourType, standardShiftRatePaise: toPaise(v.standardShiftRate), unitId: v.unitId,
+    id: ctx.id, name: (v.name ?? '').trim(), empCode: (v.empCode ?? '').trim(), phone: opt(v.phone),
+    labourType: v.labourType ?? 'shift', standardShiftRatePaise: toPaise(v.standardShiftRate ?? 0), unitId: v.unitId ?? '',
     active: ctx.existing?.active ?? true,
   }),
   extraValidate: (v, s, existingId) =>
-    values(s.masters.employees).some(
+    !!v.empCode?.trim() && values(s.masters.employees).some(
       (e) => e.id !== existingId && e.empCode.trim().toLowerCase() === v.empCode.trim().toLowerCase()
     )
       ? 'An employee with this code already exists'
@@ -620,16 +618,16 @@ const openingMaster = defineMaster<StockOpening, OpeningForm>({
     { key: 'date', header: 'As of', render: (o) => o.asOfDate },
   ],
   fields: [
-    { kind: 'select', name: 'unitId', label: 'Unit', required: true, options: unitOptions },
-    { kind: 'select', name: 'partId', label: 'Part', required: true, options: partOptions },
-    { kind: 'text', name: 'fy', label: 'Financial year', required: true, placeholder: '24-25' },
-    { kind: 'number', name: 'openingQty', label: 'Opening quantity', required: true, min: 0 },
-    { kind: 'date', name: 'asOfDate', label: 'As of date', required: true },
+    { kind: 'select', name: 'unitId', label: 'Unit', options: unitOptions },
+    { kind: 'select', name: 'partId', label: 'Part', options: partOptions },
+    { kind: 'text', name: 'fy', label: 'Financial year', placeholder: '24-25' },
+    { kind: 'number', name: 'openingQty', label: 'Opening quantity', min: 0 },
+    { kind: 'date', name: 'asOfDate', label: 'As of date' },
   ],
   emptyForm: () => ({ asOfDate: todayISO() }),
   toForm: (o) => ({ unitId: o.unitId, partId: o.partId, fy: o.fy, openingQty: o.openingQty, asOfDate: o.asOfDate }),
   toEntity: (v, ctx) => ({
-    id: ctx.id, unitId: v.unitId, partId: v.partId, fy: v.fy, openingQty: v.openingQty, asOfDate: v.asOfDate,
+    id: ctx.id, unitId: v.unitId ?? '', partId: v.partId ?? '', fy: v.fy ?? '', openingQty: v.openingQty ?? 0, asOfDate: v.asOfDate ?? '',
   }),
   // A part belongs to exactly one unit (FR-RM03a) — opening must match it.
   extraValidate: (v, s, existingId) => {
@@ -671,14 +669,14 @@ const rmRateMaster = defineMaster<RmRate, RmRateForm>({
     { key: 'super', header: 'Superseded', render: (r) => r.supersededAt ?? <Badge tone="success">Current</Badge> },
   ],
   fields: [
-    { kind: 'select', name: 'partId', label: 'Part', required: true, options: partOptions, colSpan: 2 },
-    { kind: 'money', name: 'rate', label: 'Rate per piece', required: true },
-    { kind: 'date', name: 'effectiveFrom', label: 'Effective from', required: true },
+    { kind: 'select', name: 'partId', label: 'Part', options: partOptions, colSpan: 2 },
+    { kind: 'money', name: 'rate', label: 'Rate per piece' },
+    { kind: 'date', name: 'effectiveFrom', label: 'Effective from' },
   ],
   emptyForm: () => ({ effectiveFrom: todayISO() }),
   toForm: (r) => ({ partId: r.partId, rate: fromPaise(r.ratePaise), effectiveFrom: r.effectiveFrom }),
   toEntity: (v, ctx) => ({
-    id: ctx.id, partId: v.partId, ratePaise: toPaise(v.rate), effectiveFrom: v.effectiveFrom,
+    id: ctx.id, partId: v.partId ?? '', ratePaise: toPaise(v.rate ?? 0), effectiveFrom: v.effectiveFrom ?? '',
     supersededAt: ctx.existing?.supersededAt,
   }),
   // A new RM rate supersedes the prior current rate for the same part.
@@ -735,11 +733,11 @@ const prodRateMaster = defineMaster<ProductionRate, ProdRateForm>({
     { key: 'from', header: 'Effective from', render: (r) => r.effectiveFrom },
   ],
   fields: [
-    { kind: 'select', name: 'partId', label: 'Part', required: true, options: partOptions, colSpan: 2 },
+    { kind: 'select', name: 'partId', label: 'Part', options: partOptions, colSpan: 2 },
     { kind: 'select', name: 'machineId', label: 'Machine', options: machineOptions },
     { kind: 'select', name: 'operationId', label: 'Operation', options: operationOptions },
-    { kind: 'money', name: 'rate', label: 'Rate per piece', required: true },
-    { kind: 'date', name: 'effectiveFrom', label: 'Effective from', required: true },
+    { kind: 'money', name: 'rate', label: 'Rate per piece' },
+    { kind: 'date', name: 'effectiveFrom', label: 'Effective from' },
   ],
   emptyForm: () => ({ effectiveFrom: todayISO() }),
   toForm: (r) => ({
@@ -748,7 +746,7 @@ const prodRateMaster = defineMaster<ProductionRate, ProdRateForm>({
   }),
   toEntity: (v, ctx) => ({
     id: ctx.id, partId: v.partId, machineId: opt(v.machineId), operationId: opt(v.operationId),
-    ratePaise: toPaise(v.rate), effectiveFrom: v.effectiveFrom, supersededAt: ctx.existing?.supersededAt,
+    ratePaise: toPaise(v.rate ?? 0), effectiveFrom: v.effectiveFrom ?? '', supersededAt: ctx.existing?.supersededAt,
   }),
   // A new production rate supersedes the prior current rate for the same part+machine+operation.
   afterUpsert: (draft, entity) => {

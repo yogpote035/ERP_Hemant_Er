@@ -10,7 +10,9 @@ import type { SelectOption } from './types'
 export const unitOptions = (s: RootState): SelectOption[] => {
   const writable = writableUnitIds(s)
   return values(s.masters.units)
-    .filter((u) => u.active && writable.has(u.id))
+    // Assigned units remain selectable even when older API rows omit `active`.
+    // An explicit assignment is the write-scope authority for operational forms.
+    .filter((u) => writable.has(u.id))
     .map((u) => ({ value: u.id, label: u.code, subtitle: u.name }))
 }
 

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { ReceiptText, FileDown, Ban, FileSignature, Eye, Printer, IndianRupee, Pencil, Trash2, Plus, Download, FileSpreadsheet } from 'lucide-react'
 import { formatINR, formatINRSymbol, formatINRCompact, fromPaise, toPaise, type Paise } from '@/lib/money'
-import { formatDMY, todayISO } from '@/lib/date'
+import { addDaysISO, formatDMY, todayISO } from '@/lib/date'
 import type { Id, Invoice, IssuerKind, PaymentMode } from '@/types/domain'
 import { useStore } from '@/store'
 import { getById, values } from '@/store/normalized'
@@ -444,6 +444,7 @@ function InvoiceBuilder({ invoice, onClose, onDone }: { invoice: Invoice; onClos
   const [issuerKind, setIssuerKind] = useState<IssuerKind>(invoice.issuerKind)
   const [issuerVendorId, setIssuerVendorId] = useState(invoice.issuerKind === 'supplier' ? invoice.issuerId : '')
   const [invoiceDate, setInvoiceDate] = useState(invoice.invoiceDate)
+  const [dueDate, setDueDate] = useState(invoice.dueDate ?? addDaysISO(invoice.invoiceDate || todayISO(), 45))
   const [ewayBillNo, setEwayBillNo] = useState(invoice.ewayBillNo ?? '')
   const [vehicleNo, setVehicleNo] = useState(invoice.vehicleNo ?? '')
   const [transporter, setTransporter] = useState(invoice.transporter ?? '')
@@ -529,6 +530,7 @@ function InvoiceBuilder({ invoice, onClose, onDone }: { invoice: Invoice; onClos
         issuerKind,
         issuerVendorId: issuerKind === 'supplier' ? issuerVendorId : undefined,
         invoiceDate: invoiceDate || undefined,
+        dueDate: dueDate || undefined,
         ...dispatchFields,
       })
       toastCommandSuccess('Invoice issued', res.cascade)
@@ -550,6 +552,7 @@ function InvoiceBuilder({ invoice, onClose, onDone }: { invoice: Invoice; onClos
         issuerKind,
         issuerVendorId: issuerKind === 'supplier' ? issuerVendorId : undefined,
         invoiceDate: invoiceDate || undefined,
+        dueDate: dueDate || undefined,
         ...dispatchFields,
       })
       toastCommandSuccess('Draft saved', res.cascade)
@@ -621,7 +624,11 @@ function InvoiceBuilder({ invoice, onClose, onDone }: { invoice: Invoice; onClos
           ) : null}
           <label className="flex flex-col gap-1.5">
             <span className="text-[11.5px] font-medium text-muted-fg">Invoice date</span>
-            <input type="date" className="input h-9" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+            <input type="date" className="input h-9" value={invoiceDate} onChange={(e) => { const next = e.target.value; setInvoiceDate(next); setDueDate(addDaysISO(next, 45)) }} />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[11.5px] font-medium text-muted-fg">Due date (45 days)</span>
+            <input type="date" className="input h-9" value={dueDate} min={invoiceDate || undefined} onChange={(e) => setDueDate(e.target.value)} />
           </label>
         </div>
 

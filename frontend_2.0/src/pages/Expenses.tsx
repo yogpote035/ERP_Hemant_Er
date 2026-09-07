@@ -1,8 +1,8 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { Banknote, Plus, IndianRupee, Pencil, Trash2, Download } from 'lucide-react'
 import { formatINRSymbol, formatINRCompact, fromPaise, toPaise, type Paise } from '@/lib/money'
-import { formatDMY, todayISO } from '@/lib/date'
+import { addDaysISO, formatDMY, todayISO } from '@/lib/date'
 import type { Expense, PaymentMode } from '@/types/domain'
 import { useStore } from '@/store'
 import { unitOptions, vendorOptionsForUnit } from '@/masters/options'
@@ -17,6 +17,7 @@ import { exportRowsToXlsx } from '@/lib/exportXlsx'
 import { excelNumber, excelText, excelValue, type ImportedRow } from '@/lib/importXlsx'
 import { ExcelImportButton } from '@/components/ExcelImportButton'
 import { toast } from 'sonner'
+import { useEntryUnitContext } from '@/hooks/useEntryUnitContext'
 
 const numOf = (v: string) => {
   const n = Number(v)
@@ -26,18 +27,19 @@ const STATUS_TONE: Record<ExpenseStatus, BadgeTone> = { unpaid: 'primary', parti
 const MODES: PaymentMode[] = ['rtgs', 'neft', 'cheque', 'upi', 'cash', 'bank']
 const PAYMENT_MODE_OPTIONS = MODES.map((mode) => ({ value: mode, label: mode.toUpperCase() }))
 const EXPENSE_COLUMNS = [
-  { key: 'unit', label: 'Unit', required: true }, { key: 'vendor', label: 'Vendor', required: true },
-  { key: 'category', label: 'Category', required: true }, { key: 'description', label: 'Description' },
-  { key: 'date', label: 'Date', required: true }, { key: 'dueDate', label: 'Due Date' },
+  { key: 'unit', label: 'Unit' }, { key: 'vendor', label: 'Vendor' },
+  { key: 'category', label: 'Category' }, { key: 'description', label: 'Description' },
+  { key: 'date', label: 'Date' }, { key: 'dueDate', label: 'Due Date' },
   { key: 'supplierInvoiceNo', label: 'Supplier Invoice No' }, { key: 'hsnSac', label: 'HSN/SAC' },
   { key: 'quantity', label: 'Quantity' }, { key: 'rate', label: 'Rate' },
   { key: 'subtotal', label: 'Subtotal' }, { key: 'igst', label: 'IGST %' },
   { key: 'cgst', label: 'CGST %' }, { key: 'sgst', label: 'SGST %' },
-  { key: 'tcs', label: 'TCS %' }, { key: 'total', label: 'Total', required: true },
+  { key: 'tcs', label: 'TCS %' }, { key: 'total', label: 'Total' },
   { key: 'paid', label: 'Paid' }, { key: 'balance', label: 'Balance' }, { key: 'status', label: 'Status' },
 ]
 
 export default function Expenses() {
+  const entryUnit = useEntryUnitContext()
   const can = useCan()
   const units = useStore(unitOptions)
   const rows = useStore(useShallow(selectExpenseRows))
@@ -149,7 +151,7 @@ export default function Expenses() {
           onChange={(e) => paged.setSearch(e.target.value)}
         />
         <Button className="w-24 shrink-0 justify-center" variant="secondary" leftIcon={<Download size={15} />} onClick={exportExpenses}>Export</Button>
-        {can('expenses', 'create') ? <ExcelImportButton size="md" title="Import expenses" columns={EXPENSE_COLUMNS} existingKeys={existingExpenseKeys} rowKey={expenseKey} validateRow={validateExpenseImport} onRows={importExpenses} /> : null}
+        {can('expenses', 'create') ? <ExcelImportButton size="md" title="Import expenses" columns={EXPENSE_COLUMNS} existingKeys={existingExpenseKeys} rowKey={expenseKey} validateRow={validateExpenseImport} onRows={importExpenses} prefill={entryUnit.preferredUnitId ? { unit: entryUnit.preferredUnitId } : undefined} contextMessage={entryUnit.message} /> : null}
         {can('expenses', 'create') ? (
           <Button leftIcon={<Plus size={15} />} onClick={() => setCreating(true)}>Record Expense</Button>
         ) : null}
@@ -223,8 +225,8 @@ export default function Expenses() {
         </Card>
       )}
 
-      {creating ? <ExpenseForm units={units} onClose={() => { setCreating(false); bumpRefresh() }} /> : null}
-      {editing ? <ExpenseForm units={units} existing={editing} onClose={() => { setEditing(null); bumpRefresh() }} /> : null}
+      {creating ? <ExpenseForm units={units} defaultUnitId={entryUnit.preferredUnitId} unitMessage={entryUnit.message} onClose={() => { setCreating(false); bumpRefresh() }} /> : null}
+      {editing ? <ExpenseForm units={units} existing={editing} defaultUnitId={entryUnit.preferredUnitId} unitMessage={entryUnit.message} onClose={() => { setEditing(null); bumpRefresh() }} /> : null}
       {paying ? <PayModal row={paying} onClose={() => { setPaying(null); bumpRefresh() }} /> : null}
       <ConfirmDialog
         open={deleting != null}
@@ -246,14 +248,21 @@ export default function Expenses() {
 
 function ExpenseForm({
   units,
+  defaultUnitId,
+  unitMessage,
   existing,
   onClose,
 }: {
   units: { value: string; label: string }[]
+  defaultUnitId?: string
+  unitMessage?: string
   existing?: Expense
   onClose: () => void
 }) {
-  const [unitId, setUnitId] = useState(existing?.unitId ?? '')
+  const [unitId, setUnitId] = useState(existing?.unitId ?? defaultUnitId ?? '')
+  useEffect(() => {
+    if (defaultUnitId && ((!existing && !unitId) || (existing && !unitMessage))) setUnitId(defaultUnitId)
+  }, [defaultUnitId, existing, unitId, unitMessage])
   const [vendorId, setVendorId] = useState(existing?.vendorId ?? '')
   const vendors = useStore(vendorOptionsForUnit(unitId))
   // "Description" is the renamed Category field — stored on expense.category.
@@ -276,7 +285,7 @@ function ExpenseForm({
   const [tcsPct, setTcsPct] = useState(existing?.tcsPct != null ? String(existing.tcsPct) : '')
   const [supplierInvoiceNo, setSupplierInvoiceNo] = useState(existing?.supplierInvoiceNo ?? '')
   const [date, setDate] = useState(existing?.date ?? todayISO())
-  const [dueDate, setDueDate] = useState(existing?.dueDate ?? '')
+  const [dueDate, setDueDate] = useState(existing?.dueDate ?? addDaysISO(existing?.date ?? todayISO(), 45))
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('bank')
   const [paymentDate, setPaymentDate] = useState(todayISO())
   const [paymentAmount, setPaymentAmount] = useState('')
@@ -345,15 +354,15 @@ function ExpenseForm({
     >
       <div className="space-y-3">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Fld label="Unit">
-            <SearchableDropdown aria-label="Unit" value={unitId} onChange={(v) => { setUnitId(v); setVendorId('') }} options={units} placeholder="Select unit…" />
+          <Fld label="Unit" hint={!existing ? unitMessage : undefined}>
+            <SearchableDropdown aria-label="Unit" value={unitId} disabled={Boolean(defaultUnitId) && !unitMessage} onChange={(v) => { setUnitId(v); setVendorId('') }} options={units} placeholder="Select unit…" />
           </Fld>
           <Fld label="Supplier name">
             <SearchableDropdown aria-label="Supplier name" value={vendorId} onChange={(v) => setVendorId(v)} options={vendors} placeholder={unitId ? 'Select supplier…' : 'Select unit first…'} />
           </Fld>
           <Fld label="Supplier GSTIN"><input readOnly className="input h-9 bg-muted mono text-muted-fg" value={supplier?.gstin ?? ''} placeholder="Loaded from supplier" /></Fld>
           <Fld label="Supplier invoice number"><input className="input h-9 mono" value={supplierInvoiceNo} onChange={(e) => setSupplierInvoiceNo(e.target.value)} placeholder="Supplier's bill no." /></Fld>
-          <Fld label="Invoice date"><input type="date" className="input h-9" value={date} onChange={(e) => setDate(e.target.value)} /></Fld>
+          <Fld label="Invoice date"><input type="date" className="input h-9" value={date} onChange={(e) => { const next = e.target.value; setDate(next); setDueDate(addDaysISO(next, 45)) }} /></Fld>
           <Fld label="SAC / HSN code"><input className="input h-9 mono" value={hsnSac} onChange={(e) => setHsnSac(e.target.value)} placeholder="e.g. 27101990" /></Fld>
           <Fld label="Qty"><input type="number" min={0} step="any" className="input h-9" value={quantity} onChange={(e) => setQuantity(e.target.value)} /></Fld>
           <Fld label="Rate / pc (₹)"><input type="number" min={0} step="0.01" className="input h-9" value={rate} onChange={(e) => setRate(e.target.value)} /></Fld>
@@ -376,7 +385,7 @@ function ExpenseForm({
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Fld label="Grand total"><Computed value={totalPaise} strong /></Fld>
-          <Fld label="Due date (optional)"><input type="date" className="input h-9" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></Fld>
+          <Fld label="Due date (45 days)"><input type="date" className="input h-9" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></Fld>
           <Fld label="Mode of payment">
             <SearchableDropdown
               aria-label="Mode of payment"
@@ -467,11 +476,12 @@ function PayModal({ row, onClose }: { row: ExpenseRow; onClose: () => void }) {
   )
 }
 
-function Fld({ label, children }: { label: string; children: ReactNode }) {
+function Fld({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (
     <label className="flex flex-col gap-1.5">
       <span className="text-[11.5px] font-medium text-muted-fg">{label}</span>
       {children}
+      {hint ? <span className="text-[11px] text-warning">{hint}</span> : null}
     </label>
   )
 }

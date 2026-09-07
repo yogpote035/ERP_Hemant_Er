@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { FileSpreadsheet, Upload, CheckCircle2, AlertTriangle, ArrowRight, ArrowLeft } from 'lucide-react'
 import { useStore } from '@/store'
@@ -10,7 +10,6 @@ import {
   groupMioRows,
   summarize,
   type MioColumnMap,
-  type MioFieldKey,
   type ParsedInward,
   type ImportIssue,
 } from '@/lib/mioImport'
@@ -20,6 +19,7 @@ import { toastCommandError, toastCommandSuccess } from '@/lib/commandToast'
 import { exportRowsToXlsx } from '@/lib/exportXlsx'
 import { INWARD_REGISTER_COLUMNS, INWARD_REGISTER_SAMPLE_ROWS } from '@/lib/inwardRegisterWorkbook'
 import { Button, Card, EmptyState, SearchableDropdown } from '@/components/ui'
+import { useEntryUnitContext } from '@/hooks/useEntryUnitContext'
 
 type Step = 1 | 2 | 3
 const STEPS: { n: Step; label: string }[] = [
@@ -34,6 +34,7 @@ export default function ImportWizard({
   onClose,
 }: { embedded?: boolean; onClose?: () => void } = {}) {
   const can = useCan()
+  const entryUnit = useEntryUnitContext()
   const units = useStore(unitOptions)
   const [step, setStep] = useState<Step>(1)
   const [fileName, setFileName] = useState('')
@@ -42,6 +43,7 @@ export default function ImportWizard({
   const [sheet, setSheet] = useState('')
   const [headerRowIdx, setHeaderRowIdx] = useState(0)
   const [unitId, setUnitId] = useState('')
+  useEffect(() => { if (!unitId && entryUnit.preferredUnitId) setUnitId(entryUnit.preferredUnitId) }, [entryUnit.preferredUnitId, unitId])
   const [autoCreateParts, setAutoCreateParts] = useState(true)
   const [skipInvalid, setSkipInvalid] = useState(true)
   const [colMap, setColMap] = useState<MioColumnMap | null>(null)
@@ -236,7 +238,7 @@ export default function ImportWizard({
           {parseError ? <p className="text-[13px] text-danger">{parseError}</p> : null}
 
           {sheetNames.length > 0 ? (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <><div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <label className="flex flex-col gap-1.5">
                 <span className="text-[11.5px] font-medium text-muted-fg">Sheet</span>
                 <SearchableDropdown
@@ -260,12 +262,15 @@ export default function ImportWizard({
                 <span className="text-[11.5px] font-medium text-muted-fg">Target unit</span>
                 <SearchableDropdown
                   value={unitId}
+                  disabled={entryUnit.isSingleUnit}
                   onChange={(v) => setUnitId(v)}
                   options={units}
                   placeholder="Select a unit…"
                 />
               </label>
             </div>
+            {entryUnit.message ? <div className="text-[11.5px] text-warning">{entryUnit.message}</div> : null}
+            </>
           ) : null}
 
           {sheetNames.length > 0 ? (
@@ -300,7 +305,6 @@ export default function ImportWizard({
               <label key={f.key} className="flex flex-col gap-1.5">
                 <span className="text-[11.5px] font-medium text-muted-fg">
                   {f.label}
-                  {f.required ? <span className="text-danger"> *</span> : null}
                 </span>
                 <SearchableDropdown
                   value={String(colMap[f.key])}
@@ -313,21 +317,12 @@ export default function ImportWizard({
               </label>
             ))}
           </div>
-          {(() => {
-            const missing = MIO_FIELDS.filter((f) => f.required && (colMap[f.key as MioFieldKey] ?? -1) < 0)
-            return missing.length ? (
-              <p className="text-[13px] text-danger">
-                Map the required columns: {missing.map((m) => m.label).join(', ')}
-              </p>
-            ) : null
-          })()}
           <div className="flex justify-between">
             <Button variant="secondary" leftIcon={<ArrowLeft size={15} />} onClick={() => setStep(1)}>
               Back
             </Button>
             <Button
               rightIcon={<ArrowRight size={15} />}
-              disabled={MIO_FIELDS.some((f) => f.required && (colMap[f.key as MioFieldKey] ?? -1) < 0)}
               onClick={() => setStep(3)}
             >
               Preview

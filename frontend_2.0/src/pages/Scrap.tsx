@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { Recycle, Pencil, Trash2, Download } from 'lucide-react'
 import { formatINRSymbol, fromPaise, toPaise } from '@/lib/money'
@@ -19,21 +19,23 @@ import { exportRowsToXlsx } from '@/lib/exportXlsx'
 import { excelNumber, excelText, excelValue, type ImportedRow } from '@/lib/importXlsx'
 import { ExcelImportButton } from '@/components/ExcelImportButton'
 import { toast } from 'sonner'
+import { useEntryUnitContext } from '@/hooks/useEntryUnitContext'
 
 const numOf = (v: string) => {
   const n = Number(v)
   return Number.isFinite(n) && n > 0 ? n : 0
 }
 const SCRAP_COLUMNS = [
-  { key: 'unit', label: 'Unit', required: true }, { key: 'customer', label: 'Customer', required: true },
-  { key: 'invoiceNo', label: 'Invoice No', required: true }, { key: 'invoiceDate', label: 'Invoice Date', required: true },
+  { key: 'unit', label: 'Unit' }, { key: 'customer', label: 'Customer' },
+  { key: 'invoiceNo', label: 'Invoice No' }, { key: 'invoiceDate', label: 'Invoice Date' },
   { key: 'periodFrom', label: 'Period From' }, { key: 'periodTo', label: 'Period To' },
-  { key: 'weightKg', label: 'Weight Kg', required: true }, { key: 'ratePerKg', label: 'Rate Per Kg', required: true },
+  { key: 'weightKg', label: 'Weight Kg' }, { key: 'ratePerKg', label: 'Rate Per Kg' },
   { key: 'gst', label: 'GST %' }, { key: 'tcs', label: 'TCS %' },
   { key: 'status', label: 'Status' }, { key: 'grandTotal', label: 'Grand Total' },
 ]
 
 export default function Scrap() {
+  const entryUnit = useEntryUnitContext()
   const can = useCan()
   const canCreate = can('scrap', 'create')
   const canEdit = can('scrap', 'edit')
@@ -56,6 +58,9 @@ export default function Scrap() {
   const [submitting, setSubmitting] = useState(false)
   const [deleting, setDeleting] = useState<ScrapBill | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
+  useEffect(() => {
+    if (entryUnit.preferredUnitId && ((!editingId && !unitId) || entryUnit.isSingleUnit)) setUnitId(entryUnit.preferredUnitId)
+  }, [editingId, entryUnit.isSingleUnit, entryUnit.preferredUnitId, unitId])
 
   const calc = useMemo(
     () => computeScrap(Math.round(numOf(kg) * 1000), toPaise(numOf(rate)), numOf(gst), numOf(tcs)),
@@ -93,7 +98,7 @@ export default function Scrap() {
   // saved as a GST+TCS document against the wrong tax party / period.
   function resetForm() {
     setEditingId(null)
-    setUnitId('')
+    setUnitId(entryUnit.preferredUnitId)
     setCustomerId('')
     setInvoiceDate(todayISO())
     setPeriodFrom('')
@@ -210,7 +215,7 @@ export default function Scrap() {
           <p className="mt-0.5 text-[13px] text-muted-fg">Period-wise scrap sales · GST + TCS @ 1%.</p>
         </div>
         <Button className="ml-auto w-24 shrink-0 justify-center" variant="secondary" leftIcon={<Download size={15} />} onClick={exportScrap}>Export</Button>
-        {canCreate ? <ExcelImportButton title="Import scrap bills" columns={SCRAP_COLUMNS} existingKeys={existingScrapKeys} rowKey={scrapKey} validateRow={validateScrapImport} onRows={importScrap} /> : null}
+        {canCreate ? <ExcelImportButton title="Import scrap bills" columns={SCRAP_COLUMNS} existingKeys={existingScrapKeys} rowKey={scrapKey} validateRow={validateScrapImport} onRows={importScrap} prefill={entryUnit.preferredUnitId ? { unit: entryUnit.preferredUnitId } : undefined} contextMessage={entryUnit.message} /> : null}
       </div>
 
       <KpiGrid className="lg:grid-cols-3">
@@ -224,10 +229,11 @@ export default function Scrap() {
           <div className="border-b border-border px-4 py-3 text-[13px] font-semibold">{editingId ? `Edit scrap bill ${invoiceNo}` : 'New scrap bill'}</div>
           <div className="space-y-4 p-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Fld label="Unit">
+              <Fld label="Unit" hint={!editingId ? entryUnit.message : undefined}>
                 <SearchableDropdown
                   aria-label="Unit"
                   value={unitId}
+                  disabled={entryUnit.isSingleUnit}
                   onChange={(v) => setUnitId(v)}
                   options={units}
                   placeholder="Select unit…"
@@ -340,11 +346,12 @@ export default function Scrap() {
   )
 }
 
-function Fld({ label, children }: { label: string; children: ReactNode }) {
+function Fld({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (
     <label className="flex flex-col gap-1.5">
       <span className="text-[11.5px] font-medium text-muted-fg">{label}</span>
       {children}
+      {hint ? <span className="text-[11px] text-warning">{hint}</span> : null}
     </label>
   )
 }

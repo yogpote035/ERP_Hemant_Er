@@ -40,7 +40,13 @@ describe('scrap bills', () => {
 
 describe('expenses + instalments', () => {
   it('derives balance/status across instalments and blocks an over-payment', () => {
-    const id = runSaveExpense({ unitId: 'u1', category: 'Power', date: '2025-04-01', totalPaise: toPaise(10000) }).data.id
+    const id = runSaveExpense({
+      unitId: 'u1',
+      category: 'Power',
+      date: '2025-04-01',
+      dueDate: '2999-12-31',
+      totalPaise: toPaise(10000),
+    }).data.id
     expect(expenseStatus(getById(st().expenses.expenses, id)!)).toBe('unpaid')
 
     runRecordExpensePayment({ expenseId: id, date: '2025-04-05', amountPaise: toPaise(4000), mode: 'rtgs' })

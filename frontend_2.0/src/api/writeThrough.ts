@@ -160,7 +160,7 @@ const MODULE_SYNC: Partial<Record<CommandName, Handler>> = {
   },
   editDraftInvoice: (i) => {
     const inv = storedInvoice(i.invoiceId)
-    return invoicesApi.editDraft(i.invoiceId, { customerId: i.customerId, issuerKind: i.issuerKind, issuerVendorId: i.issuerVendorId, invoiceDate: i.invoiceDate, paymentTerms: i.paymentTerms, ewayBillNo: i.ewayBillNo, vehicleNo: i.vehicleNo, transporter: i.transporter, dispatchedThrough: i.dispatchedThrough, destination: i.destination, unitId: inv?.unitId, billNo: inv?.billNo })
+    return invoicesApi.editDraft(i.invoiceId, { customerId: i.customerId, issuerKind: i.issuerKind, issuerVendorId: i.issuerVendorId, invoiceDate: i.invoiceDate, dueDate: i.dueDate, paymentTerms: i.paymentTerms, ewayBillNo: i.ewayBillNo, vehicleNo: i.vehicleNo, transporter: i.transporter, dispatchedThrough: i.dispatchedThrough, destination: i.destination, unitId: inv?.unitId, billNo: inv?.billNo })
   },
   voidInvoice: (i, r) => invoicesApi.void(idOf(i, r)),
   recordPayment: (i, r) => paymentsApi.record(withId(i, r)),

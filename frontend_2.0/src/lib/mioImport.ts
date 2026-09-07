@@ -14,13 +14,13 @@ import { parseFlexibleDate } from './date'
 
 /** Canonical fields we map the sheet's 26 columns onto. */
 export const MIO_FIELDS = [
-  { key: 'challanNo', label: 'Delivery Challan No', required: true },
-  { key: 'challanDate', label: 'Challan Date', required: true },
-  { key: 'partNo', label: 'Part No', required: true },
+  { key: 'challanNo', label: 'Delivery Challan No', required: false },
+  { key: 'challanDate', label: 'Challan Date', required: false },
+  { key: 'partNo', label: 'Part No', required: false },
   { key: 'poNo', label: 'PO No', required: false },
-  { key: 'batchHeatNo', label: 'Batch & Heat No', required: true },
+  { key: 'batchHeatNo', label: 'Batch & Heat No', required: false },
   { key: 'rmRate', label: 'Rate / Unit (RM)', required: false },
-  { key: 'receivedQty', label: 'Received QTY', required: true },
+  { key: 'receivedQty', label: 'Received QTY', required: false },
   { key: 'billNo', label: 'Bill No', required: false },
   { key: 'billDate', label: 'Bill Date', required: false },
   { key: 'okQty', label: 'OK / SKF Dispatch Qty', required: false },

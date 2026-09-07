@@ -6,6 +6,7 @@
 import type { Expense, ExpenseInstalment, Id, ISODate, PaymentMode } from '@/types/domain'
 import type { Paise } from '@/lib/money'
 import { formatINRSymbol } from '@/lib/money'
+import { addDaysISO } from '@/lib/date'
 import { expenseBalance } from '@/selectors/finance'
 import { getById, putEntity, patchEntity, removeEntity } from './normalized'
 import { writableUnitIds } from './scope'
@@ -49,10 +50,8 @@ function validateExpense(s: RootState, input: ExpenseInput): { ok: true } | { ok
       if (!usedInUnit) errors.push('Assign this vendor to the selected unit in Vendor Management first')
     }
   }
-  if (!input.category.trim()) errors.push('Description is required')
-  if (!input.id && !input.vendorId) errors.push('Supplier name is required')
-  if (!input.date) errors.push('Date is required')
-  if (!(input.totalPaise > 0)) errors.push('Total payable must be greater than 0')
+  // Blank optional fields are accepted. Validate only values the user supplied.
+  if (input.totalPaise < 0) errors.push('Total payable cannot be negative')
   else if (input.totalPaise > 1e13) errors.push('Amount is implausibly large') // ~₹10,000 cr guard vs fat-finger / exponent paste
   if ((input.igstPct ?? 0) > 0 && ((input.cgstPct ?? 0) > 0 || (input.sgstPct ?? 0) > 0)) errors.push('Use either IGST or CGST + SGST, not both')
   for (const pct of [input.igstPct, input.cgstPct, input.sgstPct, input.tcsPct]) if ((pct ?? 0) > 100) errors.push('Tax percentages cannot exceed 100%')
@@ -79,7 +78,7 @@ function applyExpense(draft: RootState, input: ExpenseInput, ctx: CommandContext
     category: input.category.trim(),
     description: input.description,
     date: input.date,
-    dueDate: input.dueDate,
+    dueDate: input.dueDate || addDaysISO(input.date, 45),
     hsnSac: input.hsnSac,
     quantity: input.quantity,
     ratePaise: input.ratePaise,

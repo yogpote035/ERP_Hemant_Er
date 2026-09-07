@@ -30,10 +30,10 @@ export type InwardFormValues = z.infer<typeof inwardSchema>
 // Challan No · Challan Date · Part No · PO No · Die No · Batch/Heat No · Bin No ·
 // RM Supplier · RM Rate/pc · RM Wt/pc · Finish Wt/pc · Received QTY (+ Unit, Customer).
 export const inwardFields: FieldSpec[] = [
-  { kind: 'select', name: 'unitId', label: 'Assigned Unit', required: true, options: unitOptions },
+  { kind: 'select', name: 'unitId', label: 'Assigned Unit', options: unitOptions },
   { kind: 'text', name: 'challanNo', label: 'Challan no.' },
   { kind: 'date', name: 'challanDate', label: 'Challan date' },
-  { kind: 'select', name: 'partId', label: 'Catalogue part', required: true, options: partOptions, hint: 'Prefills assigned unit, PO, RM rate and weights when present; missing values remain editable.' },
+  { kind: 'select', name: 'partId', label: 'Catalogue part', options: partOptions, hint: 'Prefills assigned unit, PO, RM rate and weights when present; missing values remain editable.' },
   { kind: 'text', name: 'poNo', label: 'PO no.' },
   { kind: 'text', name: 'dieNo', label: 'Die no.' },
   { kind: 'text', name: 'batchHeatNo', label: 'Batch / heat no.' },
@@ -42,7 +42,7 @@ export const inwardFields: FieldSpec[] = [
   { kind: 'number', name: 'rmRate', label: 'RM Rate / pc (₹)', step: 0.01, min: 0 },
   { kind: 'number', name: 'rmWtG', label: 'RM Wt / pc (g)', step: 0.001, min: 0 },
   { kind: 'number', name: 'finishWtG', label: 'Finish Wt / pc (g)', step: 0.001, min: 0 },
-  { kind: 'number', name: 'receivedQty', label: 'Received qty', required: true, min: 1 },
+  { kind: 'number', name: 'receivedQty', label: 'Received qty', min: 1 },
   { kind: 'select', name: 'customerId', label: 'Customer / owner', options: customerOptions },
   { kind: 'textarea', name: 'remarks', label: 'Remarks', colSpan: 2 },
 ]

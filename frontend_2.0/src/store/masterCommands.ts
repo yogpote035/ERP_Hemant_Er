@@ -64,7 +64,14 @@ export function makeMasterCommands<T extends BaseEntity, F extends FieldValues>(
     ctx: CommandContext
   ): { ok: true } | { ok: false; errors: string[] } => {
     const r = cfg.schema.safeParse(input.values)
-    if (!r.success) return { ok: false, errors: r.error.issues.map((i) => i.message) }
+    if (!r.success) {
+      const errors = r.error.issues.filter((issue) => {
+        const key = issue.path[0]
+        const value = typeof key === 'string' ? input.values[key] : undefined
+        return !(value == null || (typeof value === 'string' && value.trim() === ''))
+      }).map((issue) => issue.message)
+      if (errors.length) return { ok: false, errors }
+    }
     // Unit-scoping is enforced HERE (the security boundary), not just in the UI:
     // reject a write whose target unit is outside the user's writable set.
     if (cfg.unitScoped) {

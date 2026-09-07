@@ -34,10 +34,11 @@ describe('finalizeInvoice', () => {
   it('intra-state consignee → CGST+SGST; assessable = qty × rate', () => {
     const id = draftBill('FB-INTRA', 100, 10)
     const intra = custInState('27') // u1 (HEW) is state 27
-    const res = runFinalizeInvoice({ invoiceId: id, customerId: intra.id, issuerKind: 'unit' })
+    const res = runFinalizeInvoice({ invoiceId: id, customerId: intra.id, issuerKind: 'unit', invoiceDate: '2025-05-01' })
     expect(res.ok).toBe(true)
     const inv = getById(st().billing.invoices, id)!
     expect(inv.lifecycle).toBe('sent')
+    expect(inv.dueDate).toBe('2025-06-15')
     expect(inv.taxKind).toBe('cgst_sgst')
     expect(inv.totals!.assessable).toBe(toPaise(1000))
     expect(inv.totals!.igst).toBe(0)
