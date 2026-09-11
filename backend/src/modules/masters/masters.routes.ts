@@ -10,18 +10,29 @@ import { z } from 'zod'
 import { getDb, mutate, values, getById, queryCollectionPage } from '../../db/repository.js'
 import { putEntity, removeEntity, patchEntity } from '../../db/normalized.js'
 import type { Normalized, RmRate } from '../../types/domain.js'
-import { asyncHandler, badRequest, notFound } from '../../lib/http.js'
+import { asyncHandler, badRequest, forbidden, notFound } from '../../lib/http.js'
 import { genericSearchText } from '../../lib/list.js'
 import { authenticate, requirePermission, assertUnit } from '../../auth/middleware.js'
 import { genId, resolveId, todayISO } from '../../lib/id.js'
 import type { Paise } from '../../lib/money.js'
 import type { RootState } from '../../db/state.js'
+import { COLLECTIONS } from '../../db/persistence.js'
 import type { Module } from '../../types/rbac.js'
 
 interface Entity {
   id: string
   active?: boolean
   unitId?: string
+}
+
+function isReferencedElsewhere(s: RootState, targetId: string): boolean {
+  for (const collection of COLLECTIONS) {
+    for (const row of values(collection.get(s))) {
+      if (row.id === targetId) continue
+      if (JSON.stringify(row).includes(`"${targetId}"`)) return true
+    }
+  }
+  return false
 }
 
 /** Keep Part.RM Rate and Rate Masters as two entry points to one value. */
@@ -298,6 +309,9 @@ mastersRouter.post(
   asyncHandler(async (req, res) => {
     const cfg = cfgOf(req.params.entity)
     requireAction(req, cfg, 'create')
+    if (req.params.entity === 'units' && req.auth?.user.role !== 'admin') {
+      throw forbidden('Only administrators can create or import units')
+    }
     const body = parseOptionalFields(cfg.schema, req.body)
     if (cfg.unitScoped && body.unitId) assertUnit(req, body.unitId as string)
     const providedId = typeof (req.body as { id?: unknown })?.id === 'string' ? (req.body as { id?: string }).id : undefined
@@ -353,7 +367,11 @@ mastersRouter.delete(
     const cur = getById(cfg.collection(getDb()), req.params.id)
     if (!cur) throw notFound()
     if (cfg.unitScoped) assertUnit(req, cur.unitId)
-    if (cfg.softDelete) {
+    const permanent = req.query.permanent === 'true'
+    if (permanent && isReferencedElsewhere(getDb(), cur.id)) {
+      throw badRequest(`Cannot permanently delete this ${cfg.idPrefix}: it is referenced by existing records. Deactivate it instead.`)
+    }
+    if (cfg.softDelete && !permanent) {
       await mutate((s) => patchEntity(cfg.collection(s), cur.id, { active: false }))
       res.json({ data: { id: cur.id, active: false } })
     } else {

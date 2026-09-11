@@ -10,6 +10,7 @@ export const mastersApi = {
   create: <T>(entity: string, body: unknown) => api.post<T>(`/masters/${entity}`, body),
   update: <T>(entity: string, id: string, body: unknown) => api.put<T>(`/masters/${entity}/${id}`, body),
   remove: (entity: string, id: string) => api.del(`/masters/${entity}/${id}`),
+  permanentRemove: (entity: string, id: string) => api.del(`/masters/${entity}/${id}?permanent=true`),
   setActive: (entity: string, id: string, active: boolean) => api.patch(`/masters/${entity}/${id}/active`, { active }),
 }
 

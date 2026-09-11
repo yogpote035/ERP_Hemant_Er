@@ -36,6 +36,7 @@ export interface MasterCommands<F extends FieldValues> {
   create: Command<{ values: F; existingId: Id | null }, { id: Id }>
   update: Command<{ values: F; existingId: Id | null }, { id: Id }>
   remove: Command<{ id: Id }, { id: Id }>
+  purge: Command<{ id: Id }, { id: Id }>
   /** Reactivate a soft-deleted row (action 'edit'). Deactivation goes through `remove` ('delete'). */
   activate: Command<{ id: Id }, { id: Id }>
 }
@@ -178,5 +179,31 @@ export function makeMasterCommands<T extends BaseEntity, F extends FieldValues>(
     },
   }
 
-  return { create, update, remove, activate }
+  const purge: Command<{ id: Id }, { id: Id }> = {
+    name: 'permanentDeleteEntity',
+    module: cfg.module,
+    action: 'delete',
+    validate(s, input) {
+      const row = getById(cfg.collection(s), input.id)
+      if (!row) return { ok: false, errors: [`${cfg.label} not found`] }
+      if (cfg.unitScoped && row.unitId && !writableUnitIds(s).has(row.unitId)) {
+        return { ok: false, errors: ["You don't have access to that unit"] }
+      }
+      return { ok: true }
+    },
+    apply(draft, input) {
+      const row = getById(cfg.collection(draft), input.id) as T
+      const name = cfg.displayName(row)
+      removeEntity(cfg.collection(draft), input.id)
+      return {
+        result: { id: input.id },
+        cascade: [`${cfg.label} permanently deleted`],
+        summary: `Permanently deleted ${cfg.label.toLowerCase()} “${name}”`,
+        refs: [{ type: cfg.idPrefix, id: input.id }],
+        unitId: row.unitId,
+      }
+    },
+  }
+
+  return { create, update, remove, purge, activate }
 }

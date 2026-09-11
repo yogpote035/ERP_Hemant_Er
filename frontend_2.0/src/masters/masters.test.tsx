@@ -62,6 +62,17 @@ describe('master commands', () => {
     expect(useStore.getState().masters.customers.byId[created.id]!.active).toBe(true)
   })
 
+  it('keeps deactivate separate from permanent delete', () => {
+    login(roleId('admin'))
+    const customer = spec('customer')
+    const created = customer.save({ name: 'Disposable Customer', stateCode: '27' }, null).data
+    const row = useStore.getState().masters.customers.byId[created.id]!
+    customer.setActive(row, false)
+    expect(useStore.getState().masters.customers.byId[created.id]?.active).toBe(false)
+    customer.purge(useStore.getState().masters.customers.byId[created.id]!)
+    expect(useStore.getState().masters.customers.byId[created.id]).toBeUndefined()
+  })
+
   it('hard-deletes a rate and converts rupees → paise', () => {
     login(roleId('admin'))
     const rm = spec('rmRate')
@@ -165,5 +176,13 @@ describe('EntityManager rendering', () => {
     render(<EntityManager spec={spec('customer')} />)
     expect(screen.getByText('Rolex Rings Limited')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /new customer/i })).toBeInTheDocument()
+  })
+
+  it('hides unit creation and import actions from non-admin users', () => {
+    login(roleId('manager'))
+    render(<EntityManager spec={spec('unit')} />)
+    expect(screen.queryByRole('button', { name: /new unit/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^import$/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^export$/i })).toBeInTheDocument()
   })
 })

@@ -140,5 +140,6 @@ export interface MasterView {
   /** Throws CommandDeniedError / CommandValidationError on failure. */
   save: (values: FieldValues, existing: BaseEntity | null) => CommandResult<{ id: Id }>
   remove: (row: BaseEntity) => CommandResult<{ id: Id }>
+  purge: (row: BaseEntity) => CommandResult<{ id: Id }>
   setActive: (row: BaseEntity, active: boolean) => CommandResult<{ id: Id }>
 }

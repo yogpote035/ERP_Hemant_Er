@@ -153,6 +153,11 @@ const MODULE_SYNC: Partial<Record<CommandName, Handler>> = {
     }
     return skip('This change')
   },
+  permanentDeleteEntity: (i, _r, module) => {
+    if (module !== 'masters') return skip('This change')
+    const ref = refFromId(i.id)
+    return ref ? mastersApi.permanentRemove(ref.entity, i.id) : skip('This master')
+  },
   saveMaster: (i, r) => syncMaster(i, r),
   finalizeInvoice: (i) => {
     const inv = storedInvoice(i.invoiceId)

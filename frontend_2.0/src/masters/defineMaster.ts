@@ -57,6 +57,7 @@ export function defineMaster<T extends BaseEntity, F extends FieldValues>(
         existingId: existing ? existing.id : null,
       }),
     remove: (row) => runCommand(cmds.remove, { id: row.id }),
+    purge: (row) => runCommand(cmds.purge, { id: row.id }),
     // Reactivate → 'edit'; deactivate → 'delete' (via remove), so the two
     // directions keep their distinct permissions.
     setActive: (row, active) =>

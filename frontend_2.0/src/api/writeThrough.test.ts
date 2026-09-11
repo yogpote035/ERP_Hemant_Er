@@ -4,7 +4,7 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 vi.mock('./modules', () => {
   const f = () => vi.fn(() => Promise.resolve({}))
   return {
-    mastersApi: { create: f(), update: f(), remove: f(), list: f(), setActive: f() },
+    mastersApi: { create: f(), update: f(), remove: f(), permanentRemove: f(), list: f(), setActive: f() },
     inwardApi: { create: f(), update: f(), remove: f() },
     dispatchApi: { create: f(), remove: f() },
     invoicesApi: { finalize: f(), void: f() },

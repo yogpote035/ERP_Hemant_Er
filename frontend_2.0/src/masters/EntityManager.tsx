@@ -2,9 +2,9 @@ import { Fragment, useId, useMemo, useState, type ReactNode } from 'react'
 import { FormProvider, useForm, type FieldValues, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useShallow } from 'zustand/react/shallow'
-import { ChevronDown, ChevronRight, Download, Pencil, Plus, Trash2, RotateCcw, Search, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, CircleOff, Download, Pencil, Plus, Trash2, RotateCcw, Search, X } from 'lucide-react'
 import { toast } from 'sonner'
-import { useStore } from '@/store'
+import { currentUser, useStore } from '@/store'
 import { allowedUnitIds } from '@/store/scope'
 import { toastCommandError } from '@/lib/commandToast'
 import { useCan } from '@/hooks/useCan'
@@ -29,7 +29,10 @@ import type { BaseEntity, MasterView, RenderHelpers } from './types'
 export function EntityManager({ spec, actions }: { spec: MasterView; actions?: ReactNode }) {
   const entryUnit = useEntryUnitContext()
   const can = useCan()
-  const canCreate = can(spec.module, 'create')
+  const isAdmin = useStore((s) => currentUser(s)?.role === 'admin')
+  // Company units define the tenancy boundary. Only administrators may add or
+  // bulk-import them even when a custom role has generic Master create access.
+  const canCreate = can(spec.module, 'create') && (spec.key !== 'unit' || isAdmin)
   const canEdit = can(spec.module, 'edit')
   const canDelete = can(spec.module, 'delete')
   const canExport = can(spec.module, 'export') || can(spec.module, 'view')
@@ -54,6 +57,7 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
   const helpers = useRenderHelpers()
 
   const [editing, setEditing] = useState<{ row: BaseEntity | null } | null>(null)
+  const [deactivating, setDeactivating] = useState<BaseEntity | null>(null)
   const [deleting, setDeleting] = useState<BaseEntity | null>(null)
   const [expandedParts, setExpandedParts] = useState<Set<string>>(new Set())
   type RmHistoryRow = BaseEntity & { partId: string; ratePaise: Paise; effectiveFrom: string; supersededAt?: string }
@@ -74,7 +78,7 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
   function onDeleteConfirm() {
     if (!deleting) return
     try {
-      const res = spec.remove(deleting) // the command handles soft vs hard delete
+      const res = spec.purge(deleting)
       toast.success(res.cascade[0] ?? 'Done')
     } catch (e) {
       toastCommandError(e)
@@ -89,6 +93,18 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
       toast.success(`${spec.label} reactivated`)
     } catch (e) {
       toastCommandError(e)
+    }
+  }
+
+  function onDeactivateConfirm() {
+    if (!deactivating) return
+    try {
+      const res = spec.setActive(deactivating, false)
+      toast.success(res.cascade[0] ?? 'Deactivated')
+    } catch (e) {
+      toastCommandError(e)
+    } finally {
+      setDeactivating(null)
     }
   }
 
@@ -334,11 +350,23 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
                               <RotateCcw size={15} />
                             </button>
                           ) : null}
-                          {canDelete && !(spec.softDelete && inactive) ? (
+                          {spec.softDelete && !inactive && canDelete ? (
+                            <button
+                              type="button"
+                              className="btn btn-ghost h-8 w-8 p-0 text-warning"
+                              aria-label={`Deactivate ${spec.displayName(row)}`}
+                              title="Deactivate"
+                              onClick={() => setDeactivating(row)}
+                            >
+                              <CircleOff size={15} />
+                            </button>
+                          ) : null}
+                          {canDelete ? (
                             <button
                               type="button"
                               className="btn btn-ghost h-8 w-8 p-0 text-danger"
-                              aria-label={`${spec.softDelete ? 'Deactivate' : 'Delete'} ${spec.displayName(row)}`}
+                              aria-label={`Delete ${spec.displayName(row)}`}
+                              title="Delete permanently"
                               onClick={() => setDeleting(row)}
                             >
                               <Trash2 size={15} />
@@ -366,17 +394,25 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
       ) : null}
 
       <ConfirmDialog
+        open={deactivating !== null}
+        onClose={() => setDeactivating(null)}
+        onConfirm={onDeactivateConfirm}
+        tone="danger"
+        title={`Deactivate ${spec.label.toLowerCase()}?`}
+        confirmLabel="Deactivate"
+        message={deactivating ? `“${spec.displayName(deactivating)}” will be hidden from pickers but kept for history. You can reactivate it later.` : ''}
+      />
+
+      <ConfirmDialog
         open={deleting !== null}
         onClose={() => setDeleting(null)}
         onConfirm={onDeleteConfirm}
         tone="danger"
-        title={spec.softDelete ? `Deactivate ${spec.label.toLowerCase()}?` : `Delete ${spec.label.toLowerCase()}?`}
-        confirmLabel={spec.softDelete ? 'Deactivate' : 'Delete'}
+        title={`Permanently delete ${spec.label.toLowerCase()}?`}
+        confirmLabel="Delete permanently"
         message={
           deleting
-            ? spec.softDelete
-              ? `“${spec.displayName(deleting)}” will be hidden from pickers but kept for history. You can reactivate it later.`
-              : `“${spec.displayName(deleting)}” will be permanently removed. This can be undone from the toolbar.`
+            ? `“${spec.displayName(deleting)}” will be permanently removed. Use Deactivate instead if you need to preserve it for history.`
             : ''
         }
       />

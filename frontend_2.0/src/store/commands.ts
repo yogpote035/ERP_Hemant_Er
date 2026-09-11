@@ -24,6 +24,7 @@ export const COMMAND_NAMES = [
   'importMioWorkbook',
   'saveMaster',
   'deleteEntity',
+  'permanentDeleteEntity',
   'createUser',
   'updateUser',
   'toggleUserActive',
