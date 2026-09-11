@@ -29,6 +29,8 @@ export interface InwardInput {
   dieNo?: string
   batchHeatNo: string
   binNo?: string
+  binGrcType?: 'BIN' | 'GRC'
+  binGrcNo?: string
   rmRatePaise?: Paise
   rmWtMg?: number
   finishWtMg?: number
@@ -159,6 +161,8 @@ function applyInward(draft: RootState, input: InwardInput, ctx: CommandContext):
     dieNo: input.dieNo,
     batchHeatNo: input.batchHeatNo.trim(),
     binNo: input.binNo,
+    binGrcType: input.binGrcType,
+    binGrcNo: input.binGrcNo,
     rmRatePaise: input.rmRatePaise,
     rmWtMg: input.rmWtMg,
     finishWtMg: input.finishWtMg,

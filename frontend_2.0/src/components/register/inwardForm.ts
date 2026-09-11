@@ -14,7 +14,8 @@ export const inwardSchema = z.object({
   poNo: z.string().optional(),
   dieNo: z.string().optional(),
   batchHeatNo: z.string().optional().default(''),
-  binNo: z.string().optional(),
+  binGrcType: z.enum(['BIN', 'GRC']).optional().or(z.literal('')),
+  binGrcNo: z.string().optional(),
   vendorId: z.string().optional(),
   // Per-inward traceability (client Inward format): RM rate ₹/pc, RM & finish wt g/pc.
   rmRate: z.number({ invalid_type_error: 'Number' }).nonnegative().optional(),
@@ -37,7 +38,11 @@ export const inwardFields: FieldSpec[] = [
   { kind: 'text', name: 'poNo', label: 'PO no.' },
   { kind: 'text', name: 'dieNo', label: 'Die no.' },
   { kind: 'text', name: 'batchHeatNo', label: 'Batch / heat no.' },
-  { kind: 'text', name: 'binNo', label: 'Bin no.' },
+  { kind: 'select', name: 'binGrcType', label: 'BIN / GRC type', options: () => [
+    { value: 'BIN', label: 'BIN number' },
+    { value: 'GRC', label: 'GRC number' },
+  ], hint: 'Optional — choose the reference you want to record.' },
+  { kind: 'text', name: 'binGrcNo', label: 'BIN / GRC number', placeholder: 'Enter selected reference number' },
   { kind: 'select', name: 'vendorId', label: 'RM supplier', options: rmVendorOptions },
   { kind: 'number', name: 'rmRate', label: 'RM Rate / pc (₹)', step: 0.01, min: 0 },
   { kind: 'number', name: 'rmWtG', label: 'RM Wt / pc (g)', step: 0.001, min: 0 },
@@ -50,7 +55,7 @@ export const inwardFields: FieldSpec[] = [
 export function inwardDefaults(): InwardFormValues {
   return {
     unitId: '', partId: '', challanNo: '', challanDate: todayISO(), vendorId: '', customerId: '',
-    batchHeatNo: '', receivedQty: undefined as unknown as number, poNo: '', dieNo: '', binNo: '',
+    batchHeatNo: '', receivedQty: undefined as unknown as number, poNo: '', dieNo: '', binGrcType: '', binGrcNo: '',
     rmRate: undefined, rmWtG: undefined, finishWtG: undefined, remarks: '',
   }
 }
@@ -59,7 +64,8 @@ export function inwardToValues(i: Inward): InwardFormValues {
   return {
     unitId: i.unitId, partId: i.partId, challanNo: i.challanNo, challanDate: i.challanDate,
     vendorId: i.vendorId ?? '', customerId: i.customerId ?? '', batchHeatNo: i.batchHeatNo,
-    receivedQty: i.receivedQty, poNo: i.poNo ?? '', dieNo: i.dieNo ?? '', binNo: i.binNo ?? '',
+    receivedQty: i.receivedQty, poNo: i.poNo ?? '', dieNo: i.dieNo ?? '',
+    binGrcType: i.binGrcType ?? (i.binNo ? 'BIN' : ''), binGrcNo: i.binGrcNo ?? i.binNo ?? '',
     rmRate: i.rmRatePaise != null ? fromPaise(i.rmRatePaise) : undefined,
     rmWtG: i.rmWtMg != null ? i.rmWtMg / 1000 : undefined,
     finishWtG: i.finishWtMg != null ? i.finishWtMg / 1000 : undefined,
@@ -83,7 +89,9 @@ export function inwardValuesToInput(v: InwardFormValues, id?: string): InwardInp
     receivedQty: v.receivedQty,
     poNo: blank(v.poNo),
     dieNo: blank(v.dieNo),
-    binNo: blank(v.binNo),
+    binNo: v.binGrcType === 'BIN' ? blank(v.binGrcNo) : undefined,
+    binGrcType: v.binGrcType || undefined,
+    binGrcNo: blank(v.binGrcNo),
     rmRatePaise: v.rmRate != null ? toPaise(v.rmRate) : undefined,
     rmWtMg: v.rmWtG != null ? Math.round(v.rmWtG * 1000) : undefined,
     finishWtMg: v.finishWtG != null ? Math.round(v.finishWtG * 1000) : undefined,

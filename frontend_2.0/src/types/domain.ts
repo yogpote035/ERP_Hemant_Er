@@ -180,6 +180,8 @@ export interface Inward {
   dieNo?: string
   batchHeatNo: string
   binNo?: string
+  binGrcType?: 'BIN' | 'GRC'
+  binGrcNo?: string
   rmRatePaise?: Paise
   rmWtMg?: number
   finishWtMg?: number
