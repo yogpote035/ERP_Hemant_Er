@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { ReceiptText, FileDown, Ban, FileSignature, Eye, Printer, IndianRupee, Pencil, Trash2, Plus, Download, FileSpreadsheet } from 'lucide-react'
 import { formatINR, formatINRSymbol, formatINRCompact, fromPaise, toPaise, type Paise } from '@/lib/money'
@@ -497,14 +497,23 @@ function InvoiceBuilder({ invoice, onClose, onDone }: { invoice: Invoice; onClos
   const [addChallanId, setAddChallanId] = useState('')
   const [addQty, setAddQty] = useState('')
   const [addRate, setAddRate] = useState('')
+  const productionRates = useStore(useShallow((s) => values(s.masters.productionRates)))
   const openChallans = useStore(useShallow((s) => selectOpenInwardRows(s).filter((r) => r.inward.unitId === invoice.unitId && r.available > 0)))
   function pickAddChallan(id: string) {
     setAddChallanId(id)
     const r = openChallans.find((x) => x.inward.id === id)
-    const rp = r ? latestProductionRatePaise(useStore.getState(), r.inward.partId) : undefined
+    const rp = r ? latestProductionRatePaise(useStore.getState(), r.inward.partId, invoiceDate || todayISO()) : undefined
     setAddQty(r ? String(r.available) : '')
     setAddRate(rp != null ? String(fromPaise(rp)) : '')
   }
+  // The new challan rate always follows the Production Rate Master version that
+  // is effective on the invoice date. It refreshes when the date or master changes.
+  useEffect(() => {
+    if (!addChallanId) return
+    const r = openChallans.find((x) => x.inward.id === addChallanId)
+    const rp = r ? latestProductionRatePaise(useStore.getState(), r.inward.partId, invoiceDate || todayISO()) : undefined
+    setAddRate(rp != null ? String(fromPaise(rp)) : '')
+  }, [addChallanId, invoiceDate, openChallans, productionRates])
   function addLine() {
     const r = openChallans.find((x) => x.inward.id === addChallanId)
     if (!r) return
@@ -723,10 +732,11 @@ function InvoiceBuilder({ invoice, onClose, onDone }: { invoice: Invoice; onClos
                 <input type="number" min={1} aria-label="New line qty" className="input h-9 text-right" value={addQty} onChange={(e) => setAddQty(e.target.value)} />
               </label>
               <label className="flex w-24 flex-col gap-1">
-                <span className="text-[10.5px] font-medium text-muted-fg">Rate ₹</span>
-                <input type="number" min={0} step="0.01" aria-label="New line rate" className="input h-9 text-right" value={addRate} onChange={(e) => setAddRate(e.target.value)} />
+                <span className="text-[10.5px] font-medium text-muted-fg">Rate ₹ (auto)</span>
+                <input type="number" aria-label="New line rate from rate master" className="input h-9 text-right" value={addRate} disabled />
               </label>
               <Button variant="secondary" leftIcon={<Plus size={14} />} onClick={addLine} disabled={!addChallanId || !addQty || !addRate}>Add line</Button>
+              {addChallanId && !addRate ? <span className="w-full text-[11px] text-danger">No Production Rate Master is effective on the selected invoice date.</span> : null}
             </div>
           ) : (
             <p className="text-[12px] text-muted-fg">No other open challans in this unit to add.</p>
