@@ -23,7 +23,7 @@ import type { PaymentStatus } from '@/selectors/billing'
 import { selectOpenInwardRows, latestProductionRatePaise } from '@/selectors/register'
 import { useCan } from '@/hooks/useCan'
 import { toastCommandError, toastCommandSuccess } from '@/lib/commandToast'
-import { ActionMenu, Badge, Button, Card, Drawer, EmptyState, Kpi, KpiGrid, Modal, SearchableDropdown, TablePager, Tabs, type ActionMenuItem, type BadgeTone } from '@/components/ui'
+import { ActionMenu, Badge, Button, Card, ConfirmDialog, Drawer, EmptyState, Kpi, KpiGrid, Modal, SearchableDropdown, TablePager, Tabs, type ActionMenuItem, type BadgeTone } from '@/components/ui'
 import { usePagedSource } from '@/hooks/usePagedSource'
 import { toast } from 'sonner'
 import { exportRowsToXlsx } from '@/lib/exportXlsx'
@@ -438,7 +438,9 @@ function InvoiceBuilder({ invoice, onClose, onDone }: { invoice: Invoice; onClos
   const rmVendors = useStore(useShallow((st) => values(st.masters.vendors).filter((v) => v.active && v.type === 'rm' && v.gstin)))
   // Reactive: reflects undo/redo or master edits while the modal is open.
   const lines = useStore(useShallow((s) => selectInvoiceLines(s, invoice)))
-  const canEdit = useCan()('dispatch', 'create') // editing a line edits its dispatch
+  const canAddLine = useCan()('dispatch', 'create')
+  const canEditLine = useCan()('dispatch', 'edit')
+  const canDeleteLine = useCan()('dispatch', 'delete')
 
   const [customerId, setCustomerId] = useState(invoice.customerId ?? '')
   const [issuerKind, setIssuerKind] = useState<IssuerKind>(invoice.issuerKind)
@@ -456,6 +458,7 @@ function InvoiceBuilder({ invoice, onClose, onDone }: { invoice: Invoice; onClos
   // (a line IS a billed dispatch, so editing it edits stock — totals then recompute live).
   const [qtyBuf, setQtyBuf] = useState<Record<string, string>>({})
   const [rateBuf, setRateBuf] = useState<Record<string, string>>({})
+  const [deletingLine, setDeletingLine] = useState<(typeof lines)[number] | null>(null)
   const clearBuf = (id: string) => {
     setQtyBuf((p) => { const n = { ...p }; delete n[id]; return n })
     setRateBuf((p) => { const n = { ...p }; delete n[id]; return n })
@@ -477,8 +480,16 @@ function InvoiceBuilder({ invoice, onClose, onDone }: { invoice: Invoice; onClos
     } catch (e) { toastCommandError(e) }
     clearBuf(l.dispatchId)
   }
-  function removeLine(dispatchId: Id) {
-    try { runDeleteDispatch(dispatchId) } catch (e) { toastCommandError(e) }
+  function removeLine() {
+    if (!deletingLine) return
+    try {
+      const removingLastLine = lines.length === 1
+      const res = runDeleteDispatch(deletingLine.dispatchId)
+      toastCommandSuccess('Challan removed from draft invoice', res.cascade)
+      setDeletingLine(null)
+      // A draft with no dispatch lines is removed automatically.
+      if (removingLastLine) onDone()
+    } catch (e) { toastCommandError(e) }
   }
 
   // Add another part / challan to this invoice: open inward challans in the SAME unit
@@ -667,7 +678,7 @@ function InvoiceBuilder({ invoice, onClose, onDone }: { invoice: Invoice; onClos
                       value={qtyBuf[l.dispatchId] ?? String(l.qty)}
                       onChange={(e) => setQtyBuf((p) => ({ ...p, [l.dispatchId]: e.target.value }))}
                       onBlur={() => commitLine(l)}
-                      className="cell-input w-20 text-right" disabled={!canEdit}
+                      className="cell-input w-20 text-right" disabled={!canEditLine}
                     />
                   </td>
                   <td className="px-2 py-1.5">
@@ -676,13 +687,13 @@ function InvoiceBuilder({ invoice, onClose, onDone }: { invoice: Invoice; onClos
                       value={rateBuf[l.dispatchId] ?? String(fromPaise(l.ratePaise))}
                       onChange={(e) => setRateBuf((p) => ({ ...p, [l.dispatchId]: e.target.value }))}
                       onBlur={() => commitLine(l)}
-                      className="cell-input w-20 text-right" disabled={!canEdit}
+                      className="cell-input w-20 text-right" disabled={!canEditLine}
                     />
                   </td>
                   <td className="px-3 py-1.5 text-right mono">{formatINRSymbol(l.amountPaise)}</td>
                   <td className="px-2 py-1.5 text-right">
-                    {canEdit ? (
-                      <button type="button" onClick={() => removeLine(l.dispatchId)} aria-label={`Remove ${l.partNo} ${l.challanNo}`} className="rounded p-1 text-faint hover:bg-danger/10 hover:text-danger">
+                    {canDeleteLine ? (
+                      <button type="button" onClick={() => setDeletingLine(l)} aria-label={`Remove ${l.partNo} ${l.challanNo}`} className="rounded p-1 text-faint hover:bg-danger/10 hover:text-danger">
                         <Trash2 size={13} />
                       </button>
                     ) : null}
@@ -694,7 +705,7 @@ function InvoiceBuilder({ invoice, onClose, onDone }: { invoice: Invoice; onClos
         </div>
 
         {/* Add another part / challan (multi-challan, multi-part billing — SRS FR-B105). */}
-        {canEdit ? (
+        {canAddLine ? (
           openChallans.length ? (
             <div className="flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-border p-2.5">
               <label className="flex min-w-[200px] grow flex-col gap-1">
@@ -721,6 +732,15 @@ function InvoiceBuilder({ invoice, onClose, onDone }: { invoice: Invoice; onClos
             <p className="text-[12px] text-muted-fg">No other open challans in this unit to add.</p>
           )
         ) : null}
+
+        <ConfirmDialog
+          open={!!deletingLine}
+          onClose={() => setDeletingLine(null)}
+          onConfirm={removeLine}
+          title="Remove challan from invoice?"
+          message={deletingLine ? <>Remove challan <b>{deletingLine.challanNo}</b> ({deletingLine.partNo}) from this draft invoice? Its outward dispatch line will be deleted and the quantity will be restored to available stock.</> : null}
+          confirmLabel="Remove challan"
+        />
 
         {/* Packing Details — client review §13: compulsory in the invoice form.
             Derived from each part's Avg Qty per Box (same basis as the printed invoice). */}
