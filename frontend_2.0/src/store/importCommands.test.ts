@@ -37,7 +37,7 @@ function inward(partNo: string, challanNo: string, recv: number, dispatches: Par
 }
 
 describe('runImportMio — atomic bulk ingest', () => {
-  it('inserts inwards + dispatches + one draft invoice per bill, all undoable in one step', () => {
+  it('inserts inwards + uniquely numbered dispatches + draft invoices, all undoable in one step', () => {
     const partNo = u1Part().partNo
     const undoBefore = st()._undo.length
     const res = runImportMio({
@@ -45,18 +45,17 @@ describe('runImportMio — atomic bulk ingest', () => {
       inwards: [
         inward(partNo, 'IMP-CH-1', 1000, [
           disp({ billNo: 'IMPB-1', okQty: 600, ratePaise: toPaise(5) }),
-          disp({ billNo: 'IMPB-1', okQty: 400, ratePaise: toPaise(5) }),
+          disp({ billNo: 'IMPB-2', okQty: 400, ratePaise: toPaise(5) }),
         ]),
         inward(partNo, 'IMP-CH-2', 200, [disp({ billNo: 'DC9', mrQty: 50 })]),
       ],
     })
     expect(res.data.inwards).toBe(2)
     expect(res.data.dispatches).toBe(3)
-    expect(res.data.invoices).toBe(1)
-    // The two IMPB-1 lines collapse onto one draft invoice.
+    expect(res.data.invoices).toBe(2)
     const inv = values(st().billing.invoices).filter((i) => i.billNo === 'IMPB-1' && i.unitId === 'u1')
     expect(inv).toHaveLength(1)
-    expect(inv[0]!.dispatchIds).toHaveLength(2)
+    expect(inv[0]!.dispatchIds).toHaveLength(1)
     expect(inv[0]!.lifecycle).toBe('draft')
     expect(st()._undo.length).toBe(undoBefore + 1)
 
@@ -73,11 +72,17 @@ describe('runImportMio — atomic bulk ingest', () => {
     ).toThrow(CommandValidationError)
   })
 
-  it('previewImportIssues reports a duplicate challan against existing data', () => {
+  it('reuses an existing inward and appends a new uniquely numbered outward', () => {
     const partNo = u1Part().partNo
     runImportMio({ unitId: 'u1', inwards: [inward(partNo, 'DUP-CH', 100, [])] })
-    const issues = previewImportIssues(st(), { unitId: 'u1', inwards: [inward(partNo, 'DUP-CH', 100, [])] })
-    expect(issues.some((i) => i.level === 'error' && /already exists/.test(i.message))).toBe(true)
+    const input = inward(partNo, 'DUP-CH', 100, [disp({ billNo: 'NEW-DC-1', okQty: 25, ratePaise: toPaise(5) })])
+    const issues = previewImportIssues(st(), { unitId: 'u1', inwards: [input] })
+    expect(issues.some((i) => i.level === 'warn' && /will be reused/.test(i.message))).toBe(true)
+    expect(issues.some((i) => i.level === 'error')).toBe(false)
+    const result = runImportMio({ unitId: 'u1', inwards: [input] })
+    expect(result.data.inwards).toBe(0)
+    expect(result.data.reusedInwards).toBe(1)
+    expect(result.data.dispatches).toBe(1)
   })
 
   it('blocks a negative dispatch quantity and a non-positive received qty (import bypasses the manual guards)', () => {

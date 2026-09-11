@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowUpFromLine, ReceiptText, X, Download, FileSpreadsheet }
 import { addP, formatINRSymbol, mulQty, pctOfPaise, toPaise, fromPaise, type Paise } from '@/lib/money'
 import { todayISO } from '@/lib/date'
 import { useStore } from '@/store'
-import { latestProductionRatePaise, selectInwardRows, selectOpenInwardRows } from '@/selectors/register'
+import { latestProductionRatePaise, selectInwardRows, selectOpenInwardRows, type InwardRow } from '@/selectors/register'
 import { runSaveDispatchBatch, type DispatchBatchLine } from '@/store/registerCommands'
 import { useCan } from '@/hooks/useCan'
 import { dispatchApi } from '@/api/modules'
@@ -281,6 +281,7 @@ export default function OutwardEntry({
         <Card>
           <EmptyState icon={ArrowUpFromLine} title="No open challans" description="Every challan in your scope is fully dispatched. Record an inward challan first." />
         </Card>
+        <OutwardHistory rows={registerRows} />
         {importDrawer}
       </div>
     )
@@ -441,8 +442,75 @@ export default function OutwardEntry({
           <span className="text-[12px] font-semibold text-warning">⚠ A line total exceeds the challan's available stock</span>
         ) : null}
       </div>
+      <OutwardHistory rows={registerRows} />
       {importDrawer}
     </div>
+  )
+}
+
+function OutwardHistory({ rows }: { rows: InwardRow[] }) {
+  const outwards = rows
+    .flatMap((row) => row.children.map(({ dispatch, total, invoiceBillNo }) => ({
+      dispatch,
+      total,
+      invoiceBillNo,
+      refDcNo: row.inward.challanNo,
+      partNo: row.partNo,
+    })))
+    .sort((a, b) => {
+      const aDate = a.dispatch.dispatchDate ?? a.dispatch.billDate ?? a.dispatch.createdAt ?? ''
+      const bDate = b.dispatch.dispatchDate ?? b.dispatch.billDate ?? b.dispatch.createdAt ?? ''
+      return bDate.localeCompare(aDate) || (b.dispatch.createdAt ?? '').localeCompare(a.dispatch.createdAt ?? '')
+    })
+
+  return (
+    <Card className="overflow-x-auto p-0">
+      <div className="border-b border-border px-4 py-3">
+        <div className="text-[13px] font-semibold">Outward register</div>
+        <div className="mt-0.5 text-[11px] text-muted-fg">Saved manual and imported outward records for the selected unit.</div>
+      </div>
+      {outwards.length === 0 ? (
+        <div className="p-4">
+          <EmptyState icon={ArrowUpFromLine} title="No outward records" description="Imported and manually created outward records will appear here." />
+        </div>
+      ) : (
+        <table className="w-full min-w-[900px] text-[12px]" aria-label="Outward register">
+          <thead>
+            <tr className="bg-muted text-left text-[10.5px] uppercase tracking-wide text-muted-fg">
+              <th className="px-3 py-2 font-semibold">Our D/C No.</th>
+              <th className="px-3 py-2 font-semibold">Date</th>
+              <th className="px-3 py-2 font-semibold">Reference challan</th>
+              <th className="px-3 py-2 font-semibold">Part</th>
+              <th className="px-3 py-2 text-right font-semibold">OK</th>
+              <th className="px-3 py-2 text-right font-semibold">M/C rej</th>
+              <th className="px-3 py-2 text-right font-semibold">MF</th>
+              <th className="px-3 py-2 text-right font-semibold">Total</th>
+              <th className="px-3 py-2 text-right font-semibold">Rate</th>
+              <th className="px-3 py-2 text-right font-semibold">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {outwards.slice(0, 100).map(({ dispatch, total, invoiceBillNo, refDcNo, partNo }) => {
+              const rate = dispatch.rateSnapshotPaise ?? ZERO
+              return (
+                <tr key={dispatch.id} className="border-t border-border/60">
+                  <td className="px-3 py-2 mono font-medium">{dispatch.billNo ?? invoiceBillNo ?? '—'}</td>
+                  <td className="px-3 py-2 text-muted-fg">{dispatch.dispatchDate ?? dispatch.billDate ?? '—'}</td>
+                  <td className="px-3 py-2 mono">{refDcNo}</td>
+                  <td className="max-w-[280px] truncate px-3 py-2" title={partNo}>{partNo}</td>
+                  <td className="px-3 py-2 text-right mono">{intFmt(dispatch.okQty)}</td>
+                  <td className="px-3 py-2 text-right mono">{intFmt(dispatch.mcRejQty)}</td>
+                  <td className="px-3 py-2 text-right mono">{intFmt(dispatch.mfQty)}</td>
+                  <td className="px-3 py-2 text-right mono font-semibold">{intFmt(total)}</td>
+                  <td className="px-3 py-2 text-right mono">{dispatch.rateSnapshotPaise != null ? formatINRSymbol(rate) : '—'}</td>
+                  <td className="px-3 py-2 text-right mono font-semibold">{dispatch.rateSnapshotPaise != null ? formatINRSymbol(mulQty(rate, dispatch.okQty)) : '—'}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
+    </Card>
   )
 }
 

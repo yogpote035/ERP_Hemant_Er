@@ -88,4 +88,17 @@ describe('groupMioRows — the blank-received grouping', () => {
     expect(inwards).toHaveLength(0)
     expect(issues.some((i) => i.level === 'error')).toBe(true)
   })
+
+  it('keeps a blank-received outward row on its own repeated reference challan', () => {
+    const rows = [
+      mk({ 1: 'P1', 2: 'DC/369', 3: '01.08.2026', 7: 100, 9: 'OUT-1', 11: 50, 15: 5 }),
+      mk({ 1: 'P2', 2: 'DC/371', 9: 'OUT-2', 11: 25, 15: 6 }),
+    ]
+    const { inwards, issues } = groupMioRows(rows, map)
+    expect(inwards).toHaveLength(2)
+    expect(inwards[1]!.challanNo).toBe('DC/371')
+    expect(inwards[1]!.partNo).toBe('P2')
+    expect(inwards[1]!.dispatches[0]!.billNo).toBe('OUT-2')
+    expect(issues.some((issue) => /outward-only row/.test(issue.message))).toBe(true)
+  })
 })

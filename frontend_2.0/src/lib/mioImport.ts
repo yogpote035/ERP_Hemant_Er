@@ -151,6 +151,11 @@ export function groupMioRows(rows: unknown[][], map: MioColumnMap, headerRowIdx 
     const sheetRow = headerRowIdx + i + 2 // 1-based sheet row of this data row
     const challanNo = str(cell(row, map.challanNo))
     const recv = intOrNull(cell(row, map.receivedQty))
+    const billNo = str(cell(row, map.billNo))
+    const ok = intOrZero(cell(row, map.okQty))
+    const mr = intOrZero(cell(row, map.mrQty))
+    const mf = intOrZero(cell(row, map.mfQty))
+    const hasDispatch = billNo !== '' || ok > 0 || mr > 0 || mf > 0
     const isAllBlank = row.every((c) => str(c) === '')
     if (isAllBlank) return
 
@@ -174,22 +179,22 @@ export function groupMioRows(rows: unknown[][], map: MioColumnMap, headerRowIdx 
         dispatches: [],
       }
       inwards.push(current)
-    } else if (challanNo !== '' && recv == null && (!current || challanNo !== current.challanNo)) {
-      // A challan no with no received qty that ISN'T just the current challan repeated
-      // on a multi-dispatch row (the normal case — those need no warning). Genuinely
-      // ambiguous: a different challan with no spine row, so flag where it landed.
-      issues.push({
-        level: 'warn',
-        row: sheetRow,
-        message: `Challan ${challanNo} has no Received QTY — appended as a dispatch on ${current?.challanNo ?? '(no open challan)'}`,
-      })
+    } else if (challanNo !== '' && recv == null && hasDispatch && (!current || challanNo.toLowerCase() !== current.challanNo.toLowerCase())) {
+      // Outward-only exports often repeat the reference challan but omit Received QTY.
+      // Keep that row attached to its own reference so the store-aware stage can reuse
+      // the matching inward instead of incorrectly appending it to the previous one.
+      const partNo = str(cell(row, map.partNo))
+      current = {
+        rowIndex: i, challanNo,
+        challanDate: parseFlexibleDate(cell(row, map.challanDate)) ?? '',
+        partNo, poNo: str(cell(row, map.poNo)) || undefined,
+        batchHeatNo: str(cell(row, map.batchHeatNo)),
+        rmRatePaise: moneyOrUndef(cell(row, map.rmRate)), receivedQty: 0, dispatches: [],
+      }
+      inwards.push(current)
+      issues.push({ level: 'warn', row: sheetRow, message: `Challan ${challanNo} has no Received QTY — treated as an outward-only row` })
     }
 
-    const billNo = str(cell(row, map.billNo))
-    const ok = intOrZero(cell(row, map.okQty))
-    const mr = intOrZero(cell(row, map.mrQty))
-    const mf = intOrZero(cell(row, map.mfQty))
-    const hasDispatch = billNo !== '' || ok > 0 || mr > 0 || mf > 0
     if (hasDispatch) {
       if (!current) {
         issues.push({ level: 'error', row: sheetRow, message: 'Dispatch row before any inward challan' })

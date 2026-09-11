@@ -50,7 +50,7 @@ export default function ImportWizard({
   const [parsing, setParsing] = useState(false)
   const [parseError, setParseError] = useState('')
   const [importing, setImporting] = useState(false)
-  const [done, setDone] = useState<{ inwards: number; dispatches: number; invoices: number; partsCreated: number } | null>(null)
+  const [done, setDone] = useState<{ inwards: number; reusedInwards: number; dispatches: number; invoices: number; partsCreated: number } | null>(null)
 
   async function downloadSampleWorkbook() {
     try {
@@ -198,7 +198,7 @@ export default function ImportWizard({
             <CheckCircle2 size={40} className="text-success" />
             <div className="text-lg font-semibold">Import complete</div>
             <p className="text-[13px] text-muted-fg">
-              {intFmt(done.inwards)} challans · {intFmt(done.dispatches)} dispatches · {intFmt(done.invoices)} draft bills
+              {intFmt(done.inwards)} new challans · {intFmt(done.reusedInwards)} existing challans reused · {intFmt(done.dispatches)} dispatches · {intFmt(done.invoices)} draft bills
               {done.partsCreated ? ` · ${intFmt(done.partsCreated)} new parts` : ''}.
               This was one undoable transaction.
             </p>
@@ -350,7 +350,7 @@ export default function ImportWizard({
           <div className={`rounded-lg border px-3.5 py-2.5 text-[13px] ${importable.length ? 'border-success/30 bg-success/10 text-success' : duplicateOnly ? 'border-warning/30 bg-warning/10 text-warning' : 'border-danger/30 bg-danger/10 text-danger'}`}>
             {importable.length ? (
               <>
-                <b>{intFmt(importable.length)} challans will import.</b>
+                <b>{intFmt(importable.length)} inward/outward group{importable.length === 1 ? '' : 's'} will import.</b>
                 {skipInvalid && partition.skipped.length ? ` ${intFmt(partition.skipped.length)} skipped (footer totals / duplicates / over-dispatch).` : ''}
                 {warnCount ? ` ${intFmt(warnCount)} notices below are informational — safe to ignore.` : ''}
               </>
