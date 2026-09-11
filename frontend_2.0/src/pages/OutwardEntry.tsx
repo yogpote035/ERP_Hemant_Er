@@ -25,7 +25,7 @@ interface LineState {
   mc: string
   mf: string
   rate: string
-  /** True while the value follows Rate Master; typing switches it to manual. */
+  /** True when an effective Production Rate Master value is available. */
   rateAuto: boolean
   remark: string
 }
@@ -109,12 +109,12 @@ export default function OutwardEntry({
     return { key: `ln-${_seq++}`, challanId, bill: dcNo, dcDate: todayISO(), ok: '', mc: '', mf: '', rate: ratePaise != null ? String(fromPaise(ratePaise)) : '', rateAuto: ratePaise != null, remark: '' }
   }, [challanById, dcNo])
 
-  // Keep master-derived values dynamic. A manually typed rate is never overwritten.
+  // Keep the billing rate fully driven by Production Rate Master. It reacts to
+  // master refreshes and uses the rate effective on each line's D/C date.
   useEffect(() => {
     setLines((current) => {
       let changed = false
       const next = current.map((line) => {
-        if (!line.rateAuto && line.rate !== '') return line
         const partId = challanById.get(line.challanId)?.inward.partId
         const masterRate = partId ? latestProductionRatePaise(useStore.getState(), partId, line.dcDate || todayISO()) : undefined
         const value = masterRate != null ? String(fromPaise(masterRate)) : ''
@@ -180,7 +180,6 @@ export default function OutwardEntry({
     setLines((prev) => prev.map((ln) => (ln.key === key ? { ...ln, ...patch } : ln)))
   }
   function setLineDate(line: LineState, dcDate: string) {
-    if (!line.rateAuto) { setLine(line.key, { dcDate }); return }
     const partId = challanById.get(line.challanId)?.inward.partId
     const masterRate = partId ? latestProductionRatePaise(useStore.getState(), partId, dcDate) : undefined
     setLine(line.key, {
@@ -203,6 +202,14 @@ export default function OutwardEntry({
     }
     if (activeLines.length === 0) {
       toastCommandError(new Error('Add a quantity on at least one selected challan'))
+      return
+    }
+    const missingRateLine = activeLines.find((ln) => intOf(ln.ok) > 0 && !(Number(ln.rate) > 0))
+    if (missingRateLine) {
+      const row = challanById.get(missingRateLine.challanId)
+      toastCommandError(new Error(
+        `No production rate is configured for ${row?.partNo ?? 'this part'} on ${missingRateLine.dcDate || today}. Add an effective rate in Rate Masters.`
+      ))
       return
     }
 
@@ -379,8 +386,17 @@ export default function OutwardEntry({
                     <td className="px-2 py-1.5"><CellNum value={ln.mf} onChange={(v) => setLine(ln.key, { mf: v })} label={`Line ${i + 1} material fault`} /></td>
                     <td className="px-3 py-1.5 text-right mono font-semibold">{intFmt(c.total)}</td>
                     <td className="px-2 py-1.5">
-                      <CellNum value={ln.rate} onChange={(v) => setLine(ln.key, { rate: v, rateAuto: false })} label={`Line ${i + 1} rate`} step="0.01" placeholder="Enter rate" />
-                      <div className={`mt-0.5 text-right text-[9px] ${ln.rateAuto ? 'text-success' : 'text-faint'}`}>{ln.rateAuto ? 'Auto rate' : 'Enter manually'}</div>
+                      <input
+                        type="number"
+                        value={ln.rate}
+                        readOnly
+                        aria-label={`Line ${i + 1} rate`}
+                        placeholder="Not configured"
+                        className="cell-input cursor-not-allowed bg-muted text-right"
+                      />
+                      <div className={`mt-0.5 text-right text-[9px] ${ln.rateAuto ? 'text-success' : 'text-danger'}`}>
+                        {ln.rateAuto ? 'From Rate Masters' : 'Rate Master required'}
+                      </div>
                     </td>
                     <td className="px-3 py-1.5 text-right mono text-muted-fg">{formatINRSymbol(c.sub)}</td>
                     <td className="px-3 py-1.5 text-right mono text-muted-fg">{formatINRSymbol(c.igst)}</td>

@@ -28,7 +28,6 @@ const schema = z
     billDate: z.string().optional(),
     dispatchDate: z.string().optional(),
     rate: z.number().nonnegative().optional(),
-    custInvoiceNo: z.string().optional(),
   })
   .superRefine((v, ctx) => {
     const total = (v.okQty ?? 0) + (v.mcRejQty ?? 0) + (v.mfQty ?? 0)
@@ -68,7 +67,6 @@ export function DispatchForm({
           billDate: existing.billDate ?? '',
           dispatchDate: existing.dispatchDate ?? '',
           rate: existing.rateSnapshotPaise != null ? fromPaise(existing.rateSnapshotPaise) : undefined,
-          custInvoiceNo: existing.custInvoiceNo ?? '',
         }
       : {
           kind: 'billed',
@@ -79,7 +77,6 @@ export function DispatchForm({
           billDate: todayISO(),
           dispatchDate: todayISO(),
           rate: defaultRate != null ? fromPaise(defaultRate) : undefined,
-          custInvoiceNo: '',
         },
   })
 
@@ -108,7 +105,6 @@ export function DispatchForm({
       billDate: v.billDate || undefined,
       dispatchDate: v.dispatchDate || undefined,
       ratePaise: v.kind === 'billed' && v.rate != null ? toPaise(v.rate) : undefined,
-      custInvoiceNo: v.custInvoiceNo?.trim() || undefined,
     }
     try {
       const res = runSaveDispatch(input)
@@ -187,9 +183,6 @@ export function DispatchForm({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Rate per piece (₹)" htmlFor="rate" required error={err('rate')} hint="Defaults to the latest production rate">
               <Input id="rate" type="number" step="0.01" min={0} aria-invalid={err('rate') ? true : undefined} aria-describedby={descId('rate')} {...register('rate', { setValueAs: num })} />
-            </Field>
-            <Field label="Customer invoice no." htmlFor="custInvoiceNo">
-              <Input id="custInvoiceNo" {...register('custInvoiceNo')} />
             </Field>
             <Field label="Bill date" htmlFor="billDate">
               <Input id="billDate" type="date" {...register('billDate')} />

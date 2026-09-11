@@ -38,6 +38,7 @@ import { exportRowsToXlsx } from '@/lib/exportXlsx'
 import { excelNumber, excelText, excelValue, type ImportedRow } from '@/lib/importXlsx'
 import { ExcelImportButton } from '@/components/ExcelImportButton'
 import { toast } from 'sonner'
+import { useEntryUnitContext } from '@/hooks/useEntryUnitContext'
 
 type TabKey = 'production' | 'shift' | 'earnings'
 const TABS = [
@@ -56,8 +57,8 @@ const SHIFT_OPTIONS = [
   { value: 'C', label: 'Shift C' },
   { value: 'G', label: 'General' },
 ]
-const PRODUCTION_IMPORT_COLUMNS = [{key:'date',label:'Date'},{key:'shift',label:'Shift No'},{key:'employee',label:'Employee'},{key:'machine',label:'Machine'},{key:'part',label:'Part'},{key:'operation',label:'Operation'},{key:'standard',label:'Standard'},{key:'plan',label:'Plan'},{key:'total',label:'Total Make'},{key:'ok',label:'OK Qty'},{key:'scrap',label:'Scrap Qty'},{key:'rework',label:'Rework Qty'},{key:'mf',label:'MF Qty'},{key:'downtimeFrom',label:'Downtime From'},{key:'downtimeTo',label:'Downtime To'},{key:'remark',label:'Remark'},{key:'rate',label:'Rate'}]
-const SHIFT_IMPORT_COLUMNS = [{key:'date',label:'Date'},{key:'shift',label:'Shift No'},{key:'employee',label:'Employee'},{key:'from',label:'From Time'},{key:'to',label:'To Time'},{key:'shiftRate',label:'Shift Rate'},{key:'otHours',label:'OT Hours'},{key:'otRate',label:'OT Rate'}]
+const PRODUCTION_IMPORT_COLUMNS = [{key:'date',label:'Date'},{key:'shift',label:'Shift No.'},{key:'machine',label:'M/c No.'},{key:'part',label:'Type No.'},{key:'operation',label:'Operation No.'},{key:'standard',label:'START QTY'},{key:'plan',label:'END QTY'},{key:'employee',label:'Operator Name'},{key:'total',label:'Total Make'},{key:'ok',label:'OK Qty'},{key:'scrap',label:'Scrap'},{key:'rework',label:'Rework'},{key:'mf',label:'MF'},{key:'remark',label:'Remark'},{key:'rate',label:'Rate / Pc'},{key:'amount',label:'Total Amount'},{key:'payment',label:'Total Payment'}]
+const SHIFT_IMPORT_COLUMNS = [{key:'date',label:'Date'},{key:'shift',label:'Shift No.'},{key:'employee',label:'Operator Name'},{key:'from',label:'Available From'},{key:'to',label:'Available To'},{key:'hours',label:'Total Hrs. Present'},{key:'shiftRate',label:'Shift Rate / 8 Hr.'},{key:'amount',label:'Total Amount'}]
 
 const intOf = (v: string) => {
   const n = Number(v)
@@ -92,14 +93,15 @@ function fmtMins(mins: number): string {
 export default function Attendance() {
   const [tab, setTab] = useState<TabKey>('production')
   const can = useCan()
+  const entryUnit = useEntryUnitContext()
   async function exportAttendance() {
     const s = useStore.getState()
     if (tab === 'production') {
-      const data = values(s.hr.production).map((r) => ({ date: r.date, shift: r.shiftNo ?? '', employee: s.masters.employees.byId[r.employeeId]?.name ?? r.employeeId, machine: s.masters.machines.byId[r.machineId]?.machineNo ?? r.machineId, part: s.masters.parts.byId[r.partId]?.partNo ?? r.partId, operation: r.operationId ? s.masters.operations.byId[r.operationId]?.code ?? r.operationId : '', standard: r.openingCounter, plan: r.closingCounter, total: r.totalMakeQty ?? 0, ok: r.okQty, scrap: r.scrapQty ?? 0, rework: r.reworkQty ?? 0, mf: r.mfQty ?? 0, downtimeFrom: r.downtimeFrom ?? '', downtimeTo: r.downtimeTo ?? '', remark: r.remark ?? '', rate: fromPaise(r.rateSnapshotPaise) }))
+      const data = selectProductionRows(s).map((row) => { const r=row.entry; return ({ date: r.date, shift: r.shiftNo ?? '', employee: row.employeeName, machine: row.machineNo, part: row.partNo, operation: r.operationId ? s.masters.operations.byId[r.operationId]?.code ?? r.operationId : '', standard: r.openingCounter, plan: r.closingCounter, total: row.makeQty, ok: r.okQty, scrap: r.scrapQty ?? 0, rework: r.reworkQty ?? 0, mf: r.mfQty ?? 0, remark: r.remark ?? '', rate: fromPaise(r.rateSnapshotPaise), amount: fromPaise(row.earned), payment: r.totalPaymentPaise != null ? fromPaise(r.totalPaymentPaise) : '' }) })
       await exportRowsToXlsx(`production-attendance-${todayISO()}.xlsx`, 'Production', PRODUCTION_IMPORT_COLUMNS, data)
       toast.success(`Exported ${data.length} production entries`)
     } else if (tab === 'shift') {
-      const data = values(s.hr.shifts).map((r) => ({ date:r.date, shift:r.shiftNo ?? '', employee:s.masters.employees.byId[r.employeeId]?.name ?? r.employeeId, from:r.fromTime, to:r.toTime, shiftRate:fromPaise(r.shiftRateSnapshotPaise), otHours:r.otHours ?? 0, otRate:r.otRateSnapshotPaise != null ? fromPaise(r.otRateSnapshotPaise) : '' }))
+      const data = selectShiftRows(s).map((row) => ({ date:row.entry.date, shift:row.entry.shiftNo ?? '', employee:row.employeeName, from:row.entry.fromTime, to:row.entry.toTime, hours:row.hours, shiftRate:fromPaise(row.entry.shiftRateSnapshotPaise), amount:fromPaise(row.wage) }))
       await exportRowsToXlsx(`shift-attendance-${todayISO()}.xlsx`, 'Shift Attendance', SHIFT_IMPORT_COLUMNS, data)
       toast.success(`Exported ${data.length} shift entries`)
     } else {
@@ -109,30 +111,33 @@ export default function Attendance() {
     }
   }
   async function importAttendance(rows: ImportedRow[]) {
+    if (!entryUnit.preferredUnitId) throw new Error(entryUnit.message)
     const s = useStore.getState()
     const map = <T,>(items: T[], keys: (v:T)=>unknown[]) => new Map(items.flatMap((v) => keys(v).filter(Boolean).map((k) => [String(k).toLowerCase(), v] as const)))
     const employees = map(values(s.masters.employees), (v) => [v.id, v.name, v.empCode])
     if (tab === 'production') {
-      const machines = map(values(s.masters.machines), (v) => [v.id, v.machineNo, v.description])
-      const parts = map(values(s.masters.parts), (v) => [v.id, v.partNo, v.description])
+      const machines = map(values(s.masters.machines).filter((v) => v.unitId === entryUnit.preferredUnitId), (v) => [v.id, v.machineNo, v.description])
+      const parts = map(values(s.masters.parts).filter((v) => v.unitId === entryUnit.preferredUnitId), (v) => [v.id, v.partNo, v.description])
       const operations = map(values(s.masters.operations), (v) => [v.id, v.description, v.code])
       for (const [index, row] of rows.entries()) {
-        const employee = employees.get(excelText(excelValue(row,'Employee')).toLowerCase()); const machine = machines.get(excelText(excelValue(row,'Machine')).toLowerCase()); const part = parts.get(excelText(excelValue(row,'Part')).toLowerCase()); const operationText = excelText(excelValue(row,'Operation')); const operation = operationText ? operations.get(operationText.toLowerCase()) : undefined
-        const date = excelText(excelValue(row,'Date')); if (!employee || !machine || !part || !date) throw new Error(`Row ${index + 2}: Date, Employee, Machine and Part are required`)
-        runSaveProductionAttendance({ unitId:employee.unitId, date, shiftNo:excelText(excelValue(row,'Shift No')) || undefined, employeeId:employee.id, machineId:machine.id, partId:part.id, operationId:operation?.id, standard:excelNumber(excelValue(row,'Standard')) ?? 0, plan:excelNumber(excelValue(row,'Plan')) ?? 0, totalMakeQty:excelNumber(excelValue(row,'Total Make')) ?? 0, okQty:excelNumber(excelValue(row,'OK Qty')) ?? 0, scrapQty:excelNumber(excelValue(row,'Scrap Qty')) ?? 0, reworkQty:excelNumber(excelValue(row,'Rework Qty')) ?? 0, mfQty:excelNumber(excelValue(row,'MF Qty')) ?? 0, downtimeFrom:excelText(excelValue(row,'Downtime From')) || undefined, downtimeTo:excelText(excelValue(row,'Downtime To')) || undefined, remark:excelText(excelValue(row,'Remark')) || undefined })
+        const employee = employees.get(excelText(excelValue(row,'Operator Name')).toLowerCase()); const machine = machines.get(excelText(excelValue(row,'M/c No.')).toLowerCase()); const part = parts.get(excelText(excelValue(row,'Type No.')).toLowerCase()); const operationText = excelText(excelValue(row,'Operation No.')); const operation = operationText ? operations.get(operationText.toLowerCase()) : undefined
+        const date = excelText(excelValue(row,'Date')); if (!employee || !machine || !part || !date) throw new Error(`Row ${index + 2}: Date, Operator Name, M/c No. and Type No. are required`)
+        const payment = excelNumber(excelValue(row,'Total Payment'))
+        const importedRate = excelNumber(excelValue(row,'Rate / Pc'))
+        runSaveProductionAttendance({ unitId:entryUnit.preferredUnitId, date, shiftNo:excelText(excelValue(row,'Shift No.')) || undefined, employeeId:employee.id, machineId:machine.id, partId:part.id, operationId:operation?.id, standard:excelNumber(excelValue(row,'START QTY')) ?? 0, plan:excelNumber(excelValue(row,'END QTY')) ?? 0, totalMakeQty:excelNumber(excelValue(row,'Total Make')) ?? 0, okQty:excelNumber(excelValue(row,'OK Qty')) ?? 0, scrapQty:excelNumber(excelValue(row,'Scrap')) ?? 0, reworkQty:excelNumber(excelValue(row,'Rework')) ?? 0, mfQty:excelNumber(excelValue(row,'MF')) ?? 0, remark:excelText(excelValue(row,'Remark')) || undefined, ratePaise:importedRate != null ? toPaise(importedRate) : undefined, totalPaymentPaise:payment != null ? toPaise(payment) : undefined })
       }
     } else {
-      for (const [index, row] of rows.entries()) { const employee = employees.get(excelText(excelValue(row,'Employee')).toLowerCase()); const date=excelText(excelValue(row,'Date')); const from=excelText(excelValue(row,'From Time')); const to=excelText(excelValue(row,'To Time')); if(!employee||!date||!from||!to) throw new Error(`Row ${index + 2}: Date, Employee, From Time and To Time are required`); runSaveShiftAttendance({unitId:employee.unitId,date,shiftNo:excelText(excelValue(row,'Shift No'))||undefined,employeeId:employee.id,fromTime:from,toTime:to,otHours:excelNumber(excelValue(row,'OT Hours')),otRatePaise:excelNumber(excelValue(row,'OT Rate')) != null ? toPaise(excelNumber(excelValue(row,'OT Rate'))!) : undefined}) }
+      for (const [index, row] of rows.entries()) { const employee = employees.get(excelText(excelValue(row,'Operator Name')).toLowerCase()); const date=excelText(excelValue(row,'Date')); const from=excelText(excelValue(row,'Available From')); const to=excelText(excelValue(row,'Available To')); const importedRate=excelNumber(excelValue(row,'Shift Rate / 8 Hr.')); if(!employee||!date||!from||!to) throw new Error(`Row ${index + 2}: Date, Operator Name, Available From and Available To are required`); runSaveShiftAttendance({unitId:entryUnit.preferredUnitId,date,shiftNo:excelText(excelValue(row,'Shift No.'))||undefined,employeeId:employee.id,fromTime:from,toTime:to,shiftRatePaise:importedRate != null ? toPaise(importedRate) : undefined}) }
     }
     toast.success(`Imported ${rows.length} attendance entries`)
   }
   function validateAttendanceImport(row: ImportedRow) {
     const s=useStore.getState(); const find=<T,>(items: T[], text:string, keys:(value:T)=>unknown[]) => items.some((value)=>keys(value).filter(Boolean).some((key)=>String(key).trim().toLowerCase()===text.trim().toLowerCase()))
-    if(!find(values(s.masters.employees),excelText(excelValue(row,'Employee')),(v)=>[v.id,v.name,v.empCode])) return 'Employee does not exist'
+    if(!find(values(s.masters.employees),excelText(excelValue(row,'Operator Name')),(v)=>[v.id,v.name,v.empCode])) return 'Operator does not exist'
     if(tab==='production') {
-      if(!find(values(s.masters.machines),excelText(excelValue(row,'Machine')),(v)=>[v.id,v.machineNo,v.description])) return 'Machine does not exist'
-      if(!find(values(s.masters.parts),excelText(excelValue(row,'Part')),(v)=>[v.id,v.partNo,v.description])) return 'Part does not exist'
-      const total=excelNumber(excelValue(row,'Total Make')) ?? 0; const breakdown=['OK Qty','Scrap Qty','Rework Qty','MF Qty'].reduce((sum,header)=>sum+(excelNumber(excelValue(row,header))??0),0)
+      if(!find(values(s.masters.machines),excelText(excelValue(row,'M/c No.')),(v)=>[v.id,v.machineNo,v.description])) return 'Machine does not exist'
+      if(!find(values(s.masters.parts),excelText(excelValue(row,'Type No.')),(v)=>[v.id,v.partNo,v.description])) return 'Type/part does not exist'
+      const total=excelNumber(excelValue(row,'Total Make')) ?? 0; const breakdown=['OK Qty','Scrap','Rework','MF'].reduce((sum,header)=>sum+(excelNumber(excelValue(row,header))??0),0)
       if(breakdown>total) return 'OK + Scrap + Rework + MF exceeds Total Make'
     }
     return undefined
@@ -143,7 +148,7 @@ export default function Attendance() {
         <div><h1 className="text-xl font-bold tracking-tight">Attendance &amp; payroll</h1>
         <p className="mt-0.5 text-[13px] text-muted-fg">Production-based and shift-based labour, with derived earnings.</p></div>
         <Button className="ml-auto w-24 shrink-0 justify-center" variant="secondary" leftIcon={<Download size={15}/>} onClick={exportAttendance}>Export</Button>
-        {tab !== 'earnings' && can('attendance','create') ? <ExcelImportButton title={`Import ${tab} attendance`} columns={tab === 'production' ? PRODUCTION_IMPORT_COLUMNS : SHIFT_IMPORT_COLUMNS} existingKeys={new Set(tab === 'production' ? values(useStore.getState().hr.production).map((r) => [r.date,r.shiftNo ?? '',useStore.getState().masters.employees.byId[r.employeeId]?.name ?? r.employeeId,useStore.getState().masters.machines.byId[r.machineId]?.machineNo ?? r.machineId,useStore.getState().masters.parts.byId[r.partId]?.partNo ?? r.partId].join('|').toLowerCase()) : values(useStore.getState().hr.shifts).map((r) => [r.date,r.shiftNo ?? '',useStore.getState().masters.employees.byId[r.employeeId]?.name ?? r.employeeId,r.fromTime,r.toTime].join('|').toLowerCase()))} rowKey={(row) => (tab === 'production' ? ['Date','Shift No','Employee','Machine','Part'] : ['Date','Shift No','Employee','From Time','To Time']).map((header) => excelText(excelValue(row,header))).join('|').toLowerCase()} validateRow={validateAttendanceImport} onRows={importAttendance}/> : null}
+        {tab !== 'earnings' && can('attendance','create') ? <ExcelImportButton title={`Import ${tab} attendance`} columns={tab === 'production' ? PRODUCTION_IMPORT_COLUMNS : SHIFT_IMPORT_COLUMNS} existingKeys={new Set(tab === 'production' ? values(useStore.getState().hr.production).map((r) => [r.date,r.shiftNo ?? '',useStore.getState().masters.employees.byId[r.employeeId]?.name ?? r.employeeId,useStore.getState().masters.machines.byId[r.machineId]?.machineNo ?? r.machineId,useStore.getState().masters.parts.byId[r.partId]?.partNo ?? r.partId].join('|').toLowerCase()) : values(useStore.getState().hr.shifts).map((r) => [r.date,r.shiftNo ?? '',useStore.getState().masters.employees.byId[r.employeeId]?.name ?? r.employeeId,r.fromTime,r.toTime].join('|').toLowerCase()))} rowKey={(row) => (tab === 'production' ? ['Date','Shift No.','Operator Name','M/c No.','Type No.'] : ['Date','Shift No.','Operator Name','Available From','Available To']).map((header) => excelText(excelValue(row,header))).join('|').toLowerCase()} validateRow={validateAttendanceImport} onRows={importAttendance}/> : null}
       </div>
       <Tabs items={TABS} value={tab} onChange={setTab} ariaLabel="Attendance method" />
       {tab === 'production' ? <ProductionTab /> : tab === 'shift' ? <ShiftTab /> : <EarningsTab />}
@@ -153,6 +158,7 @@ export default function Attendance() {
 
 function ProductionTab() {
   const can = useCan()
+  const entryUnit = useEntryUnitContext()
   const canCreate = can('attendance', 'create')
   const canEdit = can('attendance', 'edit')
   const canDelete = can('attendance', 'delete')
@@ -165,6 +171,7 @@ function ProductionTab() {
   const partById = useStore((s) => s.masters.parts.byId)
 
   const [editingId, setEditingId] = useState<Id | null>(null)
+  const [editingUnitId, setEditingUnitId] = useState('')
   const [deleting, setDeleting] = useState<ProductionAttendance | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
 
@@ -176,7 +183,7 @@ function ProductionTab() {
   const [operationId, setOperationId] = useState('')
 
   // Unit is derived from the employee — machine & part pickers follow it.
-  const unitId = employeeId ? empById[employeeId]?.unitId ?? '' : ''
+  const unitId = editingId ? editingUnitId : entryUnit.preferredUnitId
   const parts = useStore(useShallow(partOptionsForUnit(unitId)))
   const machines = useStore(useShallow(machineOptionsForUnit(unitId)))
   // Changing the employee (and thus unit) clears the machine + part pickers, since
@@ -202,6 +209,7 @@ function ProductionTab() {
   const [dtFrom, setDtFrom] = useState('')
   const [dtTo, setDtTo] = useState('')
   const [remark, setRemark] = useState('')
+  const [totalPayment, setTotalPayment] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [queued, setQueued] = useState<QueuedProduction[]>([])
   const [batchErrors, setBatchErrors] = useState<Record<string, Record<string, string>>>({})
@@ -226,7 +234,7 @@ function ProductionTab() {
     if (editingId || !machineId || !partId) return
     setStandard(lastClosing != null ? String(lastClosing + 1) : '0')
   }, [machineId, partId, editingId, lastClosing])
-  const earned = rate != null ? mulQty(rate, intOf(okQty)) : (0 as Paise)
+  const earned = rate != null ? Math.round(mulQty(rate, intOf(okQty)) / 100) as Paise : (0 as Paise)
 
   // Why is "Save production" disabled? Surface it instead of a silently greyed button.
   const blockReason =
@@ -265,14 +273,15 @@ function ProductionTab() {
     setDtFrom('')
     setDtTo('')
     setRemark('')
+    setTotalPayment('')
   }
 
   function startEdit(entry: ProductionAttendance) {
-    // If the employee's unit differs from the current one, the unitId effect will
-    // fire and would wipe the machine/part we're about to load — tell it to skip once.
-    const targetUnit = empById[entry.employeeId]?.unitId ?? ''
+    // Preserve the historical transaction unit while editing, regardless of navbar state.
+    const targetUnit = entry.unitId
     if (targetUnit !== unitId) skipUnitClear.current = true
     setEditingId(entry.id)
+    setEditingUnitId(entry.unitId)
     setDate(entry.date)
     setShiftNo(entry.shiftNo ?? '')
     setEmployeeId(entry.employeeId)
@@ -289,6 +298,7 @@ function ProductionTab() {
     setDtFrom(entry.downtimeFrom ?? '')
     setDtTo(entry.downtimeTo ?? '')
     setRemark(entry.remark ?? '')
+    setTotalPayment(entry.totalPaymentPaise != null ? String(fromPaise(entry.totalPaymentPaise)) : '')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -330,6 +340,7 @@ function ProductionTab() {
         downtimeFrom: dtFrom || undefined,
         downtimeTo: dtTo || undefined,
         remark: remark.trim() || undefined,
+        totalPaymentPaise: totalPayment.trim() ? toPaise(Number(totalPayment)) : undefined,
       })
       toastCommandSuccess(editingId ? 'Production updated' : 'Production saved', res.cascade)
       bumpRefresh()
@@ -345,6 +356,7 @@ function ProductionTab() {
         setDtFrom('')
         setDtTo('')
         setRemark('')
+        setTotalPayment('')
       }
     } catch (e) {
       toastCommandError(e)
@@ -361,12 +373,13 @@ function ProductionTab() {
       reworkQty: intOf(rework) || undefined, mfQty: intOf(mf) || undefined,
       downtimeFrom: dtFrom || undefined, downtimeTo: dtTo || undefined,
       remark: remark.trim() || undefined,
+      totalPaymentPaise: totalPayment.trim() ? toPaise(Number(totalPayment)) : undefined,
     }
   }
 
   function clearQuantities() {
     setTotalMake(''); setOkQty(''); setScrap(''); setRework(''); setMf('')
-    setDtFrom(''); setDtTo(''); setRemark('')
+    setDtFrom(''); setDtTo(''); setRemark(''); setTotalPayment('')
   }
 
   function addToBatch() {
@@ -388,7 +401,7 @@ function ProductionTab() {
     if (!i.date) errors.date = 'Date is required'
     if (!i.employeeId || !empById[i.employeeId]) errors.employee = 'Select a valid operator'
     if (!i.machineId || !machineById[i.machineId] || machineById[i.machineId]?.unitId !== i.unitId) errors.machine = 'Select a valid machine for this unit'
-    if (!i.partId || !partById[i.partId] || partById[i.partId]?.unitId !== i.unitId) errors.part = 'Select a valid part for this unit'
+    if (!i.partId || !partById[i.partId]) errors.part = 'Select a valid catalogue part'
     if (i.standard < 0) errors.standard = 'Start quantity cannot be negative'
     if (i.plan < i.standard) errors.plan = 'End quantity must be greater than or equal to start'
     if (i.totalMakeQty <= 0) errors.totalMakeQty = 'Total make must be greater than zero'
@@ -443,7 +456,7 @@ function ProductionTab() {
 
             {/* Production planning */}
             <Section title="Production planning">
-              <Fld label="Standard">
+              <Fld label="START QTY">
                 <div className="flex items-center gap-1.5">
                   <Num value={standard} set={setStandard} />
                   <button
@@ -456,7 +469,7 @@ function ProductionTab() {
                   </button>
                 </div>
               </Fld>
-              <Fld label="Plan"><Num value={plan} set={setPlan} /></Fld>
+              <Fld label="END QTY"><Num value={plan} set={setPlan} /></Fld>
               <Fld label="Total make qty"><Num value={totalMake} set={setTotalMake} placeholder={String(autoMake)} /></Fld>
             </Section>
 
@@ -484,6 +497,10 @@ function ProductionTab() {
                 </span>
                 <span className="text-muted-fg">Rate: <b className="text-fg mono">{rate != null ? `₹${fromPaise(rate).toLocaleString('en-IN')}` : '— no rate —'}</b></span>
                 <span className="text-primary">Earned: <b className="mono">{formatINRSymbol(earned)}</b></span>
+                <label className="flex items-center gap-2 text-muted-fg">
+                  Total payment
+                  <input type="number" min={0} step="0.01" className="input h-8 w-28" value={totalPayment} onChange={(e) => setTotalPayment(e.target.value)} />
+                </label>
               </span>
               <div className="ml-auto flex items-center gap-2">
                 {blockReason ? <span className="text-[12px] text-amber-600 dark:text-amber-500">{blockReason}</span> : null}
@@ -521,7 +538,7 @@ function ProductionTab() {
           </div>
           <table className="w-full min-w-[1050px] text-[12px]">
             <thead><tr className="border-b border-border bg-muted text-left text-[10.5px] uppercase text-muted-fg">
-              {['Date','Shift','M/c','Type / Part','Operation','Operator','Start','End','Total make','OK','Scrap','Rework','MF','Rate / pc','Amount',''].map((h) => <th key={h} className="px-2 py-2 font-semibold">{h}</th>)}
+              {['Date','Shift','M/c','Type / Part','Operation','Operator','Start','End','Total make','OK','Scrap','Rework','MF','Rate / 100 pc','Amount','Payment',''].map((h) => <th key={h} className="px-2 py-2 font-semibold">{h}</th>)}
             </tr></thead>
             <tbody>{queued.map((row) => {
               const i = row.input
@@ -532,7 +549,7 @@ function ProductionTab() {
                 <td className={`px-2 py-2 ${cell('machine')}`} title={errors.machine}>{row.machine}</td><td className={`px-2 py-2 ${cell('part')}`} title={errors.part}>{row.part}</td><td className="px-2 py-2">{row.operation}</td><td className={`px-2 py-2 ${cell('employee')}`} title={errors.employee}>{row.employee}</td>
                 <td className={`px-2 py-2 text-right mono ${cell('standard')}`} title={errors.standard}>{i.standard}</td><td className={`px-2 py-2 text-right mono ${cell('plan')}`} title={errors.plan}>{i.plan}</td><td className={`px-2 py-2 text-right mono ${cell('totalMakeQty')}`} title={errors.totalMakeQty}>{i.totalMakeQty}</td>
                 <td className={`px-2 py-2 text-right mono ${cell('quantities')}`} title={errors.quantities}>{i.okQty}</td><td className={`px-2 py-2 text-right mono ${cell('quantities')}`} title={errors.quantities}>{i.scrapQty ?? 0}</td><td className={`px-2 py-2 text-right mono ${cell('quantities')}`} title={errors.quantities}>{i.reworkQty ?? 0}</td><td className={`px-2 py-2 text-right mono ${cell('quantities')}`} title={errors.quantities}>{i.mfQty ?? 0}</td>
-                <td className={`px-2 py-2 text-right mono ${cell('rate')}`} title={errors.rate}>₹{fromPaise(row.rate)}</td><td className="px-2 py-2 text-right mono font-semibold">{formatINRSymbol(mulQty(row.rate, i.okQty))}</td>
+                <td className={`px-2 py-2 text-right mono ${cell('rate')}`} title={errors.rate}>₹{fromPaise(row.rate)}</td><td className="px-2 py-2 text-right mono font-semibold">{formatINRSymbol(Math.round(mulQty(row.rate, i.okQty) / 100) as Paise)}</td><td className="px-2 py-2 text-right mono">{i.totalPaymentPaise != null ? formatINRSymbol(i.totalPaymentPaise) : '—'}</td>
                 <td className="px-2 py-2"><button type="button" className="btn btn-ghost h-8 w-8 p-0 text-danger" onClick={() => { setQueued((rows) => rows.filter((x) => x.key !== row.key)); setBatchErrors((all) => { const next = { ...all }; delete next[row.key]; return next }) }} aria-label="Remove pending row"><Trash2 size={14} /></button></td>
               </tr>
             })}</tbody>
@@ -569,6 +586,7 @@ function ProductionTab() {
                 <th scope="col" className="px-3 py-2.5 text-right font-semibold">MF</th>
                 <th scope="col" className="px-3 py-2.5 text-right font-semibold">Down-time</th>
                 <th scope="col" className="px-3 py-2.5 text-right font-semibold">Earned</th>
+                <th scope="col" className="px-3 py-2.5 text-right font-semibold">Payment</th>
                 {canEdit || canDelete ? <th scope="col" className="px-3 py-2.5 text-right"><span className="sr-only">Actions</span></th> : null}
               </tr>
             </thead>
@@ -587,6 +605,7 @@ function ProductionTab() {
                   <td className="px-3 py-2.5 text-right mono">{(r.entry.mfQty ?? 0).toLocaleString('en-IN')}</td>
                   <td className="px-3 py-2.5 text-right mono text-muted-fg">{fmtMins(r.downtimeMins)}</td>
                   <td className="px-3 py-2.5 text-right mono font-semibold">{formatINRSymbol(r.earned)}</td>
+                  <td className="px-3 py-2.5 text-right mono">{r.entry.totalPaymentPaise != null ? formatINRSymbol(r.entry.totalPaymentPaise) : '—'}</td>
                   {canEdit || canDelete ? (
                     <td className="px-3 py-2.5">
                       <div className="flex items-center justify-end gap-1">
@@ -627,6 +646,7 @@ function ProductionTab() {
 
 function ShiftTab() {
   const can = useCan()
+  const entryUnit = useEntryUnitContext()
   const canCreate = can('attendance', 'create')
   const canEdit = can('attendance', 'edit')
   const canDelete = can('attendance', 'delete')
@@ -635,6 +655,7 @@ function ShiftTab() {
   const employees = useStore(useShallow(employeeOptionsWritable('shift')))
 
   const [editingId, setEditingId] = useState<Id | null>(null)
+  const [editingUnitId, setEditingUnitId] = useState('')
   const [deleting, setDeleting] = useState<ShiftAttendance | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
 
@@ -648,8 +669,8 @@ function ShiftTab() {
   const [queued, setQueued] = useState<QueuedShift[]>([])
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
 
-  // Unit derived from the chosen employee (no unit picker on the form).
-  const unitId = employeeId ? empById[employeeId]?.unitId ?? '' : ''
+  // Employees are global; the navbar selection owns the transaction unit.
+  const unitId = editingId ? editingUnitId : entryUnit.preferredUnitId
   const hours = minutesBetween(fromTime, toTime) / 60
   const shiftRate = employeeId ? empById[employeeId]?.standardShiftRatePaise ?? (0 as Paise) : (0 as Paise)
   const otHoursNum = otHours ? Number(otHours) : 0
@@ -670,6 +691,8 @@ function ShiftTab() {
 
   function resetForm() {
     setEditingId(null)
+    setEditingUnitId('')
+    setEditingUnitId('')
     setShiftNo('1')
     setEmployeeId('')
     setFromTime('09:00')
@@ -680,6 +703,7 @@ function ShiftTab() {
 
   function startEdit(entry: ShiftAttendance) {
     setEditingId(entry.id)
+    setEditingUnitId(entry.unitId)
     setDate(entry.date)
     setShiftNo(entry.shiftNo ?? '')
     setEmployeeId(entry.employeeId)
@@ -736,7 +760,7 @@ function ShiftTab() {
     if (!date) errors.date = 'Date is required'
     if (!shiftNo) errors.shiftNo = 'Shift number is required'
     if (!employeeId || !empById[employeeId]) errors.employeeId = 'Select a valid employee'
-    if (!unitId) errors.employeeId = 'Selected employee has no assigned unit'
+    if (!unitId) errors.employeeId = entryUnit.message || 'Select a unit from the navbar'
     if (!fromTime) errors.fromTime = 'Available-from time is required'
     if (!toTime) errors.toTime = 'Available-to time is required'
     if (fromTime && toTime && hours <= 0) errors.toTime = 'To time must be after From time (same-day shifts only)'

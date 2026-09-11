@@ -61,6 +61,8 @@ const productionSchema = z.object({
   downtimeFrom: z.string().optional(),
   downtimeTo: z.string().optional(),
   remark: z.string().optional(),
+  ratePaise: z.number().int().positive().optional(),
+  totalPaymentPaise: z.number().int().nonnegative().optional(),
 })
 type ProductionInput = z.infer<typeof productionSchema>
 
@@ -74,13 +76,14 @@ function validateProduction(s: RootState, input: ProductionInput): string[] {
   if (!emp) errors.push('Employee is required')
   if (!mc) errors.push('Machine is required')
   if (!part) errors.push('Part is required')
-  if (mc && mc.unitId !== input.unitId) errors.push('Machine belongs to a different unit than the employee')
-  if (part && part.unitId !== input.unitId) errors.push('Part belongs to a different unit than the employee')
+  if (mc && mc.unitId !== input.unitId) errors.push('Machine belongs to a different unit than the selected navbar unit')
   const ok = input.okQty
   const scrap = input.scrapQty ?? 0
   const rework = input.reworkQty ?? 0
   const mf = input.mfQty ?? 0
   if (input.totalMakeQty < 0) errors.push('Total make qty cannot be negative')
+  if (input.ratePaise != null && input.ratePaise <= 0) errors.push('Production rate must be greater than zero')
+  if (input.totalPaymentPaise != null && input.totalPaymentPaise < 0) errors.push('Total payment cannot be negative')
   if (ok < 0 || scrap < 0 || rework < 0 || mf < 0) errors.push('Production quantities cannot be negative')
   const breakdown = ok + scrap + rework + mf
   if (breakdown > input.totalMakeQty) {
@@ -91,7 +94,7 @@ function validateProduction(s: RootState, input: ProductionInput): string[] {
   if (input.downtimeFrom && input.downtimeTo && minutesBetween(input.downtimeFrom, input.downtimeTo) <= 0) {
     errors.push('Down-time "To" must be after "From"')
   }
-  if (latestProductionRate(s, input.partId, input.machineId, input.operationId, input.date) == null) {
+  if (input.ratePaise == null && latestProductionRate(s, input.partId, input.machineId, input.operationId, input.date) == null) {
     errors.push('No production rate is configured for this part on that date — add one in Rate Masters')
   }
   return errors
@@ -122,7 +125,7 @@ attendanceRouter.post(
     }
     const created = await mutate((state) => inputs.map((input) => {
       const id = genId('prod')
-      const rate = latestProductionRate(state, input.partId, input.machineId, input.operationId, input.date) as Paise
+      const rate = (input.ratePaise as Paise | undefined) ?? latestProductionRate(state, input.partId, input.machineId, input.operationId, input.date) as Paise
       const entry: ProductionAttendance = {
         id, unitId: input.unitId, date: input.date, shiftNo: input.shiftNo,
         employeeId: input.employeeId, machineId: input.machineId, partId: input.partId,
@@ -130,7 +133,7 @@ attendanceRouter.post(
         closingCounter: input.plan, totalMakeQty: input.totalMakeQty, okQty: input.okQty,
         scrapQty: input.scrapQty, reworkQty: input.reworkQty, mfQty: input.mfQty,
         downtimeFrom: input.downtimeFrom, downtimeTo: input.downtimeTo,
-        remark: input.remark, rateSnapshotPaise: rate,
+        remark: input.remark, rateSnapshotPaise: rate, totalPaymentPaise: input.totalPaymentPaise as Paise | undefined,
         createdBy: req.auth!.user.id, createdAt: nowISO(),
       }
       putEntity(state.hr.production, entry)
@@ -160,6 +163,7 @@ attendanceRouter.post(
     // Preserve the original snapshot on edit; otherwise fetch the in-force rate.
     const rate =
       existing?.rateSnapshotPaise ??
+      (input.ratePaise as Paise | undefined) ??
       (latestProductionRate(getDb(), input.partId, input.machineId, input.operationId, input.date) as Paise)
 
     const entry: ProductionAttendance = {
@@ -182,6 +186,7 @@ attendanceRouter.post(
       downtimeTo: input.downtimeTo,
       remark: input.remark,
       rateSnapshotPaise: rate,
+      totalPaymentPaise: input.totalPaymentPaise as Paise | undefined,
       createdBy: existing?.createdBy ?? req.auth!.user.id,
       createdAt: existing?.createdAt ?? nowISO(),
     }
@@ -216,6 +221,7 @@ const shiftSchema = z.object({
   toTime: z.string(),
   otHours: z.number().optional(),
   otRatePaise: z.number().int().optional(),
+  shiftRatePaise: z.number().int().positive().optional(),
 })
 type ShiftInput = z.infer<typeof shiftSchema>
 
@@ -225,8 +231,7 @@ function validateShift(s: RootState, input: ShiftInput): string[] {
   const employee = getById(s.masters.employees, input.employeeId)
   if (!employee) errors.push('Employee is required')
   else {
-    if (employee.unitId !== input.unitId) errors.push('Employee does not belong to the selected unit')
-    if ((employee.standardShiftRatePaise ?? 0) <= 0) errors.push('Employee shift rate is not configured')
+    if (input.shiftRatePaise == null && (employee.standardShiftRatePaise ?? 0) <= 0) errors.push('Employee shift rate is not configured')
   }
   if (minutesBetween(input.fromTime, input.toTime) <= 0) errors.push('To-time must be after from-time')
   if (input.otHours != null && input.otHours < 0) errors.push('OT hours cannot be negative')
@@ -264,7 +269,7 @@ attendanceRouter.post(
       const entry: ShiftAttendance = {
         id, unitId: input.unitId, date: input.date, shiftNo: input.shiftNo,
         employeeId: input.employeeId, fromTime: input.fromTime, toTime: input.toTime,
-        shiftRateSnapshotPaise: emp?.standardShiftRatePaise ?? (0 as Paise),
+        shiftRateSnapshotPaise: (input.shiftRatePaise as Paise | undefined) ?? emp?.standardShiftRatePaise ?? (0 as Paise),
         otHours: input.otHours, otRateSnapshotPaise: input.otRatePaise as Paise | undefined,
         createdBy: req.auth!.user.id, createdAt: nowISO(),
       }
@@ -293,7 +298,7 @@ attendanceRouter.post(
     const id = input.id ?? genId('shift')
     const emp = getById(getDb().masters.employees, input.employeeId)
     // Preserve the original snapshot on edit; otherwise snapshot the employee's rate.
-    const rate = existing?.shiftRateSnapshotPaise ?? (emp?.standardShiftRatePaise ?? (0 as Paise))
+    const rate = existing?.shiftRateSnapshotPaise ?? (input.shiftRatePaise as Paise | undefined) ?? (emp?.standardShiftRatePaise ?? (0 as Paise))
 
     const entry: ShiftAttendance = {
       id,

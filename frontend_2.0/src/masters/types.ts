@@ -115,6 +115,7 @@ export interface ToEntityCtx<T> {
   now: string
   actorId: Id
   existing: T | null
+  state: RootState
 }
 
 /** Type-erased, render-ready definition consumed by the UI + router. */

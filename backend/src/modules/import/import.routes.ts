@@ -39,8 +39,6 @@ interface ParsedDispatch {
   mfQty: number
   ratePaise?: number
   dispatchDate?: string
-  custInvoiceNo?: string
-  custInvoiceDate?: string
   kind: 'billed' | 'rejection'
 }
 
@@ -80,8 +78,6 @@ const dispatchSchema = z.object({
   mfQty: z.number().int().default(0),
   ratePaise: z.number().int().optional(),
   dispatchDate: z.string().optional(),
-  custInvoiceNo: z.string().optional(),
-  custInvoiceDate: z.string().optional(),
   kind: z.enum(['billed', 'rejection']),
 })
 
@@ -114,13 +110,13 @@ function parseSeq(billNo: string): number {
 }
 
 /** Match a sheet part-no to a Part within the target unit (case-insensitive). */
-function resolvePartId(s: RootState, unitId: Id, partNo: string): Id | undefined {
+function resolvePartId(s: RootState, _unitId: Id, partNo: string): Id | undefined {
   const norm = partNo.trim().toLowerCase()
-  return values(s.masters.parts).find((p) => p.unitId === unitId && p.partNo.trim().toLowerCase() === norm)?.id
+  return values(s.masters.parts).find((p) => p.partNo.trim().toLowerCase() === norm)?.id
 }
 
 /** Create a minimal Part for an auto-imported part-no (bearing-ring defaults). */
-function createImportedPart(draft: RootState, unitId: Id, partNo: string): Id {
+function createImportedPart(draft: RootState, _unitId: Id, partNo: string): Id {
   const id = genId('part')
   const clean = partNo.trim()
   const part: Part = {
@@ -128,7 +124,7 @@ function createImportedPart(draft: RootState, unitId: Id, partNo: string): Id {
     partNo: clean,
     materialCode: clean.toUpperCase().replace(/\s+/g, '-'),
     description: 'Imported from MIO workbook',
-    unitId,
+    unitId: 'GLOBAL',
     uom: 'NOS',
     hsnSac: '84829900',
     gstPct: 12,
@@ -148,8 +144,8 @@ function inwardIssues(s: RootState, unitId: Id, inw: ParsedInward, auto: boolean
   const sheetRow = inw.rowIndex + 2
   const partId = resolvePartId(s, unitId, inw.partNo)
   if (!partId) {
-    if (auto) issues.push({ level: 'warn', row: sheetRow, message: `Part "${inw.partNo}" will be created in this unit` })
-    else issues.push({ level: 'error', row: sheetRow, message: `Unknown part "${inw.partNo}" in this unit — add it in Masters first` })
+    if (auto) issues.push({ level: 'warn', row: sheetRow, message: `Part "${inw.partNo}" will be created in the global catalogue` })
+    else issues.push({ level: 'error', row: sheetRow, message: `Unknown part "${inw.partNo}" — add it in Part Master first` })
   }
   if (!inw.challanNo) issues.push({ level: 'error', row: sheetRow, message: 'Missing challan no' })
   if (!inw.challanDate) issues.push({ level: 'error', row: sheetRow, message: 'Missing / invalid challan date' })
@@ -296,8 +292,6 @@ function applyImport(
         dispatchDate: d.dispatchDate,
         rateSnapshotPaise: billed ? (d.ratePaise as Paise | undefined) : undefined,
         gstPctSnapshot: billed ? part?.gstPct : undefined,
-        custInvoiceNo: d.custInvoiceNo,
-        custInvoiceDate: d.custInvoiceDate,
         createdBy: actorId,
         createdAt: now,
       }

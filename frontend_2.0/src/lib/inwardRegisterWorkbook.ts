@@ -23,8 +23,6 @@ export const INWARD_REGISTER_COLUMNS: ExportColumn[] = [
   { key: 'ratePerPc', label: 'Rate / Pc' },
   { key: 'gstPct', label: 'GST %' },
   { key: 'outwardValue', label: 'Outward Value (ex-GST)' },
-  { key: 'customerInvoiceNo', label: 'Customer Invoice No' },
-  { key: 'customerInvoiceDate', label: 'Customer Invoice Date' },
   { key: 'availableQty', label: 'Available Qty' },
   { key: 'status', label: 'Status' },
 ]
@@ -35,7 +33,7 @@ export const INWARD_REGISTER_SAMPLE_ROWS: Record<string, unknown>[] = [
     poNo: 'PO-001', batchHeatNo: 'HEAT-001', rmRate: 125, receivedQty: 1000, dispatchType: 'Billed',
     billNo: '001/26-27', billDate: '2026-04-10', dispatchDate: '2026-04-10', okQty: 600,
     mrQty: 5, mfQty: 2, totalDispatchQty: 607, ratePerPc: 15, gstPct: 18,
-    outwardValue: 9000, customerInvoiceNo: 'CUST-INV-001', customerInvoiceDate: '2026-04-10',
+    outwardValue: 9000,
     availableQty: 393, status: 'Open',
   },
   {
@@ -43,7 +41,7 @@ export const INWARD_REGISTER_SAMPLE_ROWS: Record<string, unknown>[] = [
     challanNo: '', challanDate: '', partNo: '', vendor: '', poNo: '', batchHeatNo: '', rmRate: '', receivedQty: '',
     dispatchType: 'Billed', billNo: '002/26-27', billDate: '2026-04-15', dispatchDate: '2026-04-15',
     okQty: 393, mrQty: 0, mfQty: 0, totalDispatchQty: 393, ratePerPc: 15, gstPct: 18,
-    outwardValue: 5895, customerInvoiceNo: '', customerInvoiceDate: '', availableQty: 0, status: 'Dispatched',
+    outwardValue: 5895, availableQty: 0, status: 'Dispatched',
   },
 ]
 
@@ -67,7 +65,7 @@ export function buildInwardRegisterExportRows(rows: InwardRow[]): Record<string,
     if (row.children.length === 0) {
       return [{
         ...base, dispatchType: '', billNo: '', billDate: '', dispatchDate: '', okQty: '', mrQty: '', mfQty: '',
-        totalDispatchQty: '', ratePerPc: '', gstPct: '', outwardValue: '', customerInvoiceNo: '', customerInvoiceDate: '',
+        totalDispatchQty: '', ratePerPc: '', gstPct: '', outwardValue: '',
         ...balance,
       }]
     }
@@ -84,8 +82,6 @@ export function buildInwardRegisterExportRows(rows: InwardRow[]): Record<string,
       ratePerPc: dispatch.rateSnapshotPaise != null ? fromPaise(dispatch.rateSnapshotPaise) : '',
       gstPct: dispatch.gstPctSnapshot ?? '',
       outwardValue: dispatch.rateSnapshotPaise != null ? fromPaise(mulQty(dispatch.rateSnapshotPaise, dispatch.okQty)) : '',
-      customerInvoiceNo: dispatch.custInvoiceNo ?? '',
-      customerInvoiceDate: dispatch.custInvoiceDate ?? '',
       ...balance,
     }))
   })

@@ -43,13 +43,15 @@ describe('production attendance', () => {
     const res = runSaveProductionAttendance({
       unitId: 'u1', date: '2025-05-01', employeeId: anEmployee().id, machineId: aMachine().id, partId: u1Part().id,
       standard: 1000, plan: 1500, totalMakeQty: 500, okQty: 480, scrapQty: 15, reworkQty: 5,
+      totalPaymentPaise: toPaise(10),
     })
     const e = getById(st().hr.production, res.data.id)!
     expect(makeQty(e)).toBe(500)
     expect(e.scrapQty).toBe(15)
     expect(e.reworkQty).toBe(5)
     expect(e.rateSnapshotPaise).toBe(toPaise(3))
-    expect(productionEarned(e)).toBe(mulQty(toPaise(3), 480))
+    expect(e.totalPaymentPaise).toBe(toPaise(10))
+    expect(productionEarned(e)).toBe(Math.round(mulQty(toPaise(3), 480) / 100))
   })
 
   it('rejects a production breakdown (OK+Scrap+Rework+MF) greater than total made', () => {

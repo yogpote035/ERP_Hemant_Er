@@ -95,11 +95,11 @@ describe('write-through routing (non-admin → module endpoints)', () => {
     expect(M.mastersApi.create).toHaveBeenCalledWith('customers', expect.objectContaining({ name: 'WT Customer' }))
   })
 
-  it('passes a unit-scoped master unitId through to the backend client', async () => {
+  it('writes a new part to the global catalogue', async () => {
     const part = MASTER_SPECS.find((s) => s.key === 'part')!
     part.save({ partNo: 'WT-PART', materialCode: 'WT-RM', unitId: 'u1', uom: 'NOS', hsnSac: '7318', gstPct: '18', finishWtG: 1, scrapWtG: 0.1, avgQtyPerBox: 10 }, null)
     await flush()
-    expect(M.mastersApi.create).toHaveBeenCalledWith('parts', expect.objectContaining({ unitId: 'u1' }))
+    expect(M.mastersApi.create).toHaveBeenCalledWith('parts', expect.objectContaining({ unitId: 'GLOBAL' }))
   })
 
   it('routes attendance + expense-edit + rejection-edit (previously local-only)', async () => {

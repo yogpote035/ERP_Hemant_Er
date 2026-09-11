@@ -116,6 +116,7 @@ export default function ImportWizard({
   const stats = useMemo(() => summarize(grouped.inwards), [grouped])
   const errorCount = issues.filter((i) => i.level === 'error').length
   const warnCount = issues.filter((i) => i.level === 'warn').length
+  const errorIssues = issues.filter((i) => i.level === 'error')
 
   // When skipping invalid rows, import only the importable challans (real
   // workbooks carry footer/total junk that would otherwise block everything).
@@ -125,6 +126,12 @@ export default function ImportWizard({
   )
   const importable = skipInvalid ? partition.valid : grouped.inwards
   const importDisabled = importable.length === 0 || (!skipInvalid && errorCount > 0)
+  const duplicateOnly =
+    skipInvalid &&
+    importable.length === 0 &&
+    partition.skipped.length > 0 &&
+    errorIssues.length > 0 &&
+    errorIssues.every((issue) => issue.message.includes('already exists'))
 
   function doImport() {
     setImporting(true)
@@ -340,12 +347,16 @@ export default function ImportWizard({
           </div>
 
           {/* Plain-language summary of what the import will actually do. */}
-          <div className={`rounded-lg border px-3.5 py-2.5 text-[13px] ${importable.length ? 'border-success/30 bg-success/10 text-success' : 'border-danger/30 bg-danger/10 text-danger'}`}>
+          <div className={`rounded-lg border px-3.5 py-2.5 text-[13px] ${importable.length ? 'border-success/30 bg-success/10 text-success' : duplicateOnly ? 'border-warning/30 bg-warning/10 text-warning' : 'border-danger/30 bg-danger/10 text-danger'}`}>
             {importable.length ? (
               <>
                 <b>{intFmt(importable.length)} challans will import.</b>
                 {skipInvalid && partition.skipped.length ? ` ${intFmt(partition.skipped.length)} skipped (footer totals / duplicates / over-dispatch).` : ''}
                 {warnCount ? ` ${intFmt(warnCount)} notices below are informational — safe to ignore.` : ''}
+              </>
+            ) : duplicateOnly ? (
+              <>
+                <b>All {intFmt(partition.skipped.length)} challans already exist in the selected unit.</b> No new records will be imported.
               </>
             ) : !skipInvalid && errorCount ? (
               <>{intFmt(errorCount)} error(s) are blocking — tick “Skip invalid rows” on the first step to import the valid challans, or fix the file.</>

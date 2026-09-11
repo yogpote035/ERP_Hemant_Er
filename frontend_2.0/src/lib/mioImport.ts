@@ -28,8 +28,6 @@ export const MIO_FIELDS = [
   { key: 'mfQty', label: 'MF (material fault)', required: false },
   { key: 'ratePerPc', label: 'Rate / Pc', required: false },
   { key: 'dispatchDate', label: 'Dispatch Date', required: false },
-  { key: 'custInvoiceNo', label: 'Customer Invoice No', required: false },
-  { key: 'custInvoiceDate', label: 'Customer Invoice Date', required: false },
 ] as const
 
 export type MioFieldKey = (typeof MIO_FIELDS)[number]['key']
@@ -45,8 +43,6 @@ export interface ParsedDispatch {
   mfQty: number
   ratePaise?: Paise
   dispatchDate?: string
-  custInvoiceNo?: string
-  custInvoiceDate?: string
   kind: 'billed' | 'rejection'
 }
 
@@ -138,8 +134,6 @@ export function autoDetectColumns(header: unknown[]): MioColumnMap {
   map.mfQty = norm.findIndex((h) => h === 'mf' || h.includes('materialfault') || h.startsWith('mf'))
   map.ratePerPc = norm.findIndex((h) => h.includes('ratepc') || h.includes('rateperpc'))
   map.dispatchDate = norm.findIndex((h) => h.includes('dispatchdate'))
-  map.custInvoiceNo = norm.findIndex((h) => h.includes('invoiceno'))
-  map.custInvoiceDate = norm.findIndex((h) => h.includes('invoicedate'))
   return map
 }
 
@@ -215,8 +209,6 @@ export function groupMioRows(rows: unknown[][], map: MioColumnMap, headerRowIdx 
         mfQty: mf,
         ratePaise: billed ? ratePaise : undefined,
         dispatchDate: parseFlexibleDate(cell(row, map.dispatchDate)) ?? undefined,
-        custInvoiceNo: str(cell(row, map.custInvoiceNo)) || undefined,
-        custInvoiceDate: parseFlexibleDate(cell(row, map.custInvoiceDate)) ?? undefined,
         kind: billed ? 'billed' : 'rejection',
       })
     }

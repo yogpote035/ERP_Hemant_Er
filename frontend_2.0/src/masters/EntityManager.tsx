@@ -133,12 +133,22 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
   }
 
   const importColumns: ExcelImportColumn[] = spec.fields.map((field) => ({ key: field.name, label: field.label, required: 'required' in field ? field.required : false }))
+  const sampleRows = spec.key === 'machine' ? [{
+    machineNo: 'MC-01', unitId: '', description: 'CNC turning machine',
+    manufacturer: 'Ace Micromatic', modelNo: 'Jobber XL', manufacturerIdNo: 'AM-2026-001',
+    purchaseYear: 2026, powerRating: '15 kW', capacity: '250 mm', referenceDocument: 'Machine manual / invoice',
+    stabilizerMake: 'Servomax', stabilizerManufacturerIdNo: 'STB-2026-001', stabilizerCapacity: '25 kVA',
+  }] : spec.key === 'employee' ? [{
+    name: 'Example Employee', empCode: '/HI/EMP/001', aadhaarNo: '123412341234',
+    address: 'Pune, Maharashtra', phone: '9876543210', standardShiftRate: 500,
+    labourType: 'operator',
+  }] : undefined
   const duplicateKey = (form: Record<string, unknown>) => {
     const val = (name: string) => String(form[name] ?? '').trim().toLowerCase()
     if (spec.key === 'unit') return val('shortCode')
     if (spec.key === 'customer') return `${val('name')}|${val('gstin')}`
-    if (spec.key === 'vendor') return val('code')
-    if (spec.key === 'part') return `${val('unitId')}|${val('partNo')}`
+    if (spec.key === 'vendor') return `${val('name')}|${val('gstin')}`
+    if (spec.key === 'part') return val('partNo')
     if (spec.key === 'machine') return `${val('unitId')}|${val('machineNo')}`
     if (spec.key === 'operation') return val('code')
     if (spec.key === 'employee') return val('empCode')
@@ -192,7 +202,7 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
           {canExport && !actions ? (
             <Button className="w-24 shrink-0 justify-center" variant="secondary" size="sm" leftIcon={<Download size={15} />} onClick={exportMaster}>Export</Button>
           ) : null}
-          {canCreate ? <ExcelImportButton size="sm" title={`Import ${spec.labelPlural}`} columns={importColumns} existingKeys={existingKeys} rowKey={rowDuplicateKey} validateRow={validateImportRow} onRows={importMaster} prefill={entryUnit.preferredUnitId ? { unitId: entryUnit.preferredUnitId } : undefined} contextMessage={spec.fields.some((field) => field.name === 'unitId') ? entryUnit.message : undefined} /> : null}
+          {canCreate ? <ExcelImportButton size="sm" title={`Import ${spec.labelPlural}`} columns={importColumns} existingKeys={existingKeys} rowKey={rowDuplicateKey} validateRow={validateImportRow} onRows={importMaster} prefill={entryUnit.preferredUnitId ? { unitId: entryUnit.preferredUnitId } : undefined} contextMessage={spec.fields.some((field) => field.name === 'unitId') ? entryUnit.message : undefined} sampleRows={sampleRows} sampleFilename={spec.key === 'machine' ? 'machine-import-sample.xlsx' : undefined} /> : null}
           {canCreate && scopedRows.length > 0 ? (
             <Button size="sm" leftIcon={<Plus size={15} />} onClick={() => setEditing({ row: null })}>
               New {spec.label}

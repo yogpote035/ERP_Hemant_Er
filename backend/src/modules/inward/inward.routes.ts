@@ -138,7 +138,6 @@ inwardRouter.post(
     if (!getById(db.masters.units, body.unitId)) throw badRequest('Unknown unit')
     const part = getById(db.masters.parts, body.partId)
     if (!part) throw badRequest('Unknown part')
-    if (part.unitId !== body.unitId) throw badRequest('Catalogue part does not belong to the selected unit')
     const vendor = body.vendorId ? getById(db.masters.vendors, body.vendorId) : undefined
     if (body.vendorId && (!vendor || !vendor.active)) throw badRequest('Unknown or inactive vendor')
     if (vendor?.unitId && vendor.unitId !== body.unitId) throw badRequest('RM supplier does not belong to the selected unit')
@@ -200,7 +199,6 @@ inwardRouter.put(
     if (!getById(db.masters.units, body.unitId)) throw badRequest('Unknown unit')
     const part = getById(db.masters.parts, body.partId)
     if (!part) throw badRequest('Unknown part')
-    if (part.unitId !== body.unitId) throw badRequest('Catalogue part does not belong to the selected unit')
     const vendor = body.vendorId ? getById(db.masters.vendors, body.vendorId) : undefined
     if (body.vendorId && (!vendor || !vendor.active)) throw badRequest('Unknown or inactive vendor')
     if (vendor?.unitId && vendor.unitId !== body.unitId) throw badRequest('RM supplier does not belong to the selected unit')

@@ -17,9 +17,8 @@ export const unitOptions = (s: RootState): SelectOption[] => {
 }
 
 export const partOptions = (s: RootState): SelectOption[] => {
-  const writable = writableUnitIds(s)
   return values(s.masters.parts)
-    .filter((p) => p.active && writable.has(p.unitId))
+    .filter((p) => p.active)
     .map((p) => ({
       value: p.id,
       label: p.partNo,
@@ -27,30 +26,26 @@ export const partOptions = (s: RootState): SelectOption[] => {
     }))
 }
 
-const vendorOpt = (v: { id: string; name: string; code: string; type: string }): SelectOption => ({
+const vendorOpt = (v: { id: string; name: string; gstin?: string }): SelectOption => ({
   value: v.id,
   label: v.name,
-  subtitle: `${v.code} · ${v.type === 'rm' ? 'RM supplier' : 'Service'}`,
+  subtitle: v.gstin ? `GSTIN ${v.gstin}` : undefined,
 })
 export const vendorOptions = (s: RootState): SelectOption[] =>
   values(s.masters.vendors).filter((v) => v.active).map(vendorOpt)
 /** RM suppliers only — for the Inward "RM Supplier" picker. */
 export const rmVendorOptions = (s: RootState): SelectOption[] =>
-  values(s.masters.vendors).filter((v) => v.active && v.type === 'rm').map(vendorOpt)
+  values(s.masters.vendors).filter((v) => v.active).map(vendorOpt)
 /** Service vendors only — for the Expense vendor picker. */
 export const serviceVendorOptions = (s: RootState): SelectOption[] =>
-  values(s.masters.vendors).filter((v) => v.active && v.type === 'service').map(vendorOpt)
+  values(s.masters.vendors).filter((v) => v.active).map(vendorOpt)
 
 /** Vendors usable for an expense in one selected unit. Explicit unit assignment
  * is preferred; older vendors are inferred only from transactions in that unit. */
 export const vendorOptionsForUnit = (unitId: string) => (s: RootState): SelectOption[] => {
   if (!unitId || !writableUnitIds(s).has(unitId)) return []
-  const historicallyUsed = new Set([
-    ...values(s.expenses.expenses).filter((e) => e.unitId === unitId).map((e) => e.vendorId),
-    ...values(s.inventory.inwards).filter((i) => i.unitId === unitId).map((i) => i.vendorId),
-  ].filter((id): id is string => Boolean(id)))
   return values(s.masters.vendors)
-    .filter((v) => v.active && (v.unitId === unitId || (!v.unitId && historicallyUsed.has(v.id))))
+    .filter((v) => v.active)
     .map(vendorOpt)
 }
 
@@ -82,7 +77,7 @@ export const operationOptions = (s: RootState): SelectOption[] =>
 export const partOptionsForUnit = (unitId: string) => (s: RootState): SelectOption[] =>
   unitId
     ? values(s.masters.parts)
-        .filter((p) => p.active && p.unitId === unitId)
+        .filter((p) => p.active)
         .map((p) => ({ value: p.id, label: p.partNo, subtitle: p.materialCode }))
     : []
 
@@ -93,19 +88,15 @@ export const machineOptionsForUnit = (unitId: string) => (s: RootState): SelectO
         .map((m) => ({ value: m.id, label: m.machineNo, subtitle: m.description }))
     : []
 
+const supportsAttendanceMethod = (type: string, method?: 'production' | 'shift') =>
+  !method || type === method || type === 'both' || !['production', 'shift', 'both'].includes(type)
+
 export const employeeOptionsForUnit =
-  (unitId: string, labourType?: 'production' | 'shift') =>
+  (_unitId: string, labourType?: 'production' | 'shift') =>
   (s: RootState): SelectOption[] =>
-    unitId
-      ? values(s.masters.employees)
-          .filter(
-            (e) =>
-              e.active &&
-              e.unitId === unitId &&
-              (!labourType || e.labourType === labourType || e.labourType === 'both')
-          )
-          .map((e) => ({ value: e.id, label: e.name, subtitle: `${e.empCode} · ${e.labourType}` }))
-      : []
+    values(s.masters.employees)
+      .filter((e) => e.active && supportsAttendanceMethod(e.labourType, labourType))
+      .map((e) => ({ value: e.id, label: e.name, subtitle: `${e.empCode} · ${e.labourType}` }))
 
 /**
  * Employees across ALL units the user may write to (attendance no longer asks for
@@ -115,18 +106,16 @@ export const employeeOptionsForUnit =
 export const employeeOptionsWritable =
   (labourType?: 'production' | 'shift') =>
   (s: RootState): SelectOption[] => {
-    const writable = writableUnitIds(s)
     return values(s.masters.employees)
       .filter(
         (e) =>
           e.active &&
-          writable.has(e.unitId) &&
-          (!labourType || e.labourType === labourType || e.labourType === 'both')
+          supportsAttendanceMethod(e.labourType, labourType)
       )
       .map((e) => ({
         value: e.id,
         label: e.name,
-        subtitle: `${e.empCode} · ${s.masters.units.byId[e.unitId]?.code ?? ''}`.trim(),
+        subtitle: `${e.empCode} · ${e.labourType}`,
       }))
   }
 

@@ -121,8 +121,6 @@ function validateInward(s: RootState, input: InwardInput): { ok: true } | { ok: 
   if (!input.partId) errors.push('Part is required')
   if (!(input.receivedQty > 0)) errors.push('Received qty must be greater than 0')
   if (input.unitId && !writableUnitIds(s).has(input.unitId)) errors.push("You don't have access to that unit")
-  const part = getById(s.masters.parts, input.partId)
-  if (part && part.unitId !== input.unitId) errors.push('Catalogue part does not belong to the selected unit')
   const vendor = input.vendorId ? getById(s.masters.vendors, input.vendorId) : undefined
   if (input.vendorId && (!vendor || !vendor.active)) errors.push('RM supplier is unknown or inactive')
   else if (vendor?.unitId && vendor.unitId !== input.unitId) errors.push('RM supplier does not belong to the selected unit')

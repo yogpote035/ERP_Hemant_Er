@@ -15,8 +15,9 @@ const ZERO = 0 as Paise
  *  fall back to the old counter delta (closing − opening). */
 export const makeQty = (a: ProductionAttendance): number =>
   a.totalMakeQty ?? Math.max(0, a.closingCounter - a.openingCounter)
-/** Earned amount on a production entry (okQty × snapshot rate). */
-export const productionEarned = (a: ProductionAttendance): Paise => mulQty(a.rateSnapshotPaise, a.okQty)
+/** Earned amount: the production rate is quoted per 100 acceptable pieces. */
+export const productionEarned = (a: ProductionAttendance): Paise =>
+  Math.round(mulQty(a.rateSnapshotPaise, a.okQty) / 100) as Paise
 
 /** Closing counter of the most recent production entry for a (machine, part) — the
  *  basis for auto-filling the next Standard counter (= last Plan + 1). Excludes the

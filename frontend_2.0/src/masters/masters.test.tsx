@@ -16,6 +16,24 @@ beforeEach(() => {
 })
 
 describe('master commands', () => {
+  it('persists machine identification, purchase, capacity and stabilizer details', () => {
+    login(roleId('admin'))
+    const machine = spec('machine')
+    const result = machine.save({
+      machineNo: 'MC-DETAIL-01', unitId: 'u1', description: 'CNC turning machine',
+      manufacturer: 'Ace Micromatic', modelNo: 'Jobber XL', manufacturerIdNo: 'AM-001',
+      purchaseYear: 2026, powerRating: '15 kW', capacity: '250 mm', referenceDocument: 'Invoice INV-01',
+      stabilizerMake: 'Servomax', stabilizerManufacturerIdNo: 'STB-001', stabilizerCapacity: '25 kVA',
+    }, null)
+    const created = useStore.getState().masters.machines.byId[result.data.id]!
+    expect(created).toMatchObject({
+      machineNo: 'MC-DETAIL-01', manufacturer: 'Ace Micromatic', modelNo: 'Jobber XL',
+      manufacturerIdNo: 'AM-001', purchaseYear: 2026, powerRating: '15 kW', capacity: '250 mm',
+      referenceDocument: 'Invoice INV-01', stabilizerMake: 'Servomax',
+      stabilizerManufacturerIdNo: 'STB-001', stabilizerCapacity: '25 kVA',
+    })
+  })
+
   it('creates, updates, soft-deletes and reactivates a customer (admin)', () => {
     login(roleId('admin'))
     const customer = spec('customer')
@@ -81,42 +99,33 @@ describe('master commands', () => {
 })
 
 describe('command-bus guards (review fixes)', () => {
-  it('enforces writable-unit membership: a manager cannot write a part into an unassigned unit', () => {
-    login(roleId('manager')) // seed manager is assigned u1, u2
+  it('creates parts in the global catalogue without accepting a unit assignment', () => {
+    login(roleId('manager'))
     const part = spec('part')
-    const partValues = {
-      partNo: 'X-1', materialCode: 'MC-1', uom: 'NOS', hsnSac: '7326', gstPct: '12',
+    const result = part.save({
+      partNo: 'X-1', materialCode: 'MC-1', unitId: 'u3', uom: 'NOS', hsnSac: '7326', gstPct: '12',
       finishWtG: 1, scrapWtG: 0.1, avgQtyPerBox: 100,
-    }
-    // u3 is outside the manager's assigned units → rejected (zero mutation).
-    expect(() => part.save({ ...partValues, unitId: 'u3' }, null)).toThrow(CommandValidationError)
-    // u1 is assigned → allowed.
-    expect(part.save({ ...partValues, unitId: 'u1' }, null).ok).toBe(true)
+    }, null)
+    expect(result.ok).toBe(true)
+    expect(useStore.getState().masters.parts.byId[result.data.id]?.unitId).toBe('GLOBAL')
   })
 
-  it('rejects an opening whose part is in another unit, and enforces ONE opening per (unit, part)', () => {
+  it('allows a global part in each unit and enforces one opening per unit and part', () => {
     login(roleId('admin'))
     const opening = spec('opening')
     const st = useStore.getState()
-    // a part that has no opening yet (only p6/p9 are seeded)
     const freshPart = values(st.masters.parts).find(
-      (p) => !values(st.masters.stockOpenings).some((o) => o.partId === p.id && o.unitId === p.unitId)
+      (p) => !values(st.masters.stockOpenings).some((o) => o.partId === p.id)
     )!
-    const otherUnit = st.masters.units.allIds.find((id) => id !== freshPart.unitId)!
-    // wrong unit → rejected
-    expect(() =>
-      opening.save({ unitId: otherUnit, partId: freshPart.id, fy: '24-25', openingQty: 10, asOfDate: '2024-04-01' }, null)
-    ).toThrow(CommandValidationError)
-    // first opening for a matching unit → accepted
-    const r = opening.save({ unitId: freshPart.unitId, partId: freshPart.id, fy: '24-25', openingQty: 10, asOfDate: '2024-04-01' }, null)
+    const firstUnit = st.masters.units.allIds[0]!
+    const secondUnit = st.masters.units.allIds.find((id) => id !== firstUnit)!
+    const r = opening.save({ unitId: firstUnit, partId: freshPart.id, fy: '24-25', openingQty: 10, asOfDate: '2024-04-01' }, null)
     expect(r.ok).toBe(true)
-    // a SECOND opening for the same (unit, part) — even a different FY — is rejected so
-    // lifetime-cumulative stock can't double-count the carry-forward.
     expect(() =>
-      opening.save({ unitId: freshPart.unitId, partId: freshPart.id, fy: '25-26', openingQty: 5, asOfDate: '2025-04-01' }, null)
+      opening.save({ unitId: firstUnit, partId: freshPart.id, fy: '25-26', openingQty: 5, asOfDate: '2025-04-01' }, null)
     ).toThrow(CommandValidationError)
-    // editing the existing opening row in place is still allowed (excludes self)
-    expect(opening.save({ unitId: freshPart.unitId, partId: freshPart.id, fy: '24-25', openingQty: 20, asOfDate: '2024-04-01' }, r.data).ok).toBe(true)
+    expect(opening.save({ unitId: secondUnit, partId: freshPart.id, fy: '24-25', openingQty: 5, asOfDate: '2024-04-01' }, null).ok).toBe(true)
+    expect(opening.save({ unitId: firstUnit, partId: freshPart.id, fy: '24-25', openingQty: 20, asOfDate: '2024-04-01' }, r.data).ok).toBe(true)
   })
 
   it('deactivation requires delete: a manager can reactivate (edit) but not deactivate (delete)', () => {
@@ -140,14 +149,13 @@ describe('command-bus guards (review fixes)', () => {
     expect(() => customer.save({ name: 'Second', gstin: '27ZZZZZ1234F1Z5', stateCode: '27' }, null)).not.toThrow()
   })
 
-  it('enforces part-number uniqueness within a unit', () => {
+  it('enforces part-number uniqueness across the global catalogue', () => {
     login(roleId('admin'))
     const part = spec('part')
     const base = { materialCode: 'M1', unitId: 'u1', uom: 'NOS', hsnSac: '7318', gstPct: '18', finishWtG: 1, scrapWtG: 0.1, avgQtyPerBox: 100 }
     part.save({ ...base, partNo: 'UNIQ-1' }, null)
     expect(() => part.save({ ...base, partNo: 'uniq-1' }, null)).toThrow(CommandValidationError) // case-insensitive dup
-    // same part no. in a DIFFERENT unit is allowed
-    expect(part.save({ ...base, partNo: 'UNIQ-1', unitId: 'u2' }, null).ok).toBe(true)
+    expect(() => part.save({ ...base, partNo: 'UNIQ-1', unitId: 'u2' }, null)).toThrow(CommandValidationError)
   })
 })
 

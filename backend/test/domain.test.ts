@@ -80,11 +80,11 @@ describe('payroll', () => {
   it('derives production earnings and shift wages (with OT)', () => {
     const pa1 = getById(s.hr.production, 'pa1')!
     const sh1 = getById(s.hr.shifts, 'sh1')!
-    assert.equal(productionEarned(pa1), 295000) // 1180 OK × ₹2.50
+    assert.equal(productionEarned(pa1), 2950) // 1180 OK × ₹2.50 per 100 pcs
     assert.equal(shiftWage(sh1), 81000) // 8h × ₹700 + 1h OT × ₹110
 
     const rows = selectEarnings(s)
-    assert.equal(rows.find((r) => r.employeeId === 'e1')!.total, 295000)
+    assert.equal(rows.find((r) => r.employeeId === 'e1')!.total, 2950)
     assert.equal(rows.find((r) => r.employeeId === 'e2')!.total, 81000)
   })
 })

@@ -365,6 +365,16 @@ export interface Machine {
   id: Id
   machineNo: string
   description?: string
+  manufacturer?: string
+  modelNo?: string
+  manufacturerIdNo?: string
+  purchaseYear?: number
+  powerRating?: string
+  capacity?: string
+  referenceDocument?: string
+  stabilizerMake?: string
+  stabilizerManufacturerIdNo?: string
+  stabilizerCapacity?: string
   unitId: Id
   active: boolean
 }
@@ -374,15 +384,17 @@ export interface Operation {
   description?: string
   active: boolean
 }
-export type LabourType = 'production' | 'shift' | 'both'
+export type LabourType = 'production' | 'shift' | 'both' | 'helper' | 'operator' | 'supervisor' | 'job_inspector'
 export interface Employee {
   id: Id
   name: string
   empCode: string
   phone?: string
+  aadhaarNo?: string
+  address?: string
   labourType: LabourType
   standardShiftRatePaise: Paise
-  unitId: Id
+  unitId?: Id
   active: boolean
 }
 export interface ProductionAttendance {
@@ -405,6 +417,7 @@ export interface ProductionAttendance {
   downtimeTo?: string
   remark?: string
   rateSnapshotPaise: Paise
+  totalPaymentPaise?: Paise
   createdBy: Id
   createdAt: ISODate
 }

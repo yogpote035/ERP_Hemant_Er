@@ -64,7 +64,6 @@ function activePartKeys(s: RootState): { unitId: Id; partId: Id }[] {
       out.push({ unitId, partId })
     }
   }
-  for (const p of values(s.masters.parts)) add(p.unitId, p.id)
   for (const i of values(s.inventory.inwards)) add(i.unitId, i.partId)
   for (const o of values(s.masters.stockOpenings)) add(o.unitId, o.partId)
   return out

@@ -51,7 +51,7 @@ export function makeMasterCommands<T extends BaseEntity, F extends FieldValues>(
   ): { id: Id } => {
     const id = input.existingId ?? ctx.newId(cfg.idPrefix)
     const existing = input.existingId ? getById(cfg.collection(draft), input.existingId) ?? null : null
-    const entity = cfg.toEntity(input.values, { id, now: ctx.now, actorId: ctx.actorId, existing })
+    const entity = cfg.toEntity(input.values, { id, now: ctx.now, actorId: ctx.actorId, existing, state: draft })
     putEntity(cfg.collection(draft), entity)
     if (verb === 'created') cfg.afterUpsert?.(draft, entity)
     cfg.afterSave?.(draft, entity, { existing, today: ctx.today, newId: ctx.newId })
@@ -77,7 +77,7 @@ export function makeMasterCommands<T extends BaseEntity, F extends FieldValues>(
     if (cfg.unitScoped) {
       const existing = input.existingId ? getById(cfg.collection(s), input.existingId) ?? null : null
       const entity = cfg.toEntity(input.values, {
-        id: input.existingId ?? 'validate', now: ctx.now, actorId: ctx.actor.id, existing,
+        id: input.existingId ?? 'validate', now: ctx.now, actorId: ctx.actor.id, existing, state: s,
       })
       if (entity.unitId && !writableUnitIds(s).has(entity.unitId)) {
         return { ok: false, errors: [`You don't have access to that unit`] }

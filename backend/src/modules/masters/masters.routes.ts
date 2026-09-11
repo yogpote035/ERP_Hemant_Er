@@ -128,11 +128,11 @@ const REGISTRY: Record<string, MasterCfg> = {
     }),
   },
   vendors: {
-    idPrefix: 'vnd', module: 'masters', unitScoped: true, softDelete: true,
+    idPrefix: 'vnd', module: 'masters', unitScoped: false, softDelete: true,
     collection: (s) => s.masters.vendors as unknown as Normalized<Entity>,
     schema: z.object({
-      unitId: z.string().min(1),
-      name: z.string().min(1), code: z.string().min(1), type: z.enum(['rm', 'service']),
+      unitId: z.string().optional(),
+      name: z.string().min(1), code: z.string().default(''), type: z.enum(['rm', 'service']).default('service'),
       contactPerson: z.string().optional(), phone: z.string().optional(), email: z.string().optional(),
       gstin: optionalGstin, pan: z.string().optional(), stateCode: z.string().regex(/^\d{2}$/).optional(),
       addressLines, city: z.string().optional(), pincode: z.string().optional(),
@@ -141,12 +141,12 @@ const REGISTRY: Record<string, MasterCfg> = {
     }).superRefine(validateGstinState),
   },
   parts: {
-    idPrefix: 'part', module: 'masters', unitScoped: true, softDelete: true,
+    idPrefix: 'part', module: 'masters', unitScoped: false, softDelete: true,
     collection: (s) => s.masters.parts as unknown as Normalized<Entity>,
     schema: z.object({
       partNo: z.string().min(1), materialCode: z.string().min(1), description: z.string().optional(),
       defaultPoNo: z.string().optional(), defaultPoDate: z.string().optional(),
-      category: z.string().optional(), editionNo: z.string().optional(), unitId: z.string().min(1),
+      category: z.string().optional(), editionNo: z.string().optional(), unitId: z.string().default('GLOBAL'),
       uom: z.string().default('NOS'), hsnSac: z.string().default('84829900'),
       gstPct: z.number().min(0).max(28).default(12),
       finishWtMg: z.number().int().min(0).default(0), scrapWtMg: z.number().int().min(0).default(0),
@@ -166,7 +166,12 @@ const REGISTRY: Record<string, MasterCfg> = {
     idPrefix: 'mc', module: 'masters', unitScoped: true, softDelete: true,
     collection: (s) => s.masters.machines as unknown as Normalized<Entity>,
     schema: z.object({
-      machineNo: z.string().min(1), description: z.string().optional(), unitId: z.string().min(1),
+      machineNo: z.string().min(1), description: z.string().optional(),
+      manufacturer: z.string().optional(), modelNo: z.string().optional(), manufacturerIdNo: z.string().optional(),
+      purchaseYear: z.number().int().min(1900).max(2100).optional(), powerRating: z.string().optional(),
+      capacity: z.string().optional(), referenceDocument: z.string().optional(),
+      stabilizerMake: z.string().optional(), stabilizerManufacturerIdNo: z.string().optional(),
+      stabilizerCapacity: z.string().optional(), unitId: z.string().min(1),
     }),
   },
   operations: {
@@ -175,12 +180,15 @@ const REGISTRY: Record<string, MasterCfg> = {
     schema: z.object({ code: z.string().min(1), description: z.string().optional() }),
   },
   employees: {
-    idPrefix: 'emp', module: 'masters', unitScoped: true, softDelete: true,
+    idPrefix: 'emp', module: 'masters', unitScoped: false, softDelete: true,
     collection: (s) => s.masters.employees as unknown as Normalized<Entity>,
     schema: z.object({
-      name: z.string().min(1), empCode: z.string().min(1), phone: z.string().optional(),
-      labourType: z.enum(['production', 'shift', 'both']).default('production'),
-      standardShiftRatePaise: z.number().int().min(0).default(0), unitId: z.string().min(1),
+      name: z.string().min(1), empCode: z.string().min(1),
+      phone: z.string().regex(/^\d{10}$/, 'Mobile number must contain exactly 10 digits').optional(),
+      aadhaarNo: z.string().regex(/^\d{12}$/, 'Aadhaar number must contain exactly 12 digits').optional(),
+      address: z.string().optional(),
+      labourType: z.enum(['production', 'shift', 'both', 'helper', 'operator', 'supervisor', 'job_inspector']).default('operator'),
+      standardShiftRatePaise: z.number().int().min(0).default(0), unitId: z.string().optional(),
     }),
   },
 }
@@ -293,6 +301,9 @@ mastersRouter.post(
     const body = parseOptionalFields(cfg.schema, req.body)
     if (cfg.unitScoped && body.unitId) assertUnit(req, body.unitId as string)
     const providedId = typeof (req.body as { id?: unknown })?.id === 'string' ? (req.body as { id?: string }).id : undefined
+    if (req.params.entity === 'stock-openings' && !getById(getDb().masters.parts, String((body as Record<string, unknown>).partId ?? ''))) {
+      throw badRequest('Selected part does not exist')
+    }
     const entity: Entity = { ...body, id: resolveId(providedId, (id) => !!getById(cfg.collection(getDb()), id), cfg.idPrefix), ...(cfg.softDelete ? { active: true } : {}) }
     await mutate((s) => {
       putEntity(cfg.collection(s), entity)
@@ -318,6 +329,10 @@ mastersRouter.put(
     const merged = { ...cur } as Record<string, unknown>
     for (const [k, v] of Object.entries(body as Record<string, unknown>)) {
       if (k in sent) merged[k] = v
+    }
+    if (req.params.entity === 'stock-openings') {
+      const part = getById(getDb().masters.parts, String(merged.partId ?? ''))
+      if (!part) throw badRequest('Selected part does not exist')
     }
     const next = { ...merged, id: cur.id } as Entity
     await mutate((s) => {

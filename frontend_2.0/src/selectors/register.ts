@@ -130,7 +130,6 @@ export function selectStockRows(s: RootState, from?: string, to?: string): Stock
       balanced: led.balanced,
     })
   }
-  for (const p of values(s.masters.parts)) add(p.unitId, p.id)
   for (const i of values(s.inventory.inwards)) add(i.unitId, i.partId)
   for (const o of values(s.masters.stockOpenings)) add(o.unitId, o.partId)
   return rows.sort((a, b) => a.partNo.localeCompare(b.partNo))

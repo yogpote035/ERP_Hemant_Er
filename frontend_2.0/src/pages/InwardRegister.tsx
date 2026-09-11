@@ -454,7 +454,6 @@ export default function InwardRegister({
             const part = getById(state.masters.parts, values.partId as string)
             if (!part) return
             const options = { shouldDirty: true, shouldValidate: true }
-            setValue('unitId', part.unitId, options)
             setValue('poNo', part.defaultPoNo ?? '', options)
             const currentRmRate = latestRmRatePaise(state, part.id)
             setValue('rmRate', currentRmRate != null ? fromPaise(currentRmRate) : undefined, options)

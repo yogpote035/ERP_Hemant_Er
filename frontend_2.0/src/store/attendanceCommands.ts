@@ -36,6 +36,8 @@ export interface ProductionInput {
   downtimeFrom?: string
   downtimeTo?: string
   remark?: string
+  ratePaise?: Paise
+  totalPaymentPaise?: Paise
 }
 
 function validateProduction(s: RootState, input: ProductionInput): { ok: true } | { ok: false; errors: string[] } {
@@ -48,13 +50,14 @@ function validateProduction(s: RootState, input: ProductionInput): { ok: true } 
   if (!mc) errors.push('Machine is required')
   if (!part) errors.push('Part is required')
   // Unit is derived from the employee, so the machine + part must belong to it.
-  if (mc && mc.unitId !== input.unitId) errors.push("Machine belongs to a different unit than the employee")
-  if (part && part.unitId !== input.unitId) errors.push("Part belongs to a different unit than the employee")
+  if (mc && mc.unitId !== input.unitId) errors.push('Machine belongs to a different unit than the selected navbar unit')
   const ok = input.okQty
   const scrap = input.scrapQty ?? 0
   const rework = input.reworkQty ?? 0
   const mf = input.mfQty ?? 0
   if (input.totalMakeQty < 0) errors.push('Total make qty cannot be negative')
+  if (input.ratePaise != null && input.ratePaise <= 0) errors.push('Production rate must be greater than zero')
+  if (input.totalPaymentPaise != null && input.totalPaymentPaise < 0) errors.push('Total payment cannot be negative')
   if (ok < 0 || scrap < 0 || rework < 0 || mf < 0) errors.push('Production quantities cannot be negative')
   const breakdown = ok + scrap + rework + mf
   if (breakdown > input.totalMakeQty) {
@@ -63,7 +66,7 @@ function validateProduction(s: RootState, input: ProductionInput): { ok: true } 
   if (input.downtimeFrom && input.downtimeTo && minutesBetween(input.downtimeFrom, input.downtimeTo) <= 0) {
     errors.push('Down-time "To" must be after "From"')
   }
-  if (latestProductionRate(s, input.partId, input.machineId, input.operationId, input.date) == null) {
+  if (input.ratePaise == null && latestProductionRate(s, input.partId, input.machineId, input.operationId, input.date) == null) {
     errors.push('No production rate is configured for this part on that date — add one in Rate Masters')
   }
   return errors.length ? { ok: false, errors } : { ok: true }
@@ -75,6 +78,7 @@ function applyProduction(draft: RootState, input: ProductionInput, ctx: CommandC
   // Preserve the original snapshot on edit; otherwise fetch the in-force rate.
   const rate =
     existing?.rateSnapshotPaise ??
+    input.ratePaise ??
     (latestProductionRate(draft, input.partId, input.machineId, input.operationId, input.date) as Paise)
   const entry: ProductionAttendance = {
     id,
@@ -96,11 +100,12 @@ function applyProduction(draft: RootState, input: ProductionInput, ctx: CommandC
     downtimeTo: input.downtimeTo,
     remark: input.remark,
     rateSnapshotPaise: rate,
+    totalPaymentPaise: input.totalPaymentPaise,
     createdBy: existing?.createdBy ?? ctx.actor.id,
     createdAt: existing?.createdAt ?? ctx.now,
   }
   putEntity(draft.hr.production, entry)
-  const earned = mulQty(rate, input.okQty)
+  const earned = Math.round(mulQty(rate, input.okQty) / 100) as Paise
   const emp = getById(draft.masters.employees, input.employeeId)
   const rejects = (input.scrapQty ?? 0) + (input.reworkQty ?? 0) + (input.mfQty ?? 0)
   return {
@@ -160,6 +165,7 @@ export interface ShiftInput {
   toTime: string
   otHours?: number
   otRatePaise?: Paise
+  shiftRatePaise?: Paise
 }
 
 function validateShift(s: RootState, input: ShiftInput): { ok: true } | { ok: false; errors: string[] } {
@@ -170,6 +176,7 @@ function validateShift(s: RootState, input: ShiftInput): { ok: true } | { ok: fa
   // OT must never be negative — a negative rate/hours would silently REDUCE the wage.
   if (input.otHours != null && input.otHours < 0) errors.push('OT hours cannot be negative')
   if (input.otRatePaise != null && input.otRatePaise < 0) errors.push('OT rate cannot be negative')
+  if (input.shiftRatePaise != null && input.shiftRatePaise <= 0) errors.push('Shift rate must be greater than zero')
   return errors.length ? { ok: false, errors } : { ok: true }
 }
 
@@ -177,7 +184,7 @@ function applyShift(draft: RootState, input: ShiftInput, ctx: CommandContext): A
   const id = input.id ?? ctx.newId('shift')
   const existing = input.id ? getById(draft.hr.shifts, input.id) : undefined
   const emp = getById(draft.masters.employees, input.employeeId)
-  const rate = existing?.shiftRateSnapshotPaise ?? (emp?.standardShiftRatePaise ?? (0 as Paise))
+  const rate = existing?.shiftRateSnapshotPaise ?? input.shiftRatePaise ?? (emp?.standardShiftRatePaise ?? (0 as Paise))
   const entry: ShiftAttendance = {
     id,
     unitId: input.unitId,

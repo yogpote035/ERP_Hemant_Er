@@ -43,9 +43,7 @@ export function selectDashboardKpis(s: RootState): DashboardKpis {
     if ((consumedByInward.get(i.id) ?? 0) < i.receivedQty) openInwards++
   }
 
-  const activeParts = values(s.masters.parts).filter(
-    (p) => p.active && allowed.has(p.unitId)
-  ).length
+  const activeParts = values(s.masters.parts).filter((p) => p.active).length
   const piecesDispatched = dispatches.reduce((a, d) => a + dispatchTotalQty(d), 0)
 
   const reconcile = selectReconcileScoped(s)

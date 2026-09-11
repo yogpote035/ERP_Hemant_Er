@@ -58,16 +58,32 @@ describe('RBAC + unit scope', () => {
     assert.equal(r.status, 403)
   })
 
-  it('scopes the parts list to the operator’s assigned units', async () => {
+  it('exposes the global parts catalogue to a unit-scoped operator', async () => {
     const t = await tokenFor('opa@hew.in') // unit u1 only
     const r = await request(app).get('/api/masters/parts').set(auth(t))
     assert.equal(r.status, 200)
     assert.ok(r.body.data.length > 0)
-    assert.ok(!r.body.data.some((p: { unitId: string }) => p.unitId === 'u2'))
+    assert.ok(r.body.data.some((p: { unitId: string }) => p.unitId === 'u2'))
   })
 })
 
 describe('masters CRUD', () => {
+  it('round-trips extended machine and stabilizer details', async () => {
+    const t = await tokenFor()
+    const input = {
+      machineNo: 'MC-API-DETAIL', unitId: 'u1', description: 'CNC turning machine',
+      manufacturer: 'Ace Micromatic', modelNo: 'Jobber XL', manufacturerIdNo: 'AM-API-001',
+      purchaseYear: 2026, powerRating: '15 kW', capacity: '250 mm', referenceDocument: 'Invoice INV-API',
+      stabilizerMake: 'Servomax', stabilizerManufacturerIdNo: 'STB-API-001', stabilizerCapacity: '25 kVA',
+    }
+    const created = await request(app).post('/api/masters/machines').set(auth(t)).send(input)
+    assert.equal(created.status, 201)
+    assert.equal(created.body.data.manufacturer, input.manufacturer)
+    assert.equal(created.body.data.purchaseYear, input.purchaseYear)
+    assert.equal(created.body.data.stabilizerManufacturerIdNo, input.stabilizerManufacturerIdNo)
+    assert.equal(created.body.data.stabilizerCapacity, input.stabilizerCapacity)
+  })
+
   it('round-trips create → update → soft-delete → reactivate', async () => {
     const t = await tokenFor()
     const created = await request(app).post('/api/masters/customers').set(auth(t)).send({ name: 'Acme', gstin: '27AAAAA0000A1Z5', stateCode: '27', addressLines: ['Pune'] })
@@ -119,6 +135,36 @@ describe('masters CRUD', () => {
     })
     assert.equal(created.status, 201)
     assert.equal(created.body.data.pan, 'ABCDE1234F')
+  })
+
+  it('round-trips employee identity, contact, rate, and labour fields', async () => {
+    const t = await tokenFor()
+    const created = await request(app).post('/api/masters/employees').set(auth(t)).send({
+      name: 'Import Operator', empCode: '/HI/EMP/001', aadhaarNo: '123412341234',
+      address: 'Pune, Maharashtra', phone: '9876543210', labourType: 'operator',
+      standardShiftRatePaise: 50000,
+    })
+    assert.equal(created.status, 201)
+    assert.equal(created.body.data.aadhaarNo, '123412341234')
+    assert.equal(created.body.data.address, 'Pune, Maharashtra')
+    assert.equal(created.body.data.phone, '9876543210')
+    assert.equal(created.body.data.labourType, 'operator')
+    assert.equal(created.body.data.standardShiftRatePaise, 50000)
+
+    const malformed = await request(app).post('/api/masters/employees').set(auth(t)).send({
+      name: 'Bad Identity', empCode: '/HI/EMP/002', aadhaarNo: '1234', phone: '999',
+      labourType: 'helper', standardShiftRatePaise: 40000,
+    })
+    assert.equal(malformed.status, 400)
+  })
+
+  it('stores opening stock for the explicitly selected unit and a global part', async () => {
+    const t = await tokenFor()
+    const created = await request(app).post('/api/masters/stock-openings').set(auth(t)).send({
+      unitId: 'u2', partId: 'p1', fy: '26-27', openingQty: 25, asOfDate: '2026-04-01',
+    })
+    assert.equal(created.status, 201)
+    assert.equal(created.body.data.unitId, 'u2')
   })
 })
 

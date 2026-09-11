@@ -150,7 +150,6 @@ const partSchema = z.object({
   partNo: z.string().min(1, 'Required'),
   materialCode: z.string().min(1, 'Required'),
   description: z.string().optional(),
-  unitId: z.string().min(1, 'Required'),
   uom: z.string().min(1, 'Required'),
   hsnSac: z.string().min(1, 'Required'),
   gstPct: z.string().min(1, 'Required'),
@@ -174,7 +173,7 @@ const partMaster = defineMaster<Part, PartForm>({
   icon: Package,
   idPrefix: 'part',
   softDelete: true,
-  unitScoped: true,
+  unitScoped: false,
   collection: (s) => s.masters.parts,
   schema: partSchema,
   searchPlaceholder: 'Search by part no., material, HSN…',
@@ -182,7 +181,6 @@ const partMaster = defineMaster<Part, PartForm>({
   columns: [
     { key: 'partNo', header: 'Part no.', render: (p) => <span className="font-medium">{p.partNo}</span> },
     { key: 'mat', header: 'Material', render: (p) => <span className="mono text-xs">{p.materialCode}</span> },
-    { key: 'unit', header: 'Assigned Unit', render: (p, h) => h.unitCode(p.unitId) },
     { key: 'gst', header: 'GST', render: (p) => `${p.gstPct}%` },
     { key: 'hsn', header: 'HSN/SAC', render: (p) => <span className="mono text-xs">{p.hsnSac}</span> },
     { key: 'active', header: 'Status', render: activeCell },
@@ -190,7 +188,6 @@ const partMaster = defineMaster<Part, PartForm>({
   fields: [
     { kind: 'text', name: 'partNo', label: 'Part number' },
     { kind: 'text', name: 'materialCode', label: 'Material code' },
-    { kind: 'select', name: 'unitId', label: 'Assigned Unit', options: unitOptions },
     { kind: 'text', name: 'uom', label: 'UOM', placeholder: 'NOS / KG' },
     { kind: 'text', name: 'hsnSac', label: 'HSN/SAC' },
     { kind: 'select', name: 'gstPct', label: 'GST %', options: GST_OPTIONS },
@@ -208,7 +205,7 @@ const partMaster = defineMaster<Part, PartForm>({
   emptyForm: () => ({ gstPct: '12', uom: 'NOS', avgQtyPerBox: 1 }),
   toForm: (p) => ({
     partNo: p.partNo, materialCode: p.materialCode, description: p.description ?? '',
-    unitId: p.unitId, uom: p.uom, hsnSac: p.hsnSac, gstPct: String(p.gstPct),
+    uom: p.uom, hsnSac: p.hsnSac, gstPct: String(p.gstPct),
     finishWtG: p.finishWtMg / 1000, scrapWtG: p.scrapWtMg / 1000, avgQtyPerBox: p.avgQtyPerBox,
     rmRate: p.rmRatePaise != null ? fromPaise(p.rmRatePaise) : undefined,
     rmWtG: p.rmWtMg != null ? p.rmWtMg / 1000 : undefined,
@@ -218,7 +215,7 @@ const partMaster = defineMaster<Part, PartForm>({
   toEntity: (v, ctx) => ({
     id: ctx.id, partNo: (v.partNo ?? '').trim(), materialCode: (v.materialCode ?? '').trim(),
     description: opt(v.description), category: ctx.existing?.category, editionNo: opt(v.editionNo),
-    unitId: v.unitId ?? '', uom: (v.uom ?? '').trim(), hsnSac: (v.hsnSac ?? '').trim(), gstPct: Number(v.gstPct ?? 0),
+    unitId: ctx.existing?.unitId ?? 'GLOBAL', uom: (v.uom ?? '').trim(), hsnSac: (v.hsnSac ?? '').trim(), gstPct: Number(v.gstPct ?? 0),
     finishWtMg: Math.round((v.finishWtG ?? 0) * 1000), scrapWtMg: Math.round((v.scrapWtG ?? 0) * 1000),
     rmRatePaise: v.rmRate != null ? toPaise(v.rmRate) : undefined,
     rmWtMg: v.rmWtG != null ? Math.round(v.rmWtG * 1000) : undefined,
@@ -239,25 +236,11 @@ const partMaster = defineMaster<Part, PartForm>({
     })
   },
   extraValidate: (v, s, existingId) => {
-    // Part no. is unique within its unit — a dup silently mis-binds Excel imports.
+    // Part catalogue is global, so part number is unique across all units.
     const dup = !!v.partNo?.trim() && values(s.masters.parts).some(
-      (p) => p.id !== existingId && p.unitId === v.unitId && p.partNo.trim().toLowerCase() === v.partNo.trim().toLowerCase()
+      (p) => p.id !== existingId && p.partNo.trim().toLowerCase() === v.partNo.trim().toLowerCase()
     )
-    if (dup) return 'Part number already exists in this unit'
-    // Moving a referenced part to another unit orphans its inward/stock/production history.
-    if (existingId) {
-      const cur = getById(s.masters.parts, existingId)
-      if (cur && cur.unitId !== v.unitId) {
-        const referenced =
-          values(s.inventory.inwards).some((i) => i.partId === existingId) ||
-          values(s.masters.stockOpenings).some((o) => o.partId === existingId) ||
-          values(s.hr.production).some((p) => p.partId === existingId) ||
-          values(s.rejection.rejectionAdvices).some((r) => r.partId === existingId) ||
-          values(s.masters.rmRates).some((r) => r.partId === existingId) ||
-          values(s.masters.productionRates).some((r) => r.partId === existingId)
-        if (referenced) return "Can't change this part's unit — it already has inward / stock / production history"
-      }
-    }
+    if (dup) return 'Part number already exists in the global catalogue'
     return null
   },
   displayName: (p) => p.partNo,
@@ -265,10 +248,7 @@ const partMaster = defineMaster<Part, PartForm>({
 
 // ── Vendors ─────────────────────────────────────────────────────────────────────
 const vendorSchema = z.object({
-  unitId: z.string().min(1, 'Required'),
   name: z.string().min(1, 'Required'),
-  code: z.string().min(1, 'Required'),
-  type: z.enum(['rm', 'service']),
   contactPerson: z.string().optional(),
   phone: z.string().optional(),
   email: z.string().email('Invalid email').optional().or(z.literal('')),
@@ -291,27 +271,21 @@ const vendorMaster = defineMaster<Vendor, VendorForm>({
   module: 'masters',
   label: 'Vendor',
   labelPlural: 'Vendors',
-  searchText: (v) => `${v.name} ${v.code} ${v.gstin ?? ''} ${v.type} ${v.city ?? ''}`,
+  searchText: (v) => `${v.name} ${v.gstin ?? ''} ${v.city ?? ''}`,
   searchPlaceholder: 'Search vendors…',
   icon: Truck,
   idPrefix: 'vnd',
   softDelete: true,
-  unitScoped: true,
+  unitScoped: false,
   collection: (s) => s.masters.vendors,
   schema: vendorSchema,
   columns: [
-    { key: 'code', header: 'Code', render: (v) => <span className="font-medium">{v.code}</span> },
     { key: 'name', header: 'Name', render: (v) => v.name },
-    { key: 'unit', header: 'Unit', render: (v, h) => v.unitId ? h.unitCode(v.unitId) : 'Unassigned' },
-    { key: 'type', header: 'Type', render: (v) => <Badge tone={v.type === 'rm' ? 'primary' : 'default'}>{v.type === 'rm' ? 'RM' : 'Service'}</Badge> },
     { key: 'gstin', header: 'GSTIN', render: (v) => <span className="mono text-xs">{v.gstin ?? '—'}</span> },
     { key: 'active', header: 'Status', render: activeCell },
   ],
   fields: [
     { kind: 'text', name: 'name', label: 'Vendor name', colSpan: 2 },
-    { kind: 'select', name: 'unitId', label: 'Assigned Unit', options: unitOptions },
-    { kind: 'text', name: 'code', label: 'Code' },
-    { kind: 'select', name: 'type', label: 'Type', options: [{ value: 'rm', label: 'Raw material' }, { value: 'service', label: 'Service' }] },
     { kind: 'text', name: 'contactPerson', label: 'Contact person' },
     { kind: 'text', name: 'phone', label: 'Phone' },
     { kind: 'text', name: 'email', label: 'Email' },
@@ -326,16 +300,16 @@ const vendorMaster = defineMaster<Vendor, VendorForm>({
     { kind: 'text', name: 'ifsc', label: 'IFSC' },
     { kind: 'textarea', name: 'remarks', label: 'Remarks', colSpan: 2 },
   ],
-  emptyForm: () => ({ type: 'service' }),
+  emptyForm: () => ({}),
   toForm: (v) => ({
-    unitId: v.unitId ?? '', name: v.name, code: v.code, type: v.type, contactPerson: v.contactPerson ?? '',
+    name: v.name, contactPerson: v.contactPerson ?? '',
     phone: v.phone ?? '', email: v.email ?? '', gstin: v.gstin ?? '', pan: v.pan ?? '',
     stateCode: v.stateCode ?? '', city: v.city ?? '', pincode: v.pincode ?? '',
     addressLines: joinLines(v.addressLines), bankName: v.bankName ?? '',
     accountNo: v.accountNo ?? '', ifsc: v.ifsc ?? '', remarks: v.remarks ?? '',
   }),
   toEntity: (v, ctx) => ({
-    id: ctx.id, unitId: v.unitId ?? '', name: (v.name ?? '').trim(), code: (v.code ?? '').trim(), type: v.type ?? 'service',
+    id: ctx.id, unitId: ctx.existing?.unitId, name: (v.name ?? '').trim(), code: ctx.existing?.code ?? ctx.id, type: ctx.existing?.type ?? 'service',
     contactPerson: opt(v.contactPerson), phone: opt(v.phone), email: opt(v.email),
     gstin: opt(v.gstin), pan: opt(v.pan), stateCode: opt(v.stateCode), city: opt(v.city),
     pincode: opt(v.pincode), addressLines: splitLines(v.addressLines), bankName: opt(v.bankName),
@@ -343,15 +317,11 @@ const vendorMaster = defineMaster<Vendor, VendorForm>({
     invoiceFormat: ctx.existing?.invoiceFormat, remarks: opt(v.remarks),
     active: ctx.existing?.active ?? true,
   }),
-  extraValidate: (v, s, existingId) => {
-    const dup = !!v.code?.trim() && values(s.masters.vendors).some(
-      (x) => x.id !== existingId && x.code.trim().toLowerCase() === v.code.trim().toLowerCase()
-    )
-    if (dup) return 'A vendor with this code already exists'
+  extraValidate: (v) => {
     if (v.gstin && gstinStateMismatch(v.gstin, v.stateCode)) return "GSTIN's first 2 digits must match the state code"
     return null
   },
-  displayName: (v) => v.code,
+  displayName: (v) => v.name,
 })
 
 // ── Customers ─────────────────────────────────────────────────────────────────────
@@ -443,8 +413,18 @@ const customerMaster = defineMaster<Customer, CustomerForm>({
 // ── Machines ─────────────────────────────────────────────────────────────────────
 const machineSchema = z.object({
   machineNo: z.string().min(1, 'Required'),
-  description: z.string().optional(),
   unitId: z.string().min(1, 'Required'),
+  description: z.string().optional(),
+  manufacturer: z.string().optional(),
+  modelNo: z.string().optional(),
+  manufacturerIdNo: z.string().optional(),
+  purchaseYear: z.number({ invalid_type_error: 'Enter a valid year' }).int().min(1900).max(2100).optional(),
+  powerRating: z.string().optional(),
+  capacity: z.string().optional(),
+  referenceDocument: z.string().optional(),
+  stabilizerMake: z.string().optional(),
+  stabilizerManufacturerIdNo: z.string().optional(),
+  stabilizerCapacity: z.string().optional(),
 })
 type MachineForm = z.infer<typeof machineSchema>
 
@@ -453,7 +433,7 @@ const machineMaster = defineMaster<Machine, MachineForm>({
   module: 'masters',
   label: 'Machine',
   labelPlural: 'Machines',
-  searchText: (m) => `${m.machineNo} ${m.description ?? ''}`,
+  searchText: (m) => `${m.machineNo} ${m.description ?? ''} ${m.manufacturer ?? ''} ${m.modelNo ?? ''} ${m.manufacturerIdNo ?? ''}`,
   searchPlaceholder: 'Search machines…',
   icon: Cpu,
   idPrefix: 'mch',
@@ -464,18 +444,41 @@ const machineMaster = defineMaster<Machine, MachineForm>({
   columns: [
     { key: 'no', header: 'Machine no.', render: (m) => <span className="font-medium">{m.machineNo}</span> },
     { key: 'desc', header: 'Description', render: (m) => m.description ?? '—' },
+    { key: 'make', header: 'Manufacturer', render: (m) => m.manufacturer ?? '—' },
+    { key: 'model', header: 'Model', render: (m) => m.modelNo ?? '—' },
+    { key: 'year', header: 'Purchase year', render: (m) => m.purchaseYear ?? '—' },
     { key: 'unit', header: 'Unit', render: (m, h) => h.unitCode(m.unitId) },
     { key: 'active', header: 'Status', render: activeCell },
   ],
   fields: [
     { kind: 'text', name: 'machineNo', label: 'Machine number' },
     { kind: 'select', name: 'unitId', label: 'Unit', options: unitOptions },
-    { kind: 'textarea', name: 'description', label: 'Description', colSpan: 2 },
+    { kind: 'textarea', name: 'description', label: 'Description of machine', colSpan: 2 },
+    { kind: 'text', name: 'manufacturer', label: 'Name of manufacturer / Make by' },
+    { kind: 'text', name: 'modelNo', label: 'Machine model no.' },
+    { kind: 'text', name: 'manufacturerIdNo', label: 'Manufacturer I.D. no.' },
+    { kind: 'number', name: 'purchaseYear', label: 'Year of purchase', min: 1900, max: 2100, step: 1 },
+    { kind: 'text', name: 'powerRating', label: 'Power rating' },
+    { kind: 'text', name: 'capacity', label: 'Capacity' },
+    { kind: 'text', name: 'referenceDocument', label: 'Ref document' },
+    { kind: 'text', name: 'stabilizerMake', label: 'Stabilizer make' },
+    { kind: 'text', name: 'stabilizerManufacturerIdNo', label: 'Stabilizer manufacturer I.D. no.' },
+    { kind: 'text', name: 'stabilizerCapacity', label: 'Stabilizer capacity' },
   ],
   emptyForm: () => ({}),
-  toForm: (m) => ({ machineNo: m.machineNo, description: m.description ?? '', unitId: m.unitId }),
+  toForm: (m) => ({
+    machineNo: m.machineNo, description: m.description ?? '', manufacturer: m.manufacturer ?? '',
+    modelNo: m.modelNo ?? '', manufacturerIdNo: m.manufacturerIdNo ?? '', purchaseYear: m.purchaseYear,
+    powerRating: m.powerRating ?? '', capacity: m.capacity ?? '', referenceDocument: m.referenceDocument ?? '',
+    stabilizerMake: m.stabilizerMake ?? '', stabilizerManufacturerIdNo: m.stabilizerManufacturerIdNo ?? '',
+    stabilizerCapacity: m.stabilizerCapacity ?? '', unitId: m.unitId,
+  }),
   toEntity: (v, ctx) => ({
     id: ctx.id, machineNo: (v.machineNo ?? '').trim(), description: opt(v.description), unitId: v.unitId ?? '',
+    manufacturer: opt(v.manufacturer), modelNo: opt(v.modelNo), manufacturerIdNo: opt(v.manufacturerIdNo),
+    purchaseYear: v.purchaseYear, powerRating: opt(v.powerRating), capacity: opt(v.capacity),
+    referenceDocument: opt(v.referenceDocument), stabilizerMake: opt(v.stabilizerMake),
+    stabilizerManufacturerIdNo: opt(v.stabilizerManufacturerIdNo), stabilizerCapacity: opt(v.stabilizerCapacity),
     active: ctx.existing?.active ?? true,
   }),
   extraValidate: (v, s, existingId) =>
@@ -533,10 +536,11 @@ const operationMaster = defineMaster<Operation, OperationForm>({
 const employeeSchema = z.object({
   name: z.string().min(1, 'Required'),
   empCode: z.string().min(1, 'Required'),
-  phone: z.string().optional(),
-  labourType: z.enum(['production', 'shift', 'both']),
+  aadhaarNo: z.string().regex(/^\d{12}$/, 'Enter exactly 12 digits').optional().or(z.literal('')),
+  address: z.string().optional(),
+  phone: z.string().regex(/^\d{10}$/, 'Enter exactly 10 digits').optional().or(z.literal('')),
+  labourType: z.enum(['production', 'shift', 'both', 'helper', 'operator', 'supervisor', 'job_inspector']),
   standardShiftRate: z.number({ invalid_type_error: 'Number' }).nonnegative(),
-  unitId: z.string().min(1, 'Required'),
 })
 type EmployeeForm = z.infer<typeof employeeSchema>
 
@@ -545,40 +549,42 @@ const employeeMaster = defineMaster<Employee, EmployeeForm>({
   module: 'masters',
   label: 'Employee',
   labelPlural: 'Employees',
-  searchText: (e) => `${e.name} ${e.empCode} ${e.phone ?? ''} ${e.labourType}`,
+  searchText: (e) => `${e.name} ${e.empCode} ${e.aadhaarNo ?? ''} ${e.phone ?? ''} ${e.address ?? ''} ${e.labourType}`,
   searchPlaceholder: 'Search employees…',
   icon: UserCog,
   idPrefix: 'emp',
   softDelete: true,
-  unitScoped: true,
+  unitScoped: false,
   collection: (s) => s.masters.employees,
   schema: employeeSchema,
   columns: [
     { key: 'code', header: 'Code', render: (e) => <span className="font-medium">{e.empCode}</span> },
     { key: 'name', header: 'Name', render: (e) => e.name },
+    { key: 'phone', header: 'Mobile', render: (e) => e.phone ?? '—' },
     { key: 'type', header: 'Labour', render: (e) => e.labourType },
     { key: 'rate', header: 'Shift rate', className: 'text-right', render: (e) => <span className="mono">{formatINR(e.standardShiftRatePaise)}</span> },
-    { key: 'unit', header: 'Unit', render: (e, h) => h.unitCode(e.unitId) },
     { key: 'active', header: 'Status', render: activeCell },
   ],
   fields: [
     { kind: 'text', name: 'name', label: 'Employee name' },
     { kind: 'text', name: 'empCode', label: 'Employee code' },
-    { kind: 'text', name: 'phone', label: 'Phone' },
+    { kind: 'text', name: 'aadhaarNo', label: 'Aadhaar no.' },
+    { kind: 'textarea', name: 'address', label: 'Address' },
+    { kind: 'text', name: 'phone', label: 'Mobile no.' },
     { kind: 'select', name: 'labourType', label: 'Labour type', options: [
-      { value: 'production', label: 'Production' }, { value: 'shift', label: 'Shift' }, { value: 'both', label: 'Both' },
+      { value: 'helper', label: 'Helper' }, { value: 'operator', label: 'Operator' },
+      { value: 'supervisor', label: 'Supervisor' }, { value: 'job_inspector', label: 'Job inspector' },
     ] },
-    { kind: 'money', name: 'standardShiftRate', label: 'Standard shift rate' },
-    { kind: 'select', name: 'unitId', label: 'Unit', options: unitOptions },
+    { kind: 'money', name: 'standardShiftRate', label: 'Shift Rate / 8 Hr.' },
   ],
-  emptyForm: () => ({ labourType: 'shift' }),
+  emptyForm: () => ({ labourType: 'operator' }),
   toForm: (e) => ({
-    name: e.name, empCode: e.empCode, phone: e.phone ?? '', labourType: e.labourType,
-    standardShiftRate: fromPaise(e.standardShiftRatePaise), unitId: e.unitId,
+    name: e.name, empCode: e.empCode, aadhaarNo: e.aadhaarNo ?? '', address: e.address ?? '', phone: e.phone ?? '', labourType: e.labourType,
+    standardShiftRate: fromPaise(e.standardShiftRatePaise),
   }),
   toEntity: (v, ctx) => ({
-    id: ctx.id, name: (v.name ?? '').trim(), empCode: (v.empCode ?? '').trim(), phone: opt(v.phone),
-    labourType: v.labourType ?? 'shift', standardShiftRatePaise: toPaise(v.standardShiftRate ?? 0), unitId: v.unitId ?? '',
+    id: ctx.id, name: (v.name ?? '').trim(), empCode: (v.empCode ?? '').trim(), aadhaarNo: opt(v.aadhaarNo), address: opt(v.address), phone: opt(v.phone),
+    labourType: v.labourType ?? 'operator', standardShiftRatePaise: toPaise(v.standardShiftRate ?? 0), unitId: ctx.existing?.unitId,
     active: ctx.existing?.active ?? true,
   }),
   extraValidate: (v, s, existingId) =>
@@ -629,10 +635,7 @@ const openingMaster = defineMaster<StockOpening, OpeningForm>({
   toEntity: (v, ctx) => ({
     id: ctx.id, unitId: v.unitId ?? '', partId: v.partId ?? '', fy: v.fy ?? '', openingQty: v.openingQty ?? 0, asOfDate: v.asOfDate ?? '',
   }),
-  // A part belongs to exactly one unit (FR-RM03a) — opening must match it.
   extraValidate: (v, s, existingId) => {
-    const part = s.masters.parts.byId[v.partId]
-    if (part && part.unitId !== v.unitId) return 'That part belongs to a different unit'
     // Opening is the single go-live carry-forward per (unit, part). Stock is
     // lifetime-cumulative (never FY-scoped), so a second opening row — e.g. one
     // per financial year — would double-count on-hand quantity. Enforce one row.
