@@ -5,7 +5,7 @@
  * Dynamic-imported from the Billing page so the heavy renderer never lands in the
  * main bundle. Takes a plain `InvoiceDocModel` (built by selectors) — no store access.
  */
-import { Document, Page, View, Text, StyleSheet, Svg, Path, pdf } from '@react-pdf/renderer'
+import { Document, Page, View, Text, StyleSheet, Svg, Path, Image, pdf } from '@react-pdf/renderer'
 import { formatINR, type Paise } from './money'
 import { packingLineLabel, packingTotal, type InvoiceDocModel } from '@/selectors/invoiceCompute'
 
@@ -28,6 +28,8 @@ const C = { line: '#94a3b8', soft: '#cbd5e1', head: '#f1f5f9', ink: '#0f172a', s
 const s = StyleSheet.create({
   page: { padding: 24, fontSize: 8, color: C.ink, fontFamily: 'Helvetica' },
   titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', borderBottomWidth: 1.5, borderColor: C.ink, paddingBottom: 5 },
+  titleBrand: { flexDirection: 'row', alignItems: 'center' },
+  logo: { width: 54, height: 35, objectFit: 'contain', marginRight: 7 },
   title: { fontSize: 15, fontFamily: 'Helvetica-Bold', letterSpacing: 1 },
   titleSub: { fontSize: 5.6, color: C.faint, fontFamily: 'Helvetica-Bold', letterSpacing: 1.6, marginTop: 1.5 },
   origTag: { fontSize: 5.5, color: C.sub, fontFamily: 'Helvetica-Bold', borderWidth: 0.7, borderColor: C.line, paddingHorizontal: 3, paddingVertical: 1.5, marginBottom: 2.5, letterSpacing: 0.8 },
@@ -69,6 +71,9 @@ function KV({ k, v }: { k: string; v: string }) {
 }
 
 const COPY_LABELS = ['ORIGINAL', 'DUPLICATE', 'TRIPLICATE', 'EXTRA'] as const
+const invoiceLogoUrl = typeof window === 'undefined'
+  ? '/hew-invoice-logo.png'
+  : new URL('/hew-invoice-logo.png', window.location.origin).toString()
 
 function InvoicePage({ m, copyLabel }: { m: InvoiceDocModel; copyLabel: typeof COPY_LABELS[number] }) {
   const intra = m.taxKind === 'cgst_sgst'
@@ -77,9 +82,12 @@ function InvoicePage({ m, copyLabel }: { m: InvoiceDocModel; copyLabel: typeof C
       <Page size="A4" style={s.page}>
         {/* Title */}
         <View style={s.titleRow}>
-          <View>
-            <Text style={s.title}>TAX INVOICE</Text>
-            <Text style={s.titleSub}>GOODS & SERVICES TAX</Text>
+          <View style={s.titleBrand}>
+            <Image src={invoiceLogoUrl} style={s.logo} />
+            <View>
+              <Text style={s.title}>TAX INVOICE</Text>
+              <Text style={s.titleSub}>GOODS & SERVICES TAX</Text>
+            </View>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
             <Text style={s.origTag}>{copyLabel}</Text>

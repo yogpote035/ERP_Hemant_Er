@@ -853,9 +853,11 @@ function InvoicePreview({ invoiceId, onClose, onPdf }: { invoiceId: Id; onClose:
         {/* Title band */}
         <div className="flex items-center justify-between gap-4 border-b-2 border-[#0f172a] pb-2.5">
           <div className="flex items-center gap-3">
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-[#2563eb] text-[13px] font-bold text-white">
-              {(m.issuerName || 'HE').slice(0, 2).toUpperCase()}
-            </span>
+            <img
+              src="/hew-invoice-logo.png"
+              alt="Hemant Engineering Works"
+              className="h-11 w-[68px] shrink-0 object-contain"
+            />
             <div className="leading-tight">
               <div className="text-[17px] font-extrabold tracking-wide text-[#0f172a]">TAX INVOICE</div>
               <div className="text-[8px] font-semibold uppercase tracking-[0.18em] text-[#64748b]">Goods &amp; Services Tax</div>
