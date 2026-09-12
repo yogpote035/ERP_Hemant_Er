@@ -80,6 +80,9 @@ export function makeMasterCommands<T extends BaseEntity, F extends FieldValues>(
       const entity = cfg.toEntity(input.values, {
         id: input.existingId ?? 'validate', now: ctx.now, actorId: ctx.actor.id, existing, state: s,
       })
+      if (!entity.unitId) {
+        return { ok: false, errors: ['Select a unit before saving'] }
+      }
       if (entity.unitId && !writableUnitIds(s).has(entity.unitId)) {
         return { ok: false, errors: [`You don't have access to that unit`] }
       }

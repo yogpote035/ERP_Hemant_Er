@@ -43,8 +43,8 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
   const allRows = useStore(useShallow(spec.selectRows))
   const allowed = useStore(useShallow(allowedUnitIds))
   const scopedRows = useMemo(
-    () => (spec.unitScoped ? allRows.filter((r) => r.unitId != null && allowed.has(r.unitId)) : allRows),
-    [allRows, allowed, spec]
+    () => (spec.unitScoped ? allRows.filter((r) => (isAdmin && r.unitId == null) || (r.unitId != null && allowed.has(r.unitId))) : allRows),
+    [allRows, allowed, isAdmin, spec]
   )
   // Server-driven in API mode. Successful writes trigger refreshAllData only
   // after the backend responds, avoiding stale GET-vs-PUT races.
@@ -162,17 +162,21 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
   const duplicateKey = (form: Record<string, unknown>) => {
     const val = (name: string) => String(form[name] ?? '').trim().toLowerCase()
     if (spec.key === 'unit') return val('shortCode')
-    if (spec.key === 'customer') return `${val('name')}|${val('gstin')}`
-    if (spec.key === 'vendor') return `${val('name')}|${val('gstin')}`
-    if (spec.key === 'part') return val('partNo')
+    if (spec.key === 'customer') return `${val('unitId')}|${val('name')}|${val('gstin')}`
+    if (spec.key === 'vendor') return `${val('unitId')}|${val('name')}|${val('gstin')}`
+    if (spec.key === 'part') return `${val('unitId')}|${val('partNo')}`
     if (spec.key === 'machine') return `${val('unitId')}|${val('machineNo')}`
-    if (spec.key === 'operation') return val('code')
-    if (spec.key === 'employee') return val('empCode')
+    if (spec.key === 'operation') return `${val('unitId')}|${val('code')}`
+    if (spec.key === 'employee') return `${val('unitId')}|${val('empCode')}`
     if (spec.key === 'opening') return `${val('unitId')}|${val('partId')}`
     return spec.fields.filter((field) => 'required' in field && field.required).map((field) => val(field.name)).join('|')
   }
   const existingKeys = new Set(scopedRows.map((row) => duplicateKey(spec.toForm(row) as Record<string, unknown>)))
-  const rowDuplicateKey = (row: ImportedRow) => duplicateKey(Object.fromEntries(spec.fields.map((field) => [field.name, excelValue(row, field.label, field.name)])))
+  const rowDuplicateKey = (row: ImportedRow) => {
+    const values = Object.fromEntries(spec.fields.map((field) => [field.name, excelValue(row, field.label, field.name)]))
+    if (!values.unitId && entryUnit.preferredUnitId) values.unitId = entryUnit.preferredUnitId
+    return duplicateKey(values)
+  }
   const validateImportRow = (row: ImportedRow, rowNumber: number) => {
     try { parseImportRow(row, rowNumber); return undefined }
     catch (error) { return error instanceof Error ? error.message.replace(/^Row \d+:\s*/, '') : 'Invalid row' }
@@ -481,7 +485,7 @@ function MasterFormModal({
     >
       <FormProvider {...methods}>
         <form id={formId} onSubmit={methods.handleSubmit(onValid)} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {spec.fields.map((f) => (
+          {spec.fields.filter((f) => f.name !== 'unitId' || !entryUnit.isSingleUnit).map((f) => (
             <AutoField key={f.name} field={f} disabled={f.name === 'unitId' && entryUnit.isSingleUnit} hint={!existing && f.name === 'unitId' && entryUnit.message ? entryUnit.message : undefined} />
           ))}
         </form>

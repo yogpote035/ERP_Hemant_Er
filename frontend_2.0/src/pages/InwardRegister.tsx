@@ -435,7 +435,7 @@ export default function InwardRegister({
             ? { ...inwardToValues(inwardModal.inward), ...(entryUnit.isSingleUnit ? { unitId: entryUnit.preferredUnitId } : {}) }
             : { ...inwardDefaults(), unitId: entryUnit.preferredUnitId }}
           submitLabel={inwardModal.inward ? 'Save changes' : 'Save inward'}
-          fieldOverrides={{ unitId: { disabled: entryUnit.isSingleUnit, hint: !inwardModal.inward ? entryUnit.message || undefined : undefined } }}
+          fieldOverrides={{ unitId: { hidden: !inwardModal.inward && entryUnit.isSingleUnit, disabled: entryUnit.isSingleUnit, hint: !inwardModal.inward ? entryUnit.message || undefined : undefined } }}
           beforeFields={!inwardModal.inward ? (
             <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs">
               <span className="text-muted-fg">Part not in the catalogue?</span>

@@ -118,10 +118,10 @@ const REGISTRY: Record<string, MasterCfg> = {
     }).superRefine(validateGstinState),
   },
   customers: {
-    idPrefix: 'cust', module: 'masters', unitScoped: false, softDelete: true,
+    idPrefix: 'cust', module: 'masters', unitScoped: true, softDelete: true,
     collection: (s) => s.masters.customers as unknown as Normalized<Entity>,
     schema: z.object({
-      name: z.string().min(1), gstin, pan: optionalPan, stateCode: z.string().regex(/^\d{2}$/),
+      unitId: z.string().min(1), name: z.string().min(1), gstin, pan: optionalPan, stateCode: z.string().regex(/^\d{2}$/),
       addressLines, paymentTermsDays: z.number().int().min(0).optional(),
       shippingName: z.string().optional(), shippingAddressLines: addressLines,
       shippingGstin: optionalGstin, shippingStateCode: z.string().regex(/^\d{2}$/).optional(),
@@ -139,10 +139,10 @@ const REGISTRY: Record<string, MasterCfg> = {
     }),
   },
   vendors: {
-    idPrefix: 'vnd', module: 'masters', unitScoped: false, softDelete: true,
+    idPrefix: 'vnd', module: 'masters', unitScoped: true, softDelete: true,
     collection: (s) => s.masters.vendors as unknown as Normalized<Entity>,
     schema: z.object({
-      unitId: z.string().optional(),
+      unitId: z.string().min(1),
       name: z.string().min(1), code: z.string().default(''), type: z.enum(['rm', 'service']).default('service'),
       contactPerson: z.string().optional(), phone: z.string().optional(), email: z.string().optional(),
       gstin: optionalGstin, pan: z.string().optional(), stateCode: z.string().regex(/^\d{2}$/).optional(),
@@ -152,12 +152,12 @@ const REGISTRY: Record<string, MasterCfg> = {
     }).superRefine(validateGstinState),
   },
   parts: {
-    idPrefix: 'part', module: 'masters', unitScoped: false, softDelete: true,
+    idPrefix: 'part', module: 'masters', unitScoped: true, softDelete: true,
     collection: (s) => s.masters.parts as unknown as Normalized<Entity>,
     schema: z.object({
       partNo: z.string().min(1), materialCode: z.string().min(1), description: z.string().optional(),
       defaultPoNo: z.string().optional(), defaultPoDate: z.string().optional(),
-      category: z.string().optional(), editionNo: z.string().optional(), unitId: z.string().default('GLOBAL'),
+      category: z.string().optional(), editionNo: z.string().optional(), unitId: z.string().min(1),
       uom: z.string().default('NOS'), hsnSac: z.string().default('84829900'),
       gstPct: z.number().min(0).max(28).default(12),
       finishWtMg: z.number().int().min(0).default(0), scrapWtMg: z.number().int().min(0).default(0),
@@ -186,12 +186,12 @@ const REGISTRY: Record<string, MasterCfg> = {
     }),
   },
   operations: {
-    idPrefix: 'op', module: 'masters', unitScoped: false, softDelete: true,
+    idPrefix: 'op', module: 'masters', unitScoped: true, softDelete: true,
     collection: (s) => s.masters.operations as unknown as Normalized<Entity>,
-    schema: z.object({ code: z.string().min(1), description: z.string().optional() }),
+    schema: z.object({ unitId: z.string().min(1), code: z.string().min(1), description: z.string().optional() }),
   },
   employees: {
-    idPrefix: 'emp', module: 'masters', unitScoped: false, softDelete: true,
+    idPrefix: 'emp', module: 'masters', unitScoped: true, softDelete: true,
     collection: (s) => s.masters.employees as unknown as Normalized<Entity>,
     schema: z.object({
       name: z.string().min(1), empCode: z.string().min(1),
@@ -199,7 +199,7 @@ const REGISTRY: Record<string, MasterCfg> = {
       aadhaarNo: z.string().regex(/^\d{12}$/, 'Aadhaar number must contain exactly 12 digits').optional(),
       address: z.string().optional(),
       labourType: z.enum(['production', 'shift', 'both', 'helper', 'operator', 'supervisor', 'job_inspector']).default('operator'),
-      standardShiftRatePaise: z.number().int().min(0).default(0), unitId: z.string().optional(),
+      standardShiftRatePaise: z.number().int().min(0).default(0), unitId: z.string().min(1),
     }),
   },
 }
@@ -313,7 +313,8 @@ mastersRouter.post(
       throw forbidden('Only administrators can create or import units')
     }
     const body = parseOptionalFields(cfg.schema, req.body)
-    if (cfg.unitScoped && body.unitId) assertUnit(req, body.unitId as string)
+    if (cfg.unitScoped && !body.unitId) throw badRequest('Select a unit before saving')
+    if (cfg.unitScoped) assertUnit(req, body.unitId as string)
     const providedId = typeof (req.body as { id?: unknown })?.id === 'string' ? (req.body as { id?: string }).id : undefined
     if (req.params.entity === 'stock-openings' && !getById(getDb().masters.parts, String((body as Record<string, unknown>).partId ?? ''))) {
       throw badRequest('Selected part does not exist')
@@ -336,6 +337,7 @@ mastersRouter.put(
     if (!cur) throw notFound()
     if (cfg.unitScoped) assertUnit(req, cur.unitId)
     const body = parseOptionalFields(cfg.schema, req.body)
+    if (cfg.unitScoped && !body.unitId && !cur.unitId) throw badRequest('Select a unit before saving')
     if (cfg.unitScoped && body.unitId) assertUnit(req, body.unitId as string)
     // Only overwrite fields the caller actually sent; keep stored values for omitted
     // ones (the create schema fills defaults for optionals, which would clobber them).

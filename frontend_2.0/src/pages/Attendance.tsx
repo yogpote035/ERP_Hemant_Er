@@ -172,6 +172,7 @@ function ProductionTab() {
 
   const [editingId, setEditingId] = useState<Id | null>(null)
   const [editingUnitId, setEditingUnitId] = useState('')
+  const [createUnitId, setCreateUnitId] = useState(entryUnit.preferredUnitId)
   const [deleting, setDeleting] = useState<ProductionAttendance | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
 
@@ -183,7 +184,8 @@ function ProductionTab() {
   const [operationId, setOperationId] = useState('')
 
   // Unit is derived from the employee — machine & part pickers follow it.
-  const unitId = editingId ? editingUnitId : entryUnit.preferredUnitId
+  useEffect(() => { if (entryUnit.preferredUnitId) setCreateUnitId(entryUnit.preferredUnitId) }, [entryUnit.preferredUnitId])
+  const unitId = editingId ? editingUnitId : createUnitId
   const parts = useStore(useShallow(partOptionsForUnit(unitId)))
   const machines = useStore(useShallow(machineOptionsForUnit(unitId)))
   // Changing the employee (and thus unit) clears the machine + part pickers, since
@@ -446,6 +448,7 @@ function ProductionTab() {
           <div className="space-y-4 p-4">
             {/* Basic */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {!editingId && !entryUnit.isSingleUnit ? <Fld label="Unit"><Sel value={createUnitId} set={setCreateUnitId} opts={entryUnit.assignedUnits.map((u) => ({ value: u.id, label: `${u.code} — ${u.name}` }))} ph="Select unit…" label="Unit" /></Fld> : null}
               <Fld label="Date"><input type="date" className="input h-9" value={date} onChange={(e) => setDate(e.target.value)} /></Fld>
               <Fld label="Shift No"><Sel value={shiftNo} set={setShiftNo} opts={SHIFT_OPTIONS} ph="— shift —" label="Shift No" /></Fld>
               <Fld label="Employee"><Sel value={employeeId} set={setEmployeeId} opts={employees} ph="Select…" label="Employee" /></Fld>
@@ -656,6 +659,7 @@ function ShiftTab() {
 
   const [editingId, setEditingId] = useState<Id | null>(null)
   const [editingUnitId, setEditingUnitId] = useState('')
+  const [createUnitId, setCreateUnitId] = useState(entryUnit.preferredUnitId)
   const [deleting, setDeleting] = useState<ShiftAttendance | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
 
@@ -670,7 +674,8 @@ function ShiftTab() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
 
   // Employees are global; the navbar selection owns the transaction unit.
-  const unitId = editingId ? editingUnitId : entryUnit.preferredUnitId
+  useEffect(() => { if (entryUnit.preferredUnitId) setCreateUnitId(entryUnit.preferredUnitId) }, [entryUnit.preferredUnitId])
+  const unitId = editingId ? editingUnitId : createUnitId
   const hours = minutesBetween(fromTime, toTime) / 60
   const shiftRate = employeeId ? empById[employeeId]?.standardShiftRatePaise ?? (0 as Paise) : (0 as Paise)
   const otHoursNum = otHours ? Number(otHours) : 0
@@ -820,6 +825,7 @@ function ShiftTab() {
           </div>
           <div className="space-y-4 p-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {!editingId && !entryUnit.isSingleUnit ? <Fld label="Unit"><Sel value={createUnitId} set={setCreateUnitId} opts={entryUnit.assignedUnits.map((u) => ({ value: u.id, label: `${u.code} — ${u.name}` }))} ph="Select unit…" label="Unit" /></Fld> : null}
               <Fld label="Date"><input type="date" className={`input h-9 ${formErrors.date ? 'border-danger' : ''}`} value={date} onChange={(e) => setDate(e.target.value)} title={formErrors.date} /></Fld>
               <Fld label="Shift No"><Sel value={shiftNo} set={setShiftNo} opts={SHIFT_OPTIONS} ph="— shift —" label="Shift No" /></Fld>
               <Fld label="Employee"><div title={formErrors.employeeId}><Sel value={employeeId} set={setEmployeeId} opts={employees} ph="Select…" label="Employee" /></div></Fld>

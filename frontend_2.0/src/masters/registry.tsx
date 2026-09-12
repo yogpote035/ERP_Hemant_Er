@@ -147,6 +147,7 @@ const unitMaster = defineMaster<Unit, UnitForm>({
 
 // ── Parts ───────────────────────────────────────────────────────────────────── (weights entered in grams)
 const partSchema = z.object({
+  unitId: z.string().min(1, 'Required'),
   partNo: z.string().min(1, 'Required'),
   materialCode: z.string().min(1, 'Required'),
   description: z.string().optional(),
@@ -173,12 +174,13 @@ const partMaster = defineMaster<Part, PartForm>({
   icon: Package,
   idPrefix: 'part',
   softDelete: true,
-  unitScoped: false,
+  unitScoped: true,
   collection: (s) => s.masters.parts,
   schema: partSchema,
   searchPlaceholder: 'Search by part no., material, HSN…',
   searchText: (p) => `${p.partNo} ${p.materialCode} ${p.hsnSac} ${p.description ?? ''} ${p.packingMode ?? ''}`,
   columns: [
+    { key: 'unit', header: 'Unit', render: (p, h) => h.unitCode(p.unitId) },
     { key: 'partNo', header: 'Part no.', render: (p) => <span className="font-medium">{p.partNo}</span> },
     { key: 'mat', header: 'Material', render: (p) => <span className="mono text-xs">{p.materialCode}</span> },
     { key: 'gst', header: 'GST', render: (p) => `${p.gstPct}%` },
@@ -186,6 +188,7 @@ const partMaster = defineMaster<Part, PartForm>({
     { key: 'active', header: 'Status', render: activeCell },
   ],
   fields: [
+    { kind: 'select', name: 'unitId', label: 'Unit', options: unitOptions },
     { kind: 'text', name: 'partNo', label: 'Part number' },
     { kind: 'text', name: 'materialCode', label: 'Material code' },
     { kind: 'text', name: 'uom', label: 'UOM', placeholder: 'NOS / KG' },
@@ -204,7 +207,7 @@ const partMaster = defineMaster<Part, PartForm>({
   ],
   emptyForm: () => ({ gstPct: '12', uom: 'NOS', avgQtyPerBox: 1 }),
   toForm: (p) => ({
-    partNo: p.partNo, materialCode: p.materialCode, description: p.description ?? '',
+    unitId: p.unitId, partNo: p.partNo, materialCode: p.materialCode, description: p.description ?? '',
     uom: p.uom, hsnSac: p.hsnSac, gstPct: String(p.gstPct),
     finishWtG: p.finishWtMg / 1000, scrapWtG: p.scrapWtMg / 1000, avgQtyPerBox: p.avgQtyPerBox,
     rmRate: p.rmRatePaise != null ? fromPaise(p.rmRatePaise) : undefined,
@@ -215,7 +218,7 @@ const partMaster = defineMaster<Part, PartForm>({
   toEntity: (v, ctx) => ({
     id: ctx.id, partNo: (v.partNo ?? '').trim(), materialCode: (v.materialCode ?? '').trim(),
     description: opt(v.description), category: ctx.existing?.category, editionNo: opt(v.editionNo),
-    unitId: ctx.existing?.unitId ?? 'GLOBAL', uom: (v.uom ?? '').trim(), hsnSac: (v.hsnSac ?? '').trim(), gstPct: Number(v.gstPct ?? 0),
+    unitId: v.unitId ?? '', uom: (v.uom ?? '').trim(), hsnSac: (v.hsnSac ?? '').trim(), gstPct: Number(v.gstPct ?? 0),
     finishWtMg: Math.round((v.finishWtG ?? 0) * 1000), scrapWtMg: Math.round((v.scrapWtG ?? 0) * 1000),
     rmRatePaise: v.rmRate != null ? toPaise(v.rmRate) : undefined,
     rmWtMg: v.rmWtG != null ? Math.round(v.rmWtG * 1000) : undefined,
@@ -236,11 +239,11 @@ const partMaster = defineMaster<Part, PartForm>({
     })
   },
   extraValidate: (v, s, existingId) => {
-    // Part catalogue is global, so part number is unique across all units.
+    // Part numbers may repeat across companies, but must be unique inside a unit.
     const dup = !!v.partNo?.trim() && values(s.masters.parts).some(
-      (p) => p.id !== existingId && p.partNo.trim().toLowerCase() === v.partNo.trim().toLowerCase()
+      (p) => p.id !== existingId && p.unitId === v.unitId && p.partNo.trim().toLowerCase() === v.partNo.trim().toLowerCase()
     )
-    if (dup) return 'Part number already exists in the global catalogue'
+    if (dup) return 'Part number already exists in this unit'
     return null
   },
   displayName: (p) => p.partNo,
@@ -248,6 +251,7 @@ const partMaster = defineMaster<Part, PartForm>({
 
 // ── Vendors ─────────────────────────────────────────────────────────────────────
 const vendorSchema = z.object({
+  unitId: z.string().min(1, 'Required'),
   name: z.string().min(1, 'Required'),
   contactPerson: z.string().optional(),
   phone: z.string().optional(),
@@ -276,15 +280,17 @@ const vendorMaster = defineMaster<Vendor, VendorForm>({
   icon: Truck,
   idPrefix: 'vnd',
   softDelete: true,
-  unitScoped: false,
+  unitScoped: true,
   collection: (s) => s.masters.vendors,
   schema: vendorSchema,
   columns: [
+    { key: 'unit', header: 'Unit', render: (v, h) => h.unitCode(v.unitId ?? '') },
     { key: 'name', header: 'Name', render: (v) => v.name },
     { key: 'gstin', header: 'GSTIN', render: (v) => <span className="mono text-xs">{v.gstin ?? '—'}</span> },
     { key: 'active', header: 'Status', render: activeCell },
   ],
   fields: [
+    { kind: 'select', name: 'unitId', label: 'Unit', options: unitOptions },
     { kind: 'text', name: 'name', label: 'Vendor name', colSpan: 2 },
     { kind: 'text', name: 'contactPerson', label: 'Contact person' },
     { kind: 'text', name: 'phone', label: 'Phone' },
@@ -302,14 +308,14 @@ const vendorMaster = defineMaster<Vendor, VendorForm>({
   ],
   emptyForm: () => ({}),
   toForm: (v) => ({
-    name: v.name, contactPerson: v.contactPerson ?? '',
+    unitId: v.unitId ?? '', name: v.name, contactPerson: v.contactPerson ?? '',
     phone: v.phone ?? '', email: v.email ?? '', gstin: v.gstin ?? '', pan: v.pan ?? '',
     stateCode: v.stateCode ?? '', city: v.city ?? '', pincode: v.pincode ?? '',
     addressLines: joinLines(v.addressLines), bankName: v.bankName ?? '',
     accountNo: v.accountNo ?? '', ifsc: v.ifsc ?? '', remarks: v.remarks ?? '',
   }),
   toEntity: (v, ctx) => ({
-    id: ctx.id, unitId: ctx.existing?.unitId, name: (v.name ?? '').trim(), code: ctx.existing?.code ?? ctx.id, type: ctx.existing?.type ?? 'service',
+    id: ctx.id, unitId: v.unitId ?? '', name: (v.name ?? '').trim(), code: ctx.existing?.code ?? ctx.id, type: ctx.existing?.type ?? 'service',
     contactPerson: opt(v.contactPerson), phone: opt(v.phone), email: opt(v.email),
     gstin: opt(v.gstin), pan: opt(v.pan), stateCode: opt(v.stateCode), city: opt(v.city),
     pincode: opt(v.pincode), addressLines: splitLines(v.addressLines), bankName: opt(v.bankName),
@@ -326,6 +332,7 @@ const vendorMaster = defineMaster<Vendor, VendorForm>({
 
 // ── Customers ─────────────────────────────────────────────────────────────────────
 const customerSchema = z.object({
+  unitId: z.string().min(1, 'Required'),
   name: z.string().min(1, 'Required'),
   gstin: z.string().regex(GSTIN_RE, GSTIN_MSG),
   pan: z.union([z.literal(''), z.string().regex(PAN_RE, PAN_MSG)]).optional(),
@@ -358,9 +365,11 @@ const customerMaster = defineMaster<Customer, CustomerForm>({
   icon: Users2,
   idPrefix: 'cus',
   softDelete: true,
+  unitScoped: true,
   collection: (s) => s.masters.customers,
   schema: customerSchema,
   columns: [
+    { key: 'unit', header: 'Unit', render: (c, h) => h.unitCode(c.unitId ?? '') },
     { key: 'name', header: 'Name', render: (c) => <span className="font-medium">{c.name}</span> },
     { key: 'gstin', header: 'GSTIN', render: (c) => <span className="mono text-xs">{c.gstin}</span> },
     { key: 'state', header: 'State', render: (c) => c.stateCode },
@@ -368,6 +377,7 @@ const customerMaster = defineMaster<Customer, CustomerForm>({
     { key: 'active', header: 'Status', render: activeCell },
   ],
   fields: [
+    { kind: 'select', name: 'unitId', label: 'Unit', options: unitOptions },
     { kind: 'text', name: 'name', label: 'Customer name', colSpan: 2 },
     { kind: 'text', name: 'gstin', label: 'GSTIN' },
     { kind: 'text', name: 'stateCode', label: 'State code', hint: STATE_HINT },
@@ -387,7 +397,7 @@ const customerMaster = defineMaster<Customer, CustomerForm>({
   ],
   emptyForm: () => ({}),
   toForm: (c) => ({
-    name: c.name, gstin: c.gstin, pan: c.pan ?? '', stateCode: c.stateCode,
+    unitId: c.unitId ?? '', name: c.name, gstin: c.gstin, pan: c.pan ?? '', stateCode: c.stateCode,
     paymentTermsDays: c.paymentTermsDays, addressLines: joinLines(c.addressLines),
     shippingName: c.shippingName ?? '', shippingAddressLines: joinLines(c.shippingAddressLines ?? []),
     shippingGstin: c.shippingGstin ?? '', shippingStateCode: c.shippingStateCode ?? '',
@@ -395,7 +405,7 @@ const customerMaster = defineMaster<Customer, CustomerForm>({
     freightTerms: c.freightTerms ?? '', transitInsuranceTerms: c.transitInsuranceTerms ?? '', sez: c.sez ?? false,
   }),
   toEntity: (v, ctx) => ({
-    id: ctx.id, name: (v.name ?? '').trim(), gstin: (v.gstin ?? '').trim().toUpperCase(), pan: opt(v.pan)?.toUpperCase(), stateCode: v.stateCode ?? '',
+    id: ctx.id, unitId: v.unitId ?? '', name: (v.name ?? '').trim(), gstin: (v.gstin ?? '').trim().toUpperCase(), pan: opt(v.pan)?.toUpperCase(), stateCode: v.stateCode ?? '',
     paymentTermsDays: v.paymentTermsDays, addressLines: splitLines(v.addressLines),
     shippingName: opt(v.shippingName), shippingAddressLines: splitLines(v.shippingAddressLines),
     shippingGstin: opt(v.shippingGstin)?.toUpperCase(), shippingStateCode: opt(v.shippingStateCode),
@@ -492,6 +502,7 @@ const machineMaster = defineMaster<Machine, MachineForm>({
 
 // ── Operations ─────────────────────────────────────────────────────────────────────
 const operationSchema = z.object({
+  unitId: z.string().min(1, 'Required'),
   code: z.string().min(1, 'Required'),
   description: z.string().optional(),
 })
@@ -507,33 +518,37 @@ const operationMaster = defineMaster<Operation, OperationForm>({
   icon: Wrench,
   idPrefix: 'op',
   softDelete: true,
+  unitScoped: true,
   collection: (s) => s.masters.operations,
   schema: operationSchema,
   columns: [
+    { key: 'unit', header: 'Unit', render: (o, h) => h.unitCode(o.unitId ?? '') },
     { key: 'code', header: 'Code', render: (o) => <span className="font-medium">{o.code}</span> },
     { key: 'desc', header: 'Description', render: (o) => o.description ?? '—' },
     { key: 'active', header: 'Status', render: activeCell },
   ],
   fields: [
+    { kind: 'select', name: 'unitId', label: 'Unit', options: unitOptions },
     { kind: 'text', name: 'code', label: 'Operation code' },
     { kind: 'textarea', name: 'description', label: 'Description', colSpan: 2 },
   ],
   emptyForm: () => ({}),
-  toForm: (o) => ({ code: o.code, description: o.description ?? '' }),
+  toForm: (o) => ({ unitId: o.unitId ?? '', code: o.code, description: o.description ?? '' }),
   toEntity: (v, ctx) => ({
-    id: ctx.id, code: (v.code ?? '').trim(), description: opt(v.description), active: ctx.existing?.active ?? true,
+    id: ctx.id, unitId: v.unitId ?? '', code: (v.code ?? '').trim(), description: opt(v.description), active: ctx.existing?.active ?? true,
   }),
   extraValidate: (v, s, existingId) =>
     !!v.code?.trim() && values(s.masters.operations).some(
-      (o) => o.id !== existingId && o.code.trim().toLowerCase() === v.code.trim().toLowerCase()
+      (o) => o.id !== existingId && o.unitId === v.unitId && o.code.trim().toLowerCase() === v.code.trim().toLowerCase()
     )
-      ? 'An operation with this code already exists'
+      ? 'An operation with this code already exists in this unit'
       : null,
   displayName: (o) => o.code,
 })
 
 // ── Employees ─────────────────────────────────────────────────────────────────────
 const employeeSchema = z.object({
+  unitId: z.string().min(1, 'Required'),
   name: z.string().min(1, 'Required'),
   empCode: z.string().min(1, 'Required'),
   aadhaarNo: z.string().regex(/^\d{12}$/, 'Enter exactly 12 digits').optional().or(z.literal('')),
@@ -554,10 +569,11 @@ const employeeMaster = defineMaster<Employee, EmployeeForm>({
   icon: UserCog,
   idPrefix: 'emp',
   softDelete: true,
-  unitScoped: false,
+  unitScoped: true,
   collection: (s) => s.masters.employees,
   schema: employeeSchema,
   columns: [
+    { key: 'unit', header: 'Unit', render: (e, h) => h.unitCode(e.unitId ?? '') },
     { key: 'code', header: 'Code', render: (e) => <span className="font-medium">{e.empCode}</span> },
     { key: 'name', header: 'Name', render: (e) => e.name },
     { key: 'phone', header: 'Mobile', render: (e) => e.phone ?? '—' },
@@ -566,6 +582,7 @@ const employeeMaster = defineMaster<Employee, EmployeeForm>({
     { key: 'active', header: 'Status', render: activeCell },
   ],
   fields: [
+    { kind: 'select', name: 'unitId', label: 'Unit', options: unitOptions },
     { kind: 'text', name: 'name', label: 'Employee name' },
     { kind: 'text', name: 'empCode', label: 'Employee code' },
     { kind: 'text', name: 'aadhaarNo', label: 'Aadhaar no.' },
@@ -579,19 +596,19 @@ const employeeMaster = defineMaster<Employee, EmployeeForm>({
   ],
   emptyForm: () => ({ labourType: 'operator' }),
   toForm: (e) => ({
-    name: e.name, empCode: e.empCode, aadhaarNo: e.aadhaarNo ?? '', address: e.address ?? '', phone: e.phone ?? '', labourType: e.labourType,
+    unitId: e.unitId ?? '', name: e.name, empCode: e.empCode, aadhaarNo: e.aadhaarNo ?? '', address: e.address ?? '', phone: e.phone ?? '', labourType: e.labourType,
     standardShiftRate: fromPaise(e.standardShiftRatePaise),
   }),
   toEntity: (v, ctx) => ({
     id: ctx.id, name: (v.name ?? '').trim(), empCode: (v.empCode ?? '').trim(), aadhaarNo: opt(v.aadhaarNo), address: opt(v.address), phone: opt(v.phone),
-    labourType: v.labourType ?? 'operator', standardShiftRatePaise: toPaise(v.standardShiftRate ?? 0), unitId: ctx.existing?.unitId,
+    labourType: v.labourType ?? 'operator', standardShiftRatePaise: toPaise(v.standardShiftRate ?? 0), unitId: v.unitId ?? '',
     active: ctx.existing?.active ?? true,
   }),
   extraValidate: (v, s, existingId) =>
     !!v.empCode?.trim() && values(s.masters.employees).some(
-      (e) => e.id !== existingId && e.empCode.trim().toLowerCase() === v.empCode.trim().toLowerCase()
+      (e) => e.id !== existingId && e.unitId === v.unitId && e.empCode.trim().toLowerCase() === v.empCode.trim().toLowerCase()
     )
-      ? 'An employee with this code already exists'
+      ? 'An employee with this code already exists in this unit'
       : null,
   displayName: (e) => e.empCode,
 })

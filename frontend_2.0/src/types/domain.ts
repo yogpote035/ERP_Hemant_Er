@@ -84,6 +84,7 @@ export interface Vendor {
 /** The consignee you bill. */
 export interface Customer {
   id: Id
+  unitId?: Id
   name: string
   gstin: string
   pan?: string
@@ -419,6 +420,7 @@ export interface Machine {
 }
 export interface Operation {
   id: Id
+  unitId?: Id
   code: string
   description?: string
   active: boolean

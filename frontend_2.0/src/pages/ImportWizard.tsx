@@ -265,7 +265,7 @@ export default function ImportWizard({
                   })}
                 />
               </label>
-              <label className="flex flex-col gap-1.5">
+              {!entryUnit.isSingleUnit ? <label className="flex flex-col gap-1.5">
                 <span className="text-[11.5px] font-medium text-muted-fg">Target unit</span>
                 <SearchableDropdown
                   value={unitId}
@@ -274,7 +274,7 @@ export default function ImportWizard({
                   options={units}
                   placeholder="Select a unit…"
                 />
-              </label>
+              </label> : null}
             </div>
             {entryUnit.message ? <div className="text-[11.5px] text-warning">{entryUnit.message}</div> : null}
             </>

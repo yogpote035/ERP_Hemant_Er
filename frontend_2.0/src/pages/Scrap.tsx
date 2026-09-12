@@ -229,7 +229,7 @@ export default function Scrap() {
           <div className="border-b border-border px-4 py-3 text-[13px] font-semibold">{editingId ? `Edit scrap bill ${invoiceNo}` : 'New scrap bill'}</div>
           <div className="space-y-4 p-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Fld label="Unit" hint={!editingId ? entryUnit.message : undefined}>
+              {editingId || !entryUnit.isSingleUnit ? <Fld label="Unit" hint={!editingId ? entryUnit.message : undefined}>
                 <SearchableDropdown
                   aria-label="Unit"
                   value={unitId}
@@ -238,7 +238,7 @@ export default function Scrap() {
                   options={units}
                   placeholder="Select unit…"
                 />
-              </Fld>
+              </Fld> : null}
               <Fld label="Customer">
                 <SearchableDropdown
                   aria-label="Customer"

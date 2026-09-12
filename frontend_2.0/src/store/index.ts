@@ -35,7 +35,9 @@ export function currentUser(s: RootState): User | null {
 function healUnit(user: User, prev: Id | 'ALL' | null): Id | 'ALL' {
   if (user.role === 'admin') return prev ?? 'ALL'
   if (prev && prev !== 'ALL' && user.assignedUnitIds.includes(prev)) return prev
-  return user.assignedUnitIds[0] ?? 'ALL'
+  // A single assignment is unambiguous and can be silently inherited by every
+  // create/import flow. Multi-unit users must deliberately choose a target.
+  return user.assignedUnitIds.length === 1 ? user.assignedUnitIds[0]! : 'ALL'
 }
 
 export function login(userId: Id): void {

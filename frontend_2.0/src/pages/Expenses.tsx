@@ -366,9 +366,11 @@ function ExpenseForm({
     >
       <div className="space-y-3">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Fld label="Unit" hint={!existing ? unitMessage : undefined}>
-            <SearchableDropdown aria-label="Unit" value={unitId} disabled={Boolean(defaultUnitId) && !unitMessage} onChange={(v) => { setUnitId(v); setVendorId('') }} options={units} placeholder="Select unit…" />
-          </Fld>
+          {existing || unitMessage || !defaultUnitId ? (
+            <Fld label="Unit" hint={!existing ? unitMessage : undefined}>
+              <SearchableDropdown aria-label="Unit" value={unitId} onChange={(v) => { setUnitId(v); setVendorId('') }} options={units} placeholder="Select unit…" />
+            </Fld>
+          ) : null}
           <Fld label="Supplier name">
             <SearchableDropdown aria-label="Supplier name" value={vendorId} onChange={(v) => setVendorId(v)} options={vendors} placeholder={unitId ? 'Select supplier…' : 'Select unit first…'} />
           </Fld>
