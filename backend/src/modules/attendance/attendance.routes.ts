@@ -76,7 +76,12 @@ function validateProduction(s: RootState, input: ProductionInput): string[] {
   if (!emp) errors.push('Employee is required')
   if (!mc) errors.push('Machine is required')
   if (!part) errors.push('Part is required')
+  if (emp && emp.unitId !== input.unitId) errors.push('Employee belongs to a different unit than the selected navbar unit')
   if (mc && mc.unitId !== input.unitId) errors.push('Machine belongs to a different unit than the selected navbar unit')
+  if (part && part.unitId !== input.unitId) errors.push('Part belongs to a different unit than the selected navbar unit')
+  const operation = input.operationId ? getById(s.masters.operations, input.operationId) : undefined
+  if (input.operationId && !operation) errors.push('Operation is required')
+  if (operation && operation.unitId !== input.unitId) errors.push('Operation belongs to a different unit than the selected navbar unit')
   const ok = input.okQty
   const scrap = input.scrapQty ?? 0
   const rework = input.reworkQty ?? 0
@@ -231,6 +236,7 @@ function validateShift(s: RootState, input: ShiftInput): string[] {
   const employee = getById(s.masters.employees, input.employeeId)
   if (!employee) errors.push('Employee is required')
   else {
+    if (employee.unitId !== input.unitId) errors.push('Employee belongs to a different unit than the selected navbar unit')
     if (input.shiftRatePaise == null && (employee.standardShiftRatePaise ?? 0) <= 0) errors.push('Employee shift rate is not configured')
   }
   if (minutesBetween(input.fromTime, input.toTime) <= 0) errors.push('To-time must be after from-time')

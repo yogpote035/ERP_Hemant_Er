@@ -104,12 +104,7 @@ function validateVendorUnit(s: ReturnType<typeof getDb>, vendorId: string | unde
   if (!vendorId) return
   const vendor = getById(s.masters.vendors, vendorId)
   if (!vendor || !vendor.active) throw badRequest('Unknown or inactive vendor')
-  if (vendor.unitId && vendor.unitId !== unitId) throw badRequest('Vendor does not belong to the selected unit')
-  if (!vendor.unitId) {
-    const usedInUnit = values(s.expenses.expenses).some((e) => e.unitId === unitId && e.vendorId === vendorId) ||
-      values(s.inventory.inwards).some((i) => i.unitId === unitId && i.vendorId === vendorId)
-    if (!usedInUnit) throw badRequest('Assign this vendor to the selected unit in Vendor Management first')
-  }
+  if (vendor.unitId !== unitId) throw badRequest('Vendor does not belong to the selected unit')
 }
 
 // ── router ───────────────────────────────────────────────────────────────────

@@ -131,7 +131,7 @@ describe('issued-invoice immutability (Phase B snapshots)', () => {
 
     // Rename the customer master after the invoice is issued.
     const customer = ALL_SPECS.find((s) => s.key === 'customer')!
-    customer.save({ name: 'RENAMED PVT LTD', gstin: cust.gstin, stateCode: cust.stateCode }, cust)
+    customer.save({ unitId: cust.unitId, name: 'RENAMED PVT LTD', gstin: cust.gstin, stateCode: cust.stateCode }, cust)
     expect(getById(st().masters.customers, cust.id)!.name).toBe('RENAMED PVT LTD')
 
     // The issued invoice's PDF + list name stay the SNAPSHOT, not the live master.

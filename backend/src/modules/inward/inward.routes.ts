@@ -140,10 +140,13 @@ inwardRouter.post(
     if (!getById(db.masters.units, body.unitId)) throw badRequest('Unknown unit')
     const part = getById(db.masters.parts, body.partId)
     if (!part) throw badRequest('Unknown part')
+    if (part.unitId !== body.unitId) throw badRequest('Part does not belong to the selected unit')
     const vendor = body.vendorId ? getById(db.masters.vendors, body.vendorId) : undefined
     if (body.vendorId && (!vendor || !vendor.active)) throw badRequest('Unknown or inactive vendor')
     if (vendor?.unitId && vendor.unitId !== body.unitId) throw badRequest('RM supplier does not belong to the selected unit')
-    if (body.customerId && !getById(db.masters.customers, body.customerId)) throw badRequest('Unknown customer')
+    const customer = body.customerId ? getById(db.masters.customers, body.customerId) : undefined
+    if (body.customerId && !customer) throw badRequest('Unknown customer')
+    if (customer && customer.unitId !== body.unitId) throw badRequest('Customer does not belong to the selected unit')
 
     // Duplicate-challan guard: one (unit, challan, part) row only.
     const dup = values(db.inventory.inwards).some(
@@ -203,10 +206,13 @@ inwardRouter.put(
     if (!getById(db.masters.units, body.unitId)) throw badRequest('Unknown unit')
     const part = getById(db.masters.parts, body.partId)
     if (!part) throw badRequest('Unknown part')
+    if (part.unitId !== body.unitId) throw badRequest('Part does not belong to the selected unit')
     const vendor = body.vendorId ? getById(db.masters.vendors, body.vendorId) : undefined
     if (body.vendorId && (!vendor || !vendor.active)) throw badRequest('Unknown or inactive vendor')
     if (vendor?.unitId && vendor.unitId !== body.unitId) throw badRequest('RM supplier does not belong to the selected unit')
-    if (body.customerId && !getById(db.masters.customers, body.customerId)) throw badRequest('Unknown customer')
+    const customer = body.customerId ? getById(db.masters.customers, body.customerId) : undefined
+    if (body.customerId && !customer) throw badRequest('Unknown customer')
+    if (customer && customer.unitId !== body.unitId) throw badRequest('Customer does not belong to the selected unit')
 
     const dup = values(db.inventory.inwards).some(
       (i) => Boolean(body.challanNo) && i.id !== cur.id && i.unitId === body.unitId && i.partId === body.partId && i.challanNo === body.challanNo

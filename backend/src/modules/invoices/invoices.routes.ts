@@ -193,10 +193,12 @@ invoicesRouter.post(
 
     const cust = getById(s.masters.customers, input.customerId)
     if (!cust) throw badRequest('Choose a consignee (customer)')
+    if (cust.unitId !== inv.unitId) throw badRequest('Customer does not belong to the invoice unit')
 
     if (input.issuerKind === 'supplier') {
       const v = getById(s.masters.vendors, input.issuerVendorId)
       if (!v) throw badRequest('Choose the issuing RM supplier')
+      if (v.unitId !== inv.unitId) throw badRequest('Issuing supplier does not belong to the invoice unit')
       if (!v.gstin || !v.stateCode) throw badRequest('The issuing supplier needs a GSTIN + state code')
     }
 
@@ -333,9 +335,14 @@ invoicesRouter.post(
     if (!inv) throw notFound('Invoice not found')
     assertUnit(req, inv.unitId)
     if (inv.lifecycle !== 'draft') throw conflict(`Bill ${inv.billNo} is ${inv.lifecycle} — only a draft can be edited`)
+    if (input.customerId) {
+      const customer = getById(s.masters.customers, input.customerId)
+      if (!customer || customer.unitId !== inv.unitId) throw badRequest('Customer does not belong to the invoice unit')
+    }
     if (input.issuerKind === 'supplier') {
       const v = getById(s.masters.vendors, input.issuerVendorId)
       if (!v || !v.gstin || !v.stateCode) throw badRequest('The issuing supplier needs a GSTIN + state code')
+      if (v.unitId !== inv.unitId) throw badRequest('Issuing supplier does not belong to the invoice unit')
     }
     const issuerId = input.issuerKind === 'supplier' && input.issuerVendorId ? input.issuerVendorId : inv.unitId
     const updated = await mutate((draft) => {

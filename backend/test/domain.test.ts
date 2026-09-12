@@ -6,7 +6,8 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { seedState } from '../src/db/seed.js'
-import { getById } from '../src/db/normalized.js'
+import { getById, putEntity, values } from '../src/db/normalized.js'
+import { migrateLegacyUnitOwnership } from '../src/db/migrateUnitOwnership.js'
 import { deriveTaxKind, computeInvoice } from '../src/domain/invoiceCompute.js'
 import { selectPartStock } from '../src/domain/stock.js'
 import { outstandingForInvoice } from '../src/domain/billing.js'
@@ -15,6 +16,22 @@ import { computeScrap } from '../src/lib/scrapMath.js'
 import type { Paise } from '../src/lib/money.js'
 
 const s = seedState()
+
+describe('legacy unit ownership migration', () => {
+  it('clones a shared legacy customer and repoints each unit transaction', () => {
+    const legacy = structuredClone(seedState())
+    const customer = getById(legacy.masters.customers, 'c1')!
+    customer.unitId = undefined
+    const source = getById(legacy.billing.invoices, 'inv-254')!
+    putEntity(legacy.billing.invoices, { ...source, id: 'inv-u2-legacy', unitId: 'u2', customerId: customer.id })
+
+    assert.equal(migrateLegacyUnitOwnership(legacy), true)
+    const customers = values(legacy.masters.customers).filter((row) => row.name === customer.name)
+    assert.deepEqual(new Set(customers.map((row) => row.unitId)), new Set(['u1', 'u2']))
+    const u2Invoice = getById(legacy.billing.invoices, 'inv-u2-legacy')!
+    assert.equal(getById(legacy.masters.customers, u2Invoice.customerId)?.unitId, 'u2')
+  })
+})
 
 describe('invoiceCompute', () => {
   it('derives tax kind from issuer/customer state codes', () => {

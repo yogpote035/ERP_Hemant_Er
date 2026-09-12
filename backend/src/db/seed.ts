@@ -72,9 +72,9 @@ const PARTS: Part[] = [
 ]
 
 const CUSTOMERS: Customer[] = [
-  { id: 'c1', name: 'Rolex Rings Limited', gstin: '24AACCR3790B1ZO', stateCode: '24', addressLines: ['Gondal Road, Nr Railway Crossing', 'Village Kothriya, Rajkot-360004', 'Gujarat'], paymentTermsDays: 45, active: true },
-  { id: 'c2', name: 'Yenkay Engineering Pvt Ltd', gstin: '27AABCY1234C1Z8', stateCode: '27', addressLines: ['Plot 14, MIDC Bhosari', 'Pune 411026', 'Maharashtra'], paymentTermsDays: 30, active: true },
-  { id: 'c3', name: 'SKF India Ltd', gstin: '29AAACS1234D1Z1', stateCode: '29', addressLines: ['Mahadevapura', 'Bangalore 560048', 'Karnataka'], paymentTermsDays: 30, active: true },
+  { id: 'c1', unitId: 'u1', name: 'Rolex Rings Limited', gstin: '24AACCR3790B1ZO', stateCode: '24', addressLines: ['Gondal Road, Nr Railway Crossing', 'Village Kothriya, Rajkot-360004', 'Gujarat'], paymentTermsDays: 45, active: true },
+  { id: 'c2', unitId: 'u1', name: 'Yenkay Engineering Pvt Ltd', gstin: '27AABCY1234C1Z8', stateCode: '27', addressLines: ['Plot 14, MIDC Bhosari', 'Pune 411026', 'Maharashtra'], paymentTermsDays: 30, active: true },
+  { id: 'c3', unitId: 'u1', name: 'SKF India Ltd', gstin: '29AAACS1234D1Z1', stateCode: '29', addressLines: ['Mahadevapura', 'Bangalore 560048', 'Karnataka'], paymentTermsDays: 30, active: true },
 ]
 const VENDORS: Vendor[] = [
   { id: 'v1', unitId: 'u1', name: 'Sunflag Iron & Steel', code: 'VND-001', type: 'rm', gstin: '27AAACS5678E1Z3', pan: 'AAACS5678E', stateCode: '27', addressLines: ['Bhandara Road', 'Nagpur 441401'], city: 'Nagpur', pincode: '441401', bankName: 'SBI', accountNo: '3012345678', ifsc: 'SBIN0001234', invoiceFormat: 'SUN/{FY}/{seq}', active: true },
@@ -145,8 +145,8 @@ const MACHINES: Machine[] = [
   { id: 'm2', machineNo: 'MC-02', description: 'CNC Turning', unitId: 'u1', active: true },
 ]
 const OPERATIONS: Operation[] = [
-  { id: 'op-1r', code: '1R', description: '1st Rough', active: true },
-  { id: 'op-1f', code: '1F', description: '1st Finish', active: true },
+  { id: 'op-1r', unitId: 'u1', code: '1R', description: '1st Rough', active: true },
+  { id: 'op-1f', unitId: 'u1', code: '1F', description: '1st Finish', active: true },
 ]
 const EMPLOYEES: Employee[] = [
   { id: 'e1', name: 'Ramesh Patil', empCode: 'E001', phone: '9800000001', labourType: 'production', standardShiftRatePaise: toPaise(800), unitId: 'u1', active: true },
@@ -213,7 +213,7 @@ function bulkSeed(s: RootState): number {
   for (let i = 0; i < 37; i++) {
     const [stateCode, st] = pick(STATES, i)
     putEntity(s.masters.customers, {
-      id: `cb${i}`, name: `${pick(['Precision', 'Apex', 'Mahalaxmi', 'Sai', 'Bharat', 'Unique', 'Vidarbha'], i)} ${pick(['Bearings', 'Forgings', 'Auto Components', 'Engineering', 'Industries'], i + 1)} ${i + 1}`,
+      id: `cb${i}`, unitId: pick(ALL_UNIT_IDS, i), name: `${pick(['Precision', 'Apex', 'Mahalaxmi', 'Sai', 'Bharat', 'Unique', 'Vidarbha'], i)} ${pick(['Bearings', 'Forgings', 'Auto Components', 'Engineering', 'Industries'], i + 1)} ${i + 1}`,
       gstin: `${stateCode}AABC${pad(i, 4)}Q1Z${i % 9}`, stateCode,
       addressLines: [`Plot ${i + 1}, MIDC`, `${st} ${400000 + i}`], paymentTermsDays: pick([30, 45, 60], i), active: i % 13 !== 0,
     })
@@ -228,7 +228,7 @@ function bulkSeed(s: RootState): number {
   }
   // Machines / operations / employees — feed Attendance & Payroll.
   for (let i = 0; i < 18; i++) putEntity(s.masters.machines, { id: `mb${i}`, machineNo: `MC-${pad(10 + i, 2)}`, description: pick(['CNC Turning', 'VMC', 'Grinding', 'Drilling'], i), unitId: pick(ALL_UNIT_IDS, i), active: i % 9 !== 0 })
-  for (let i = 0; i < 10; i++) putEntity(s.masters.operations, { id: `opb${i}`, code: `${(i % 4) + 2}${i % 2 ? 'F' : 'R'}`, description: pick(['Rough', 'Finish', 'Bore', 'Face'], i), active: true })
+  for (let i = 0; i < 10; i++) putEntity(s.masters.operations, { id: `opb${i}`, unitId: pick(ALL_UNIT_IDS, i), code: `${(i % 4) + 2}${i % 2 ? 'F' : 'R'}`, description: pick(['Rough', 'Finish', 'Bore', 'Face'], i), active: true })
   for (let i = 0; i < 58; i++) putEntity(s.masters.employees, { id: `eb${i}`, name: `${pick(['Ramesh', 'Suresh', 'Mahesh', 'Dinesh', 'Ganesh', 'Vijay', 'Anil', 'Sunil'], i)} ${pick(['Patil', 'Jadhav', 'Kale', 'More', 'Shinde', 'Pawar'], i + 1)}`, empCode: `E${pad(100 + i)}`, phone: `98${pad(10000000 + i, 8)}`, labourType: pick(['production', 'shift', 'both'] as const, i), standardShiftRatePaise: toPaise(600 + (i % 6) * 50), unitId: pick(ALL_UNIT_IDS, i), active: i % 14 !== 0 })
 
   // Expenses — categories, optional vendor, mixed paid/partial/unpaid via instalments.

@@ -89,17 +89,17 @@ describe('write-through routing (non-admin → module endpoints)', () => {
 
   it('routes a master save to /masters/:entity by id prefix', async () => {
     const customer = MASTER_SPECS.find((s) => s.key === 'customer')!
-    customer.save({ name: 'WT Customer', gstin: '27ZZZZZ0000Z1Z9', stateCode: '27', addressLines: 'Pune' }, null)
+    customer.save({ unitId: 'u1', name: 'WT Customer', gstin: '27ZZZZZ0000Z1Z9', stateCode: '27', addressLines: 'Pune' }, null)
     await flush()
     expect(M.mastersApi.create).toHaveBeenCalledTimes(1)
     expect(M.mastersApi.create).toHaveBeenCalledWith('customers', expect.objectContaining({ name: 'WT Customer' }))
   })
 
-  it('writes a new part to the global catalogue', async () => {
+  it('writes a new part to its selected unit', async () => {
     const part = MASTER_SPECS.find((s) => s.key === 'part')!
     part.save({ partNo: 'WT-PART', materialCode: 'WT-RM', unitId: 'u1', uom: 'NOS', hsnSac: '7318', gstPct: '18', finishWtG: 1, scrapWtG: 0.1, avgQtyPerBox: 10 }, null)
     await flush()
-    expect(M.mastersApi.create).toHaveBeenCalledWith('parts', expect.objectContaining({ unitId: 'GLOBAL' }))
+    expect(M.mastersApi.create).toHaveBeenCalledWith('parts', expect.objectContaining({ unitId: 'u1' }))
   })
 
   it('routes attendance + expense-edit + rejection-edit (previously local-only)', async () => {

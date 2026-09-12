@@ -104,14 +104,14 @@ const PARTS: Part[] = [
 
 // ── Customers / Vendors ───────────────────────────────────────────────────────
 const CUSTOMERS: Customer[] = [
-  { id: 'c1', name: 'Rolex Rings Limited', gstin: '24AACCR3790B1ZO', stateCode: '24', addressLines: ['Gondal Road, Nr Railway Crossing', 'Village Kothriya, Rajkot-360004', 'Gujarat'], paymentTermsDays: 45, active: true },
-  { id: 'c2', name: 'Yenkay Engineering Pvt Ltd', gstin: '27AABCY1234C1Z8', stateCode: '27', addressLines: ['Plot 14, MIDC Bhosari', 'Pune 411026', 'Maharashtra'], paymentTermsDays: 30, active: true },
-  { id: 'c3', name: 'SKF India Ltd', gstin: '29AAACS1234D1Z1', stateCode: '29', addressLines: ['Mahadevapura', 'Bangalore 560048', 'Karnataka'], paymentTermsDays: 30, active: true },
+  { id: 'c1', unitId: 'u1', name: 'Rolex Rings Limited', gstin: '24AACCR3790B1ZO', stateCode: '24', addressLines: ['Gondal Road, Nr Railway Crossing', 'Village Kothriya, Rajkot-360004', 'Gujarat'], paymentTermsDays: 45, active: true },
+  { id: 'c2', unitId: 'u1', name: 'Yenkay Engineering Pvt Ltd', gstin: '27AABCY1234C1Z8', stateCode: '27', addressLines: ['Plot 14, MIDC Bhosari', 'Pune 411026', 'Maharashtra'], paymentTermsDays: 30, active: true },
+  { id: 'c3', unitId: 'u1', name: 'SKF India Ltd', gstin: '29AAACS1234D1Z1', stateCode: '29', addressLines: ['Mahadevapura', 'Bangalore 560048', 'Karnataka'], paymentTermsDays: 30, active: true },
 ]
 const VENDORS: Vendor[] = [
-  { id: 'v1', name: 'Sunflag Iron & Steel', code: 'VND-001', type: 'rm', gstin: '27AAACS5678E1Z3', pan: 'AAACS5678E', stateCode: '27', addressLines: ['Bhandara Road', 'Nagpur 441401'], city: 'Nagpur', pincode: '441401', bankName: 'SBI', accountNo: '3012345678', ifsc: 'SBIN0001234', invoiceFormat: 'SUN/{FY}/{seq}', active: true },
-  { id: 'v2', name: 'Pune Tool Traders', code: 'VND-002', type: 'service', gstin: '27AAFCP4321F1Z9', stateCode: '27', addressLines: ['Shivajinagar', 'Pune 411005'], active: true },
-  { id: 'v3', name: 'Khed Coolants & Oils', code: 'VND-003', type: 'service', stateCode: '27', addressLines: ['Chakan', 'Pune 410501'], active: true },
+  { id: 'v1', unitId: 'u1', name: 'Sunflag Iron & Steel', code: 'VND-001', type: 'rm', gstin: '27AAACS5678E1Z3', pan: 'AAACS5678E', stateCode: '27', addressLines: ['Bhandara Road', 'Nagpur 441401'], city: 'Nagpur', pincode: '441401', bankName: 'SBI', accountNo: '3012345678', ifsc: 'SBIN0001234', invoiceFormat: 'SUN/{FY}/{seq}', active: true },
+  { id: 'v2', unitId: 'u1', name: 'Pune Tool Traders', code: 'VND-002', type: 'service', gstin: '27AAFCP4321F1Z9', stateCode: '27', addressLines: ['Shivajinagar', 'Pune 411005'], active: true },
+  { id: 'v3', unitId: 'u1', name: 'Khed Coolants & Oils', code: 'VND-003', type: 'service', stateCode: '27', addressLines: ['Chakan', 'Pune 410501'], active: true },
 ]
 
 // ── Users ──────────────────────────────────────────────────────────────────────
@@ -202,8 +202,8 @@ const MACHINES: Machine[] = [
   { id: 'm2', machineNo: 'MC-02', description: 'CNC Turning', unitId: 'u1', active: true },
 ]
 const OPERATIONS: Operation[] = [
-  { id: 'op-1r', code: '1R', description: '1st Rough', active: true },
-  { id: 'op-1f', code: '1F', description: '1st Finish', active: true },
+  { id: 'op-1r', unitId: 'u1', code: '1R', description: '1st Rough', active: true },
+  { id: 'op-1f', unitId: 'u1', code: '1F', description: '1st Finish', active: true },
 ]
 const EMPLOYEES: Employee[] = [
   { id: 'e1', name: 'Ramesh Patil', empCode: 'E001', phone: '9800000001', labourType: 'production', standardShiftRatePaise: toPaise(800), unitId: 'u1', active: true },

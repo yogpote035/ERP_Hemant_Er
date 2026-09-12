@@ -40,7 +40,7 @@ describe('master commands', () => {
     const before = values(useStore.getState().masters.customers).length
 
     const res = customer.save(
-      { name: 'Acme Co', gstin: '27ABCDE1234F1Z5', stateCode: '27', paymentTermsDays: 30, addressLines: 'L1\nL2' },
+      { unitId: 'u1', name: 'Acme Co', gstin: '27ABCDE1234F1Z5', stateCode: '27', paymentTermsDays: 30, addressLines: 'L1\nL2' },
       null
     )
     expect(res.ok).toBe(true)
@@ -51,7 +51,7 @@ describe('master commands', () => {
     expect(created.active).toBe(true)
     expect(useStore.getState().system.activityLog.at(-1)?.command).toBe('saveMaster')
 
-    customer.save({ name: 'Acme Corp', gstin: created.gstin, stateCode: '27', paymentTermsDays: 45 }, created)
+    customer.save({ unitId: 'u1', name: 'Acme Corp', gstin: created.gstin, stateCode: '27', paymentTermsDays: 45 }, created)
     const updated = useStore.getState().masters.customers.byId[created.id]!
     expect(updated.name).toBe('Acme Corp')
     expect(updated.paymentTermsDays).toBe(45)
@@ -65,7 +65,7 @@ describe('master commands', () => {
   it('keeps deactivate separate from permanent delete', () => {
     login(roleId('admin'))
     const customer = spec('customer')
-    const created = customer.save({ name: 'Disposable Customer', stateCode: '27' }, null).data
+    const created = customer.save({ unitId: 'u1', name: 'Disposable Customer', stateCode: '27' }, null).data
     const row = useStore.getState().masters.customers.byId[created.id]!
     customer.setActive(row, false)
     expect(useStore.getState().masters.customers.byId[created.id]?.active).toBe(false)
@@ -103,25 +103,25 @@ describe('master commands', () => {
     )
 
     login(roleId('manager')) // masters = ['view','create','edit'] — no delete
-    const r = customer.save({ name: 'Mgr Co', gstin: '27ABCDE1234F1Z5', stateCode: '27' }, null)
+    const r = customer.save({ unitId: 'u1', name: 'Mgr Co', gstin: '27ABCDE1234F1Z5', stateCode: '27' }, null)
     const created = useStore.getState().masters.customers.byId[r.data.id]!
     expect(() => customer.remove(created)).toThrow(CommandDeniedError)
   })
 })
 
 describe('command-bus guards (review fixes)', () => {
-  it('creates parts in the global catalogue without accepting a unit assignment', () => {
+  it('creates parts in an assigned unit', () => {
     login(roleId('manager'))
     const part = spec('part')
     const result = part.save({
-      partNo: 'X-1', materialCode: 'MC-1', unitId: 'u3', uom: 'NOS', hsnSac: '7326', gstPct: '12',
+      partNo: 'X-1', materialCode: 'MC-1', unitId: 'u1', uom: 'NOS', hsnSac: '7326', gstPct: '12',
       finishWtG: 1, scrapWtG: 0.1, avgQtyPerBox: 100,
     }, null)
     expect(result.ok).toBe(true)
-    expect(useStore.getState().masters.parts.byId[result.data.id]?.unitId).toBe('GLOBAL')
+    expect(useStore.getState().masters.parts.byId[result.data.id]?.unitId).toBe('u1')
   })
 
-  it('allows a global part in each unit and enforces one opening per unit and part', () => {
+  it('enforces one opening per unit and part', () => {
     login(roleId('admin'))
     const opening = spec('opening')
     const st = useStore.getState()
@@ -142,7 +142,7 @@ describe('command-bus guards (review fixes)', () => {
   it('deactivation requires delete: a manager can reactivate (edit) but not deactivate (delete)', () => {
     login(roleId('manager'))
     const customer = spec('customer')
-    const r = customer.save({ name: 'Toggle Co', gstin: '27ABCDE1234F1Z5', stateCode: '27' }, null)
+    const r = customer.save({ unitId: 'u1', name: 'Toggle Co', gstin: '27ABCDE1234F1Z5', stateCode: '27' }, null)
     const created = useStore.getState().masters.customers.byId[r.data.id]!
     expect(() => customer.setActive(created, false)).toThrow(CommandDeniedError) // deactivate → 'delete'
     expect(() => customer.setActive(created, true)).not.toThrow() // reactivate → 'edit'
@@ -152,21 +152,21 @@ describe('command-bus guards (review fixes)', () => {
     login(roleId('admin'))
     const customer = spec('customer')
     // malformed GSTIN
-    expect(() => customer.save({ name: 'Bad', gstin: '27ABCDE1234F1Z', stateCode: '27' }, null)).toThrow(CommandValidationError)
+    expect(() => customer.save({ unitId: 'u1', name: 'Bad', gstin: '27ABCDE1234F1Z', stateCode: '27' }, null)).toThrow(CommandValidationError)
     // GSTIN leading digits (29) disagree with stateCode (27)
-    expect(() => customer.save({ name: 'Mismatch', gstin: '29ABCDE1234F1Z5', stateCode: '27' }, null)).toThrow(CommandValidationError)
+    expect(() => customer.save({ unitId: 'u1', name: 'Mismatch', gstin: '29ABCDE1234F1Z5', stateCode: '27' }, null)).toThrow(CommandValidationError)
     // Separate company/customer records may legitimately use the same GST registration.
-    customer.save({ name: 'First', gstin: '27ZZZZZ1234F1Z5', stateCode: '27' }, null)
-    expect(() => customer.save({ name: 'Second', gstin: '27ZZZZZ1234F1Z5', stateCode: '27' }, null)).not.toThrow()
+    customer.save({ unitId: 'u1', name: 'First', gstin: '27ZZZZZ1234F1Z5', stateCode: '27' }, null)
+    expect(() => customer.save({ unitId: 'u1', name: 'Second', gstin: '27ZZZZZ1234F1Z5', stateCode: '27' }, null)).not.toThrow()
   })
 
-  it('enforces part-number uniqueness across the global catalogue', () => {
+  it('enforces part-number uniqueness within each unit', () => {
     login(roleId('admin'))
     const part = spec('part')
     const base = { materialCode: 'M1', unitId: 'u1', uom: 'NOS', hsnSac: '7318', gstPct: '18', finishWtG: 1, scrapWtG: 0.1, avgQtyPerBox: 100 }
     part.save({ ...base, partNo: 'UNIQ-1' }, null)
     expect(() => part.save({ ...base, partNo: 'uniq-1' }, null)).toThrow(CommandValidationError) // case-insensitive dup
-    expect(() => part.save({ ...base, partNo: 'UNIQ-1', unitId: 'u2' }, null)).toThrow(CommandValidationError)
+    expect(() => part.save({ ...base, partNo: 'UNIQ-1', unitId: 'u2' }, null)).not.toThrow()
   })
 })
 

@@ -58,12 +58,12 @@ describe('RBAC + unit scope', () => {
     assert.equal(r.status, 403)
   })
 
-  it('exposes the global parts catalogue to a unit-scoped operator', async () => {
+  it('exposes only assigned-unit parts to a unit-scoped operator', async () => {
     const t = await tokenFor('opa@hew.in') // unit u1 only
     const r = await request(app).get('/api/masters/parts').set(auth(t))
     assert.equal(r.status, 200)
     assert.ok(r.body.data.length > 0)
-    assert.ok(r.body.data.some((p: { unitId: string }) => p.unitId === 'u2'))
+    assert.ok(r.body.data.every((p: { unitId: string }) => p.unitId === 'u1'))
   })
 })
 
@@ -86,11 +86,11 @@ describe('masters CRUD', () => {
 
   it('round-trips create → update → soft-delete → reactivate', async () => {
     const t = await tokenFor()
-    const created = await request(app).post('/api/masters/customers').set(auth(t)).send({ name: 'Acme', gstin: '27AAAAA0000A1Z5', stateCode: '27', addressLines: ['Pune'] })
+    const created = await request(app).post('/api/masters/customers').set(auth(t)).send({ unitId: 'u1', name: 'Acme', gstin: '27AAAAA0000A1Z5', stateCode: '27', addressLines: ['Pune'] })
     assert.equal(created.status, 201)
     const id = created.body.data.id
 
-    const upd = await request(app).put(`/api/masters/customers/${id}`).set(auth(t)).send({ name: 'Acme Ltd', gstin: '27AAAAA0000A1Z5', stateCode: '27', addressLines: ['Pune'], paymentTermsDays: 30 })
+    const upd = await request(app).put(`/api/masters/customers/${id}`).set(auth(t)).send({ unitId: 'u1', name: 'Acme Ltd', gstin: '27AAAAA0000A1Z5', stateCode: '27', addressLines: ['Pune'], paymentTermsDays: 30 })
     assert.equal(upd.body.data.name, 'Acme Ltd')
 
     const del = await request(app).delete(`/api/masters/customers/${id}`).set(auth(t))
@@ -102,21 +102,21 @@ describe('masters CRUD', () => {
   it('validates GSTIN structure and state but permits multiple companies to share one GSTIN', async () => {
     const t = await tokenFor()
     const malformed = await request(app).post('/api/masters/customers').set(auth(t)).send({
-      name: 'Malformed GST Co', gstin: '27ABCDE1234F1Z', stateCode: '27', addressLines: [],
+      unitId: 'u1', name: 'Malformed GST Co', gstin: '27ABCDE1234F1Z', stateCode: '27', addressLines: [],
     })
     assert.equal(malformed.status, 400)
 
     const mismatch = await request(app).post('/api/masters/customers').set(auth(t)).send({
-      name: 'Mismatch GST Co', gstin: '29ABCDE1234F1Z5', stateCode: '27', addressLines: [],
+      unitId: 'u1', name: 'Mismatch GST Co', gstin: '29ABCDE1234F1Z5', stateCode: '27', addressLines: [],
     })
     assert.equal(mismatch.status, 400)
 
     const sharedGstin = '27SHARE1234S1Z5'
     const first = await request(app).post('/api/masters/customers').set(auth(t)).send({
-      name: 'Shared GST Company One', gstin: sharedGstin, stateCode: '27', addressLines: [],
+      unitId: 'u1', name: 'Shared GST Company One', gstin: sharedGstin, stateCode: '27', addressLines: [],
     })
     const second = await request(app).post('/api/masters/customers').set(auth(t)).send({
-      name: 'Shared GST Company Two', gstin: sharedGstin, stateCode: '27', addressLines: [],
+      unitId: 'u1', name: 'Shared GST Company Two', gstin: sharedGstin, stateCode: '27', addressLines: [],
     })
     assert.equal(first.status, 201)
     assert.equal(second.status, 201)
@@ -126,12 +126,12 @@ describe('masters CRUD', () => {
   it('validates and normalizes an optional customer PAN', async () => {
     const t = await tokenFor()
     const malformed = await request(app).post('/api/masters/customers').set(auth(t)).send({
-      name: 'Bad PAN Company', gstin: '27ABCDE1234F1Z5', pan: 'ABCDE123', stateCode: '27', addressLines: [],
+      unitId: 'u1', name: 'Bad PAN Company', gstin: '27ABCDE1234F1Z5', pan: 'ABCDE123', stateCode: '27', addressLines: [],
     })
     assert.equal(malformed.status, 400)
 
     const created = await request(app).post('/api/masters/customers').set(auth(t)).send({
-      name: 'PAN Company', gstin: '27ABCDE1234F1Z5', pan: 'abcde1234f', stateCode: '27', addressLines: [],
+      unitId: 'u1', name: 'PAN Company', gstin: '27ABCDE1234F1Z5', pan: 'abcde1234f', stateCode: '27', addressLines: [],
     })
     assert.equal(created.status, 201)
     assert.equal(created.body.data.pan, 'ABCDE1234F')
@@ -140,7 +140,7 @@ describe('masters CRUD', () => {
   it('round-trips employee identity, contact, rate, and labour fields', async () => {
     const t = await tokenFor()
     const created = await request(app).post('/api/masters/employees').set(auth(t)).send({
-      name: 'Import Operator', empCode: '/HI/EMP/001', aadhaarNo: '123412341234',
+      unitId: 'u1', name: 'Import Operator', empCode: '/HI/EMP/001', aadhaarNo: '123412341234',
       address: 'Pune, Maharashtra', phone: '9876543210', labourType: 'operator',
       standardShiftRatePaise: 50000,
     })
@@ -152,13 +152,13 @@ describe('masters CRUD', () => {
     assert.equal(created.body.data.standardShiftRatePaise, 50000)
 
     const malformed = await request(app).post('/api/masters/employees').set(auth(t)).send({
-      name: 'Bad Identity', empCode: '/HI/EMP/002', aadhaarNo: '1234', phone: '999',
+      unitId: 'u1', name: 'Bad Identity', empCode: '/HI/EMP/002', aadhaarNo: '1234', phone: '999',
       labourType: 'helper', standardShiftRatePaise: 40000,
     })
     assert.equal(malformed.status, 400)
   })
 
-  it('stores opening stock for the explicitly selected unit and a global part', async () => {
+  it('stores opening stock for the explicitly selected unit and its unit-owned part', async () => {
     const t = await tokenFor()
     const created = await request(app).post('/api/masters/stock-openings').set(auth(t)).send({
       unitId: 'u2', partId: 'p1', fy: '26-27', openingQty: 25, asOfDate: '2026-04-01',
@@ -293,7 +293,7 @@ describe('client-supplied id on create (no id divergence)', () => {
   it('mints a fresh id when the client id collides', async () => {
     const t = await tokenFor()
     // i1 already exists; a create reusing it must NOT overwrite it.
-    const r = await request(app).post('/api/masters/customers').set(auth(t)).send({ id: 'c1', name: 'Collide Co', gstin: '27CCCCC0000C1Z5', stateCode: '27', addressLines: [] })
+    const r = await request(app).post('/api/masters/customers').set(auth(t)).send({ id: 'c1', unitId: 'u1', name: 'Collide Co', gstin: '27CCCCC0000C1Z5', stateCode: '27', addressLines: [] })
     assert.equal(r.status, 201)
     assert.notEqual(r.body.data.id, 'c1') // didn't clobber the seeded customer c1
   })

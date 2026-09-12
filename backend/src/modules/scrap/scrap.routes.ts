@@ -83,7 +83,9 @@ function toRow(s: ReturnType<typeof getDb>, bill: ScrapBill) {
 /** Cross-row + referential validation (ports validateScrap's store-level checks). */
 function assertValid(s: ReturnType<typeof getDb>, body: UpsertBody, selfId?: Id): void {
   if (!getById(s.masters.units, body.unitId)) throw badRequest('Unknown unit')
-  if (!getById(s.masters.customers, body.customerId)) throw badRequest('Customer is required')
+  const customer = getById(s.masters.customers, body.customerId)
+  if (!customer) throw badRequest('Customer is required')
+  if (customer.unitId !== body.unitId) throw badRequest('Customer does not belong to the selected unit')
   if (body.periodFrom && body.periodTo && body.periodTo < body.periodFrom) {
     throw badRequest('Period "to" must be on or after period "from"')
   }

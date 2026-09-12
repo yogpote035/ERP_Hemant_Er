@@ -113,8 +113,12 @@ rejectionRouter.post(
     const db = getDb()
     // Referential checks the frontend gets for free via the masters/inventory stores.
     if (!getById(db.masters.units, body.unitId)) throw badRequest('Unknown unit')
-    if (!getById(db.masters.customers, body.customerId)) throw badRequest('Customer is required')
-    if (!getById(db.masters.parts, body.partId)) throw badRequest('Part is required')
+    const customer = getById(db.masters.customers, body.customerId)
+    const part = getById(db.masters.parts, body.partId)
+    if (!customer) throw badRequest('Customer is required')
+    if (!part) throw badRequest('Part is required')
+    if (customer.unitId !== body.unitId) throw badRequest('Customer does not belong to the selected unit')
+    if (part.unitId !== body.unitId) throw badRequest('Part does not belong to the selected unit')
     const inward = getById(db.inventory.inwards, body.sourceInwardId)
     if (!inward) throw badRequest('Source challan is required')
 
@@ -186,8 +190,12 @@ rejectionRouter.put(
 
     // Referential checks the frontend gets for free via the masters/inventory stores.
     if (!getById(db.masters.units, body.unitId)) throw badRequest('Unknown unit')
-    if (!getById(db.masters.customers, body.customerId)) throw badRequest('Customer is required')
-    if (!getById(db.masters.parts, body.partId)) throw badRequest('Part is required')
+    const customer = getById(db.masters.customers, body.customerId)
+    const part = getById(db.masters.parts, body.partId)
+    if (!customer) throw badRequest('Customer is required')
+    if (!part) throw badRequest('Part is required')
+    if (customer.unitId !== body.unitId) throw badRequest('Customer does not belong to the selected unit')
+    if (part.unitId !== body.unitId) throw badRequest('Part does not belong to the selected unit')
     const inward = getById(db.inventory.inwards, body.sourceInwardId)
     if (!inward) throw badRequest('Source challan is required')
 
