@@ -3,13 +3,14 @@ import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 
-export type ModalSize = 'sm' | 'md' | 'lg' | 'xl'
+export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'full'
 
 const SIZES: Record<ModalSize, string> = {
   sm: 'max-w-sm',
   md: 'max-w-lg',
   lg: 'max-w-2xl',
   xl: 'max-w-4xl',
+  full: 'h-[calc(100dvh-2rem)] max-w-none',
 }
 
 export interface ModalProps {

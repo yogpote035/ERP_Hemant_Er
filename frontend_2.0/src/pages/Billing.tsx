@@ -839,7 +839,7 @@ function InvoicePreview({ invoiceId, onClose, onPdf }: { invoiceId: Id; onClose:
     <Modal
       open
       onClose={onClose}
-      size="xl"
+      size="full"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Close</Button>
