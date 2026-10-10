@@ -65,6 +65,19 @@ describe('RBAC + unit scope', () => {
     assert.ok(r.body.data.length > 0)
     assert.ok(r.body.data.every((p: { unitId: string }) => p.unitId === 'u1'))
   })
+
+  it('lets the manager role list and create machines inside assigned units', async () => {
+    const t = await tokenFor('manager@hew.in')
+    const list = await request(app).get('/api/masters/machines').set(auth(t))
+    assert.equal(list.status, 200)
+    assert.ok(list.body.data.every((m: { unitId: string }) => ['u1', 'u2'].includes(m.unitId)))
+
+    const created = await request(app).post('/api/masters/machines').set(auth(t)).send({
+      unitId: 'u1', machineNo: 'MC-MANAGER-ACCESS', description: 'Manager access regression',
+    })
+    assert.equal(created.status, 201)
+    assert.equal(created.body.data.unitId, 'u1')
+  })
 })
 
 describe('masters CRUD', () => {
@@ -171,16 +184,18 @@ describe('masters CRUD', () => {
 describe('inward lifecycle', () => {
   it('creates, edits, and enforces delete guards', async () => {
     const t = await tokenFor()
-    const c = await request(app).post('/api/inward').set(auth(t)).send({ unitId: 'u1', partId: 'p1', challanNo: 'IT-1', challanDate: '2025-04-01', batchHeatNo: 'H', receivedQty: 300, binGrcType: 'GRC', binGrcNo: '04/2026-27' })
+    const c = await request(app).post('/api/inward').set(auth(t)).send({ unitId: 'u1', partId: 'p1', challanNo: 'IT-1', challanDate: '2025-04-01', batchHeatNo: 'H', receivedQty: 300, binGrcType: 'JRC', binGrcNo: '04/2026-27', rmSupplierName: 'Manual Steel Supplier' })
     assert.equal(c.status, 201)
-    assert.equal(c.body.data.binGrcType, 'GRC')
+    assert.equal(c.body.data.binGrcType, 'JRC')
     assert.equal(c.body.data.binGrcNo, '04/2026-27')
+    assert.equal(c.body.data.rmSupplierName, 'Manual Steel Supplier')
     const id = c.body.data.id
 
-    const e = await request(app).put(`/api/inward/${id}`).set(auth(t)).send({ unitId: 'u1', partId: 'p1', challanNo: 'IT-1', challanDate: '2025-04-01', batchHeatNo: 'H', receivedQty: 800, binGrcType: 'BIN', binGrcNo: 'BIN-CUSTOM-17' })
+    const e = await request(app).put(`/api/inward/${id}`).set(auth(t)).send({ unitId: 'u1', partId: 'p1', challanNo: 'IT-1', challanDate: '2025-04-01', batchHeatNo: 'H', receivedQty: 800, binGrcType: 'BIN', binGrcNo: 'BIN-CUSTOM-17', rmSupplierName: 'Updated Manual Supplier' })
     assert.equal(e.body.data.receivedQty, 800)
     assert.equal(e.body.data.binGrcType, 'BIN')
     assert.equal(e.body.data.binGrcNo, 'BIN-CUSTOM-17')
+    assert.equal(e.body.data.rmSupplierName, 'Updated Manual Supplier')
 
     // i1 has dispatches → delete blocked (409); the throwaway has none → deletable.
     assert.equal((await request(app).delete('/api/inward/i1').set(auth(t))).status, 409)

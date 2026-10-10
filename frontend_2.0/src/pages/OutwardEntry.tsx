@@ -25,7 +25,7 @@ interface LineState {
   mc: string
   mf: string
   rate: string
-  /** True when an effective Production Rate Master value is available. */
+  /** True while the value is still the automatic Production Rate Master default. */
   rateAuto: boolean
   remark: string
 }
@@ -55,9 +55,6 @@ export default function OutwardEntry({
   const openRows = useStore(useShallow(selectOpenInwardRows))
   const registerRows = useStore(useShallow(selectInwardRows))
   const partsById = useStore((s) => s.masters.parts.byId)
-  // Subscribe so blank/automatic line rates react when Rate Master data refreshes.
-  const productionRates = useStore((s) => s.masters.productionRates)
-
   const challanById = useMemo(() => new Map(openRows.map((r) => [r.inward.id, r])), [openRows])
   const gstOf = useCallback(
     (challanId: string): number => {
@@ -108,24 +105,6 @@ export default function OutwardEntry({
     const ratePaise = partId ? latestProductionRatePaise(useStore.getState(), partId) : undefined
     return { key: `ln-${_seq++}`, challanId, bill: dcNo, dcDate: todayISO(), ok: '', mc: '', mf: '', rate: ratePaise != null ? String(fromPaise(ratePaise)) : '', rateAuto: ratePaise != null, remark: '' }
   }, [challanById, dcNo])
-
-  // Keep the billing rate fully driven by Production Rate Master. It reacts to
-  // master refreshes and uses the rate effective on each line's D/C date.
-  useEffect(() => {
-    setLines((current) => {
-      let changed = false
-      const next = current.map((line) => {
-        const partId = challanById.get(line.challanId)?.inward.partId
-        const masterRate = partId ? latestProductionRatePaise(useStore.getState(), partId, line.dcDate || todayISO()) : undefined
-        const value = masterRate != null ? String(fromPaise(masterRate)) : ''
-        const auto = masterRate != null
-        if (line.rate === value && line.rateAuto === auto) return line
-        changed = true
-        return { ...line, rate: value, rateAuto: auto }
-      })
-      return changed ? next : current
-    })
-  }, [productionRates, challanById])
 
   // Reconcile the line list to the multi-select: keep existing, add new, drop un-ticked.
   const setSelected = useCallback((ids: string[]) => {
@@ -207,9 +186,7 @@ export default function OutwardEntry({
     const missingRateLine = activeLines.find((ln) => intOf(ln.ok) > 0 && !(Number(ln.rate) > 0))
     if (missingRateLine) {
       const row = challanById.get(missingRateLine.challanId)
-      toastCommandError(new Error(
-        `No production rate is configured for ${row?.partNo ?? 'this part'} on ${missingRateLine.dcDate || today}. Add an effective rate in Rate Masters.`
-      ))
+      toastCommandError(new Error(`Enter a rate for ${row?.partNo ?? 'this part'}. You may use the Rate Master default or enter it manually.`))
       return
     }
 
@@ -390,13 +367,15 @@ export default function OutwardEntry({
                       <input
                         type="number"
                         value={ln.rate}
-                        readOnly
+                        min={0}
+                        step="0.01"
+                        onChange={(e) => setLine(ln.key, { rate: e.target.value, rateAuto: false })}
                         aria-label={`Line ${i + 1} rate`}
-                        placeholder="Not configured"
-                        className="cell-input cursor-not-allowed bg-muted text-right"
+                        placeholder="Enter rate"
+                        className="cell-input text-right"
                       />
-                      <div className={`mt-0.5 text-right text-[9px] ${ln.rateAuto ? 'text-success' : 'text-danger'}`}>
-                        {ln.rateAuto ? 'From Rate Masters' : 'Rate Master required'}
+                      <div className={`mt-0.5 text-right text-[9px] ${ln.rateAuto ? 'text-success' : 'text-faint'}`}>
+                        {ln.rateAuto ? 'From Rate Master' : 'Manual rate'}
                       </div>
                     </td>
                     <td className="px-3 py-1.5 text-right mono text-muted-fg">{formatINRSymbol(c.sub)}</td>

@@ -299,7 +299,7 @@ export function selectInvoiceDocModel(s: RootState, invoiceId: Id): InvoiceDocMo
     const d = getById(s.inventory.dispatches, l.dispatchId)
     const inw = d ? getById(s.inventory.inwards, d.inwardId) : undefined
     const part = getById(s.masters.parts, l.partId)
-    const rmSupplier = inw?.vendorId ? getById(s.masters.vendors, inw.vendorId)?.name : undefined
+    const rmSupplier = inw?.rmSupplierName || (inw?.vendorId ? getById(s.masters.vendors, inw.vendorId)?.name : undefined)
     allPoNos.push(inw?.poNo)
     allCustInv.push(d?.custInvoiceNo)
 
@@ -310,7 +310,7 @@ export function selectInvoiceDocModel(s: RootState, invoiceId: Id): InvoiceDocMo
         partType: part?.description || part?.category || undefined,
         dieNo: inw?.dieNo,
         drgEdtNo: part?.editionNo,
-        ircBinNo: inw?.binNo,
+        ircBinNo: inw?.binGrcNo ?? inw?.binNo,
         heatNos: [],
         rmSupplier,
         finishWeightG: part ? part.finishWtMg / 1000 : undefined,
@@ -325,7 +325,7 @@ export function selectInvoiceDocModel(s: RootState, invoiceId: Id): InvoiceDocMo
     }
     // Fill representative traceability from whichever dispatch first has it.
     pl.dieNo ??= inw?.dieNo
-    pl.ircBinNo ??= inw?.binNo
+    pl.ircBinNo ??= inw?.binGrcNo ?? inw?.binNo
     pl.rmSupplier ??= rmSupplier
     if (inw?.batchHeatNo && !pl.heatNos.includes(inw.batchHeatNo)) pl.heatNos.push(inw.batchHeatNo)
     pl.dcs.push({

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { ReceiptText, FileDown, Ban, FileSignature, Eye, Printer, IndianRupee, Pencil, Trash2, Plus, Download, FileSpreadsheet } from 'lucide-react'
 import { formatINR, formatINRSymbol, formatINRCompact, fromPaise, toPaise, type Paise } from '@/lib/money'
@@ -497,7 +497,6 @@ function InvoiceBuilder({ invoice, onClose, onDone }: { invoice: Invoice; onClos
   const [addChallanId, setAddChallanId] = useState('')
   const [addQty, setAddQty] = useState('')
   const [addRate, setAddRate] = useState('')
-  const productionRates = useStore(useShallow((s) => values(s.masters.productionRates)))
   const openChallans = useStore(useShallow((s) => selectOpenInwardRows(s).filter((r) => r.inward.unitId === invoice.unitId && r.available > 0)))
   function pickAddChallan(id: string) {
     setAddChallanId(id)
@@ -506,14 +505,6 @@ function InvoiceBuilder({ invoice, onClose, onDone }: { invoice: Invoice; onClos
     setAddQty(r ? String(r.available) : '')
     setAddRate(rp != null ? String(fromPaise(rp)) : '')
   }
-  // The new challan rate always follows the Production Rate Master version that
-  // is effective on the invoice date. It refreshes when the date or master changes.
-  useEffect(() => {
-    if (!addChallanId) return
-    const r = openChallans.find((x) => x.inward.id === addChallanId)
-    const rp = r ? latestProductionRatePaise(useStore.getState(), r.inward.partId, invoiceDate || todayISO()) : undefined
-    setAddRate(rp != null ? String(fromPaise(rp)) : '')
-  }, [addChallanId, invoiceDate, openChallans, productionRates])
   function addLine() {
     const r = openChallans.find((x) => x.inward.id === addChallanId)
     if (!r) return
@@ -732,11 +723,11 @@ function InvoiceBuilder({ invoice, onClose, onDone }: { invoice: Invoice; onClos
                 <input type="number" min={1} aria-label="New line qty" className="input h-9 text-right" value={addQty} onChange={(e) => setAddQty(e.target.value)} />
               </label>
               <label className="flex w-24 flex-col gap-1">
-                <span className="text-[10.5px] font-medium text-muted-fg">Rate ₹ (auto)</span>
-                <input type="number" aria-label="New line rate from rate master" className="input h-9 text-right" value={addRate} disabled />
+                <span className="text-[10.5px] font-medium text-muted-fg">Rate ₹</span>
+                <input type="number" min={0} step="0.01" aria-label="New line rate" className="input h-9 text-right" value={addRate} onChange={(e) => setAddRate(e.target.value)} placeholder="Enter rate" />
               </label>
               <Button variant="secondary" leftIcon={<Plus size={14} />} onClick={addLine} disabled={!addChallanId || !addQty || !addRate}>Add line</Button>
-              {addChallanId && !addRate ? <span className="w-full text-[11px] text-danger">No Production Rate Master is effective on the selected invoice date.</span> : null}
+              {addChallanId && !addRate ? <span className="w-full text-[11px] text-muted-fg">No Rate Master default is available. Enter the rate manually.</span> : null}
             </div>
           ) : (
             <p className="text-[12px] text-muted-fg">No other open challans in this unit to add.</p>
@@ -939,7 +930,7 @@ function InvoicePreview({ invoiceId, onClose, onPdf }: { invoiceId: Id; onClose:
                   {p.partType ? <Spec k="Part Type" v={p.partType} /> : null}
                   {p.dieNo ? <Spec k="Die No" v={p.dieNo} /> : null}
                   {p.drgEdtNo ? <Spec k="Drg Edt No" v={p.drgEdtNo} /> : null}
-                  {p.ircBinNo ? <Spec k="IRC / Bin No" v={p.ircBinNo} /> : null}
+                  {p.ircBinNo ? <Spec k="JRC / BIN No" v={p.ircBinNo} /> : null}
                   {p.heatNos.length ? <Spec k="Heat No" v={p.heatNos.join(', ')} /> : null}
                   {p.rmSupplier ? <Spec k="RM Supplier" v={p.rmSupplier} /> : null}
                   {p.finishWeightG != null ? <Spec k="Finish Weight" v={`${p.finishWeightG} GM`} /> : null}

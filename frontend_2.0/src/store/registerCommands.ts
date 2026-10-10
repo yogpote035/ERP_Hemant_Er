@@ -22,6 +22,7 @@ export interface InwardInput {
   unitId: Id
   partId: Id
   vendorId?: Id
+  rmSupplierName?: string
   customerId?: Id
   challanNo: string
   challanDate: ISODate
@@ -29,7 +30,7 @@ export interface InwardInput {
   dieNo?: string
   batchHeatNo: string
   binNo?: string
-  binGrcType?: 'BIN' | 'GRC'
+  binGrcType?: 'BIN' | 'JRC' | 'GRC'
   binGrcNo?: string
   rmRatePaise?: Paise
   rmWtMg?: number
@@ -154,6 +155,7 @@ function applyInward(draft: RootState, input: InwardInput, ctx: CommandContext):
     unitId: input.unitId,
     partId: input.partId,
     vendorId: input.vendorId,
+    rmSupplierName: input.rmSupplierName?.trim() || undefined,
     customerId: input.customerId,
     challanNo: input.challanNo.trim(),
     challanDate: input.challanDate,

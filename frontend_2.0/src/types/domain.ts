@@ -173,6 +173,8 @@ export interface Inward {
   unitId: Id
   partId: Id
   vendorId?: Id
+  /** Supplier name entered directly on the inward when it is not in Vendor Master. */
+  rmSupplierName?: string
   /** Material owner (optional, traceability) — NOT a stock dimension. */
   customerId?: Id
   challanNo: string
@@ -181,7 +183,7 @@ export interface Inward {
   dieNo?: string
   batchHeatNo: string
   binNo?: string
-  binGrcType?: 'BIN' | 'GRC'
+  binGrcType?: 'BIN' | 'JRC' | 'GRC'
   binGrcNo?: string
   rmRatePaise?: Paise
   rmWtMg?: number

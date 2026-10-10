@@ -54,7 +54,7 @@ export function selectInwardRows(s: RootState): InwardRow[] {
       return {
         inward,
         partNo: part?.partNo ?? '—',
-        vendorName: vendor?.name ?? '—',
+        vendorName: inward.rmSupplierName || vendor?.name || '—',
         received: inward.receivedQty,
         dispatched,
         available: selectAvailableForInward(s, inward.id),

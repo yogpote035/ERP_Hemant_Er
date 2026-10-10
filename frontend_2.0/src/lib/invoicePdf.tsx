@@ -158,7 +158,7 @@ function InvoicePage({ m, copyLabel }: { m: InvoiceDocModel; copyLabel: typeof C
               {p.partType ? <Text style={s.spec}><Text style={s.specK}>Part Type:</Text> {p.partType}</Text> : null}
               {p.dieNo ? <Text style={s.spec}><Text style={s.specK}>Die No:</Text> {p.dieNo}</Text> : null}
               {p.drgEdtNo ? <Text style={s.spec}><Text style={s.specK}>Drg Edt No:</Text> {p.drgEdtNo}</Text> : null}
-              {p.ircBinNo ? <Text style={s.spec}><Text style={s.specK}>IRC/Bin No:</Text> {p.ircBinNo}</Text> : null}
+              {p.ircBinNo ? <Text style={s.spec}><Text style={s.specK}>JRC / BIN No:</Text> {p.ircBinNo}</Text> : null}
               {p.heatNos.length ? <Text style={s.spec}><Text style={s.specK}>Heat No:</Text> {p.heatNos.join(', ')}</Text> : null}
               {p.rmSupplier ? <Text style={s.spec}><Text style={s.specK}>RM Supplier:</Text> {p.rmSupplier}</Text> : null}
               {p.finishWeightG != null ? <Text style={s.spec}><Text style={s.specK}>Finish Weight:</Text> {p.finishWeightG} GM</Text> : null}
