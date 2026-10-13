@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowUpFromLine, ReceiptText, X, Download, FileSpreadsheet }
 import { addP, formatINRSymbol, mulQty, pctOfPaise, toPaise, fromPaise, type Paise } from '@/lib/money'
 import { todayISO } from '@/lib/date'
 import { useStore } from '@/store'
-import { latestProductionRatePaise, selectInwardRows, selectOpenInwardRows, type InwardRow } from '@/selectors/register'
+import { productionRateSuggestion, selectInwardRows, selectOpenInwardRows, type InwardRow, type ProductionRateSuggestionSource } from '@/selectors/register'
 import { runSaveDispatchBatch, type DispatchBatchLine } from '@/store/registerCommands'
 import { useCan } from '@/hooks/useCan'
 import { dispatchApi } from '@/api/modules'
@@ -25,8 +25,8 @@ interface LineState {
   mc: string
   mf: string
   rate: string
-  /** True while the value is still the automatic Production Rate Master default. */
-  rateAuto: boolean
+  /** Set while the value is still an automatic suggestion; manual editing clears it. */
+  rateSource?: ProductionRateSuggestionSource
   remark: string
 }
 
@@ -102,8 +102,8 @@ export default function OutwardEntry({
 
   const lineForChallan = useCallback((challanId: string): LineState => {
     const partId = challanById.get(challanId)?.inward.partId ?? ''
-    const ratePaise = partId ? latestProductionRatePaise(useStore.getState(), partId) : undefined
-    return { key: `ln-${_seq++}`, challanId, bill: dcNo, dcDate: todayISO(), ok: '', mc: '', mf: '', rate: ratePaise != null ? String(fromPaise(ratePaise)) : '', rateAuto: ratePaise != null, remark: '' }
+    const suggestion = partId ? productionRateSuggestion(useStore.getState(), partId) : undefined
+    return { key: `ln-${_seq++}`, challanId, bill: dcNo, dcDate: todayISO(), ok: '', mc: '', mf: '', rate: suggestion ? String(fromPaise(suggestion.ratePaise)) : '', rateSource: suggestion?.source, remark: '' }
   }, [challanById, dcNo])
 
   // Reconcile the line list to the multi-select: keep existing, add new, drop un-ticked.
@@ -160,11 +160,11 @@ export default function OutwardEntry({
   }
   function setLineDate(line: LineState, dcDate: string) {
     const partId = challanById.get(line.challanId)?.inward.partId
-    const masterRate = partId ? latestProductionRatePaise(useStore.getState(), partId, dcDate) : undefined
+    const suggestion = partId ? productionRateSuggestion(useStore.getState(), partId, dcDate) : undefined
     setLine(line.key, {
       dcDate,
-      rate: masterRate != null ? String(fromPaise(masterRate)) : '',
-      rateAuto: masterRate != null,
+      rate: suggestion ? String(fromPaise(suggestion.ratePaise)) : '',
+      rateSource: suggestion?.source,
     })
   }
   function removeLine(challanId: string) {
@@ -369,13 +369,13 @@ export default function OutwardEntry({
                         value={ln.rate}
                         min={0}
                         step="0.01"
-                        onChange={(e) => setLine(ln.key, { rate: e.target.value, rateAuto: false })}
+                        onChange={(e) => setLine(ln.key, { rate: e.target.value, rateSource: undefined })}
                         aria-label={`Line ${i + 1} rate`}
                         placeholder="Enter rate"
                         className="cell-input text-right"
                       />
-                      <div className={`mt-0.5 text-right text-[9px] ${ln.rateAuto ? 'text-success' : 'text-faint'}`}>
-                        {ln.rateAuto ? 'From Rate Master' : 'Manual rate'}
+                      <div className={`mt-0.5 text-right text-[9px] ${ln.rateSource ? 'text-success' : 'text-faint'}`}>
+                        {ln.rateSource === 'rate-master' ? 'From Rate Master' : ln.rateSource === 'last-outward' ? 'From last outward' : 'Manual rate'}
                       </div>
                     </td>
                     <td className="px-3 py-1.5 text-right mono text-muted-fg">{formatINRSymbol(c.sub)}</td>

@@ -150,6 +150,44 @@ describe('masters CRUD', () => {
     assert.equal(created.body.data.pan, 'ABCDE1234F')
   })
 
+  it('persists and returns every customer billing, contact, terms, and shipped-to field', async () => {
+    const t = await tokenFor()
+    const input = {
+      unitId: 'u1', name: 'Complete Customer Ltd', gstin: '27ABCDE1234F1Z5', pan: 'abcde1234f', stateCode: '27',
+      addressLines: ['Billing Line 1', 'Pune 411001'], paymentTermsDays: 45,
+      shippingName: 'Complete Customer Warehouse', shippingAddressLines: ['Warehouse Gate 2', 'Bengaluru 560001'],
+      shippingGstin: '29ABCDE1234F1Z5', shippingStateCode: '29',
+      contactPerson: 'Accounts Team', phone: '+91 98765 43210', email: 'ACCOUNTS@EXAMPLE.COM',
+      freightTerms: 'Supplier account', transitInsuranceTerms: 'Customer scope', sez: true,
+    }
+    const created = await request(app).post('/api/masters/customers').set(auth(t)).send(input)
+    assert.equal(created.status, 201)
+    const id = created.body.data.id
+
+    const stored = await request(app).get(`/api/masters/customers/${id}`).set(auth(t))
+    assert.equal(stored.status, 200)
+    assert.deepEqual(stored.body.data, {
+      ...input,
+      pan: 'ABCDE1234F',
+      gstin: input.gstin,
+      shippingGstin: input.shippingGstin,
+      id,
+      active: true,
+    })
+
+    const updated = await request(app).put(`/api/masters/customers/${id}`).set(auth(t)).send({
+      ...input,
+      shippingName: 'Updated Delivery Depot',
+      shippingAddressLines: ['Updated Shipping Address'],
+      contactPerson: 'Updated Contact',
+    })
+    assert.equal(updated.status, 200)
+    assert.equal(updated.body.data.shippingName, 'Updated Delivery Depot')
+    assert.deepEqual(updated.body.data.shippingAddressLines, ['Updated Shipping Address'])
+    assert.equal(updated.body.data.contactPerson, 'Updated Contact')
+    assert.equal(updated.body.data.freightTerms, input.freightTerms)
+  })
+
   it('round-trips employee identity, contact, rate, and labour fields', async () => {
     const t = await tokenFor()
     const created = await request(app).post('/api/masters/employees').set(auth(t)).send({

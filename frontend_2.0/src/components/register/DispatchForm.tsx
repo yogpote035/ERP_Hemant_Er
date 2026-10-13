@@ -8,7 +8,7 @@ import { todayISO } from '@/lib/date'
 import { useStore } from '@/store'
 import { runSaveDispatch, type DispatchInput } from '@/store/registerCommands'
 import { selectAvailableForInward, dispatchTotalQty } from '@/selectors/stock'
-import { latestProductionRatePaise } from '@/selectors/register'
+import { productionRateSuggestion } from '@/selectors/register'
 import { toastCommandError, toastCommandSuccess } from '@/lib/commandToast'
 import { Drawer, Button, Field, Input, SearchableDropdown } from '@/components/ui'
 
@@ -51,7 +51,7 @@ export function DispatchForm({
   onClose: () => void
 }) {
   const baseAvailable = useStore((s) => selectAvailableForInward(s, inward.id))
-  const defaultRate = useStore((s) => latestProductionRatePaise(s, inward.partId))
+  const defaultRate = useStore((s) => productionRateSuggestion(s, inward.partId)?.ratePaise)
   // On edit, the row's own qty is "available" to it again.
   const available = existing ? baseAvailable + dispatchTotalQty(existing) : baseAvailable
 

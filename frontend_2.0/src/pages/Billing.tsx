@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { ReceiptText, FileDown, Ban, FileSignature, Eye, Printer, IndianRupee, Pencil, Trash2, Plus, Download, FileSpreadsheet } from 'lucide-react'
 import { formatINR, formatINRSymbol, formatINRCompact, fromPaise, toPaise, type Paise } from '@/lib/money'
 import { addDaysISO, formatDMY, todayISO } from '@/lib/date'
+import { hasDifferentShippingDetails } from '@/lib/customerShipping'
 import type { Id, Invoice, IssuerKind, PaymentMode } from '@/types/domain'
 import { useStore } from '@/store'
 import { getById, values } from '@/store/normalized'
@@ -20,7 +21,7 @@ import {
   type InvoiceDocModel,
 } from '@/selectors/invoiceCompute'
 import type { PaymentStatus } from '@/selectors/billing'
-import { selectOpenInwardRows, latestProductionRatePaise } from '@/selectors/register'
+import { selectOpenInwardRows, productionRateSuggestion } from '@/selectors/register'
 import { useCan } from '@/hooks/useCan'
 import { toastCommandError, toastCommandSuccess } from '@/lib/commandToast'
 import { ActionMenu, Badge, Button, Card, ConfirmDialog, Drawer, EmptyState, Kpi, KpiGrid, Modal, SearchableDropdown, TablePager, Tabs, type ActionMenuItem, type BadgeTone } from '@/components/ui'
@@ -501,7 +502,7 @@ function InvoiceBuilder({ invoice, onClose, onDone }: { invoice: Invoice; onClos
   function pickAddChallan(id: string) {
     setAddChallanId(id)
     const r = openChallans.find((x) => x.inward.id === id)
-    const rp = r ? latestProductionRatePaise(useStore.getState(), r.inward.partId, invoiceDate || todayISO()) : undefined
+    const rp = r ? productionRateSuggestion(useStore.getState(), r.inward.partId, invoiceDate || todayISO())?.ratePaise : undefined
     setAddQty(r ? String(r.available) : '')
     setAddRate(rp != null ? String(fromPaise(rp)) : '')
   }
@@ -605,7 +606,12 @@ function InvoiceBuilder({ invoice, onClose, onDone }: { invoice: Invoice; onClos
               aria-label="Consignee (Bill to)"
               value={customerId}
               onChange={(v) => setCustomerId(v)}
-              options={customers.map((c) => ({ value: c.id, label: c.name, subtitle: `GSTIN ${c.gstin} · state ${c.stateCode}` }))}
+              options={customers.map((c) => ({
+                value: c.id,
+                label: c.name,
+                subtitle: `GSTIN ${c.gstin} · state ${c.stateCode}`,
+                badge: hasDifferentShippingDetails(c) ? 'Different ship-to' : undefined,
+              }))}
               placeholder="Select customer…"
             />
           </label>

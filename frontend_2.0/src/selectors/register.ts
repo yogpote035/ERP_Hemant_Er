@@ -79,6 +79,44 @@ export function latestProductionRatePaise(s: RootState, partId: Id, asOf = today
   return candidates[0]?.ratePaise
 }
 
+export type ProductionRateSuggestionSource = 'rate-master' | 'last-outward'
+
+export interface ProductionRateSuggestion {
+  ratePaise: Paise
+  source: ProductionRateSuggestionSource
+}
+
+/** Suggested outward rate for a selected part.
+ *  Production Rate Master is authoritative. Imported/legacy parts that do not yet
+ *  have a master rate fall back to their most recent billed outward snapshot. */
+export function productionRateSuggestion(
+  s: RootState,
+  partId: Id,
+  asOf = todayISO()
+): ProductionRateSuggestion | undefined {
+  const masterRate = latestProductionRatePaise(s, partId, asOf)
+  if (masterRate != null) return { ratePaise: masterRate, source: 'rate-master' }
+
+  const inwardIds = new Set(
+    values(s.inventory.inwards).filter((inward) => inward.partId === partId).map((inward) => inward.id)
+  )
+  const latestDispatch = values(s.inventory.dispatches)
+    .filter((dispatch) => {
+      const date = dispatch.dispatchDate ?? dispatch.billDate
+      return dispatch.kind === 'billed' && inwardIds.has(dispatch.inwardId) &&
+        dispatch.rateSnapshotPaise != null && dispatch.rateSnapshotPaise > 0 &&
+        Boolean(date) && date! <= asOf
+    })
+    .sort((a, b) => {
+      const dateOrder = (b.dispatchDate ?? b.billDate ?? '').localeCompare(a.dispatchDate ?? a.billDate ?? '')
+      return dateOrder || b.createdAt.localeCompare(a.createdAt)
+    })[0]
+
+  return latestDispatch?.rateSnapshotPaise != null
+    ? { ratePaise: latestDispatch.rateSnapshotPaise, source: 'last-outward' }
+    : undefined
+}
+
 /** Versioned RM Rate Masters is the canonical rate history used by inward entry. */
 export function latestRmRatePaise(s: RootState, partId: Id, asOf = todayISO()): Paise | undefined {
   const candidates = values(s.masters.rmRates)

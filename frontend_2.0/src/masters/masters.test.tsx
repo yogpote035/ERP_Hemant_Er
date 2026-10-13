@@ -62,6 +62,26 @@ describe('master commands', () => {
     expect(useStore.getState().masters.customers.byId[created.id]!.active).toBe(true)
   })
 
+  it('maps every customer form field into the stored customer record', () => {
+    login(roleId('admin'))
+    const result = spec('customer').save({
+      unitId: 'u1', name: 'Complete Customer', gstin: '27ABCDE1234F1Z5', pan: 'abcde1234f', stateCode: '27',
+      paymentTermsDays: 45, addressLines: 'Billing Line 1\nPune 411001',
+      shippingName: 'Delivery Warehouse', shippingAddressLines: 'Gate 2\nBengaluru 560001',
+      shippingGstin: '29ABCDE1234F1Z5', shippingStateCode: '29', contactPerson: 'Accounts Team',
+      phone: '+91 98765 43210', email: 'ACCOUNTS@EXAMPLE.COM', freightTerms: 'Supplier account',
+      transitInsuranceTerms: 'Customer scope', sez: true,
+    }, null)
+    const saved = useStore.getState().masters.customers.byId[result.data.id]!
+    expect(saved).toMatchObject({
+      unitId: 'u1', name: 'Complete Customer', gstin: '27ABCDE1234F1Z5', pan: 'ABCDE1234F', stateCode: '27',
+      paymentTermsDays: 45, addressLines: ['Billing Line 1', 'Pune 411001'], shippingName: 'Delivery Warehouse',
+      shippingAddressLines: ['Gate 2', 'Bengaluru 560001'], shippingGstin: '29ABCDE1234F1Z5', shippingStateCode: '29',
+      contactPerson: 'Accounts Team', phone: '+91 98765 43210', email: 'accounts@example.com',
+      freightTerms: 'Supplier account', transitInsuranceTerms: 'Customer scope', sez: true,
+    })
+  })
+
   it('keeps deactivate separate from permanent delete', () => {
     login(roleId('admin'))
     const customer = spec('customer')
