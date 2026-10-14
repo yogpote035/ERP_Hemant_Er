@@ -23,6 +23,7 @@ import type { Dispatch, Id, Inward } from '@/types/domain'
 import { useStore } from '@/store'
 import { runSaveInward, runDeleteInward, runDeleteDispatch } from '@/store/registerCommands'
 import { latestRmRatePaise, selectInwardRows, type DispatchChild, type InwardRow } from '@/selectors/register'
+import { dispatchRejectionQty, dispatchTotalQty } from '@/selectors/stock'
 import { useCan } from '@/hooks/useCan'
 import { useEntryUnitContext } from '@/hooks/useEntryUnitContext'
 import { inwardApi } from '@/api/modules'
@@ -129,7 +130,7 @@ export default function InwardRegister({
       const onlyRej = hasChildren && r.children.every((c) => c.dispatch.kind === 'rejection')
       if (onlyRej) rejectionOnly += 1
       for (const c of r.children) {
-        rejection += c.dispatch.mcRejQty + c.dispatch.mfQty
+        rejection += dispatchRejectionQty(c.dispatch)
         if (c.dispatch.kind === 'billed') {
           outwardQty += c.dispatch.okQty
           const rate = c.dispatch.rateSnapshotPaise
@@ -307,7 +308,7 @@ export default function InwardRegister({
         <Kpi tone="green" label="Total Outward Qty" value={intFmt(kpis.outwardQty)} sub="OK pcs dispatched" />
         <Kpi tone="green" label="Total Outward Value" value={formatINRCompact(kpis.outwardValue)} sub="dispatched (ex-GST)" />
         <Kpi tone="purple" label="Multi-dispatch" value={intFmt(kpis.multiDispatch)} sub="1 challan &rarr; many bills" />
-        <Kpi tone="red" label="Rejection (MR+MF)" value={intFmt(kpis.rejection)} sub="stock &minus;, no bill" />
+        <Kpi tone="red" label="Total rejection" value={intFmt(kpis.rejection)} sub="all rejection types · stock &minus;" />
       </KpiGrid>
 
       {/* Toolbar */}
@@ -418,7 +419,7 @@ export default function InwardRegister({
 
       <div className="flex flex-wrap gap-x-6 gap-y-1 text-[11px] text-faint">
         <span><b className="text-muted-fg">Inward</b> = challan, heat, RM rate, received</span>
-        <span><b className="text-muted-fg">Outward</b> = bill, OK / MR / MF, rate, IGST</span>
+        <span><b className="text-muted-fg">Outward</b> = bill, OK / rejection quantities, rate, IGST</span>
         <span><b className="text-muted-fg">Payment</b> = customer invoice</span>
         <span>Click the challan to expand dispatches · <b className="text-muted-fg">double-click a row to create an invoice</b></span>
       </div>
@@ -530,7 +531,7 @@ function RegisterRow({
 }) {
   const hasChildren = row.children.length > 0
   const billedQty = row.children.reduce((a, c) => a + c.dispatch.okQty, 0)
-  const rejQty = row.children.reduce((a, c) => a + c.dispatch.mcRejQty + c.dispatch.mfQty, 0)
+  const rejQty = row.children.reduce((a, c) => a + dispatchRejectionQty(c.dispatch), 0)
   const status = STATUS[row.balance]
   const subId = `dispatches-${row.inward.id}`
 
@@ -599,12 +600,12 @@ function RegisterRow({
       {open && hasChildren ? (
         <tr className="bg-muted/60">
           <td colSpan={10} className="px-0 py-0">
-            <div id={subId} className="px-3 py-3 pl-9">
+            <div id={subId} className="overflow-x-auto px-3 py-3 pl-9">
               <div className="mb-2 text-[11px] font-semibold text-muted-fg">
                 ↳ Outward dispatches &amp; payment for {row.inward.challanNo} — {row.children.length} line
                 {row.children.length === 1 ? '' : 's'}
               </div>
-              <table className="w-full text-[12px]">
+              <table className="w-full min-w-[1450px] text-[12px]">
                 <thead>
                   <tr className="text-left text-[10.5px] uppercase tracking-wide text-faint">
                     <th scope="col" className="py-1.5 pr-3 font-semibold">Bill / DC</th>
@@ -612,6 +613,13 @@ function RegisterRow({
                     <th scope="col" className="py-1.5 pr-3 text-right font-semibold">OK</th>
                     <th scope="col" className="py-1.5 pr-3 text-right font-semibold">MR</th>
                     <th scope="col" className="py-1.5 pr-3 text-right font-semibold">MF</th>
+                    <th scope="col" className="py-1.5 pr-3 text-right font-semibold">Shin Line</th>
+                    <th scope="col" className="py-1.5 pr-3 text-right font-semibold">Crack</th>
+                    <th scope="col" className="py-1.5 pr-3 text-right font-semibold">Chip Off</th>
+                    <th scope="col" className="py-1.5 pr-3 text-right font-semibold">Forg Return</th>
+                    <th scope="col" className="py-1.5 pr-3 text-right font-semibold">RAII</th>
+                    <th scope="col" className="py-1.5 pr-3 text-right font-semibold">Short Qty</th>
+                    <th scope="col" className="py-1.5 pr-3 text-right font-semibold">Other</th>
                     <th scope="col" className="py-1.5 pr-3 text-right font-semibold">Total</th>
                     <th scope="col" className="py-1.5 pr-3 text-right font-semibold">Rate</th>
                     <th scope="col" className="py-1.5 pr-3 text-right font-semibold">IGST</th>
@@ -655,7 +663,7 @@ function DispatchSubRow({
   onDelete: () => void
 }) {
   const d = child.dispatch
-  const total = d.okQty + d.mcRejQty + d.mfQty
+  const total = dispatchTotalQty(d)
   const isRejection = d.kind === 'rejection'
   const rate = d.rateSnapshotPaise
   const sub: Paise | undefined = rate != null ? mulQty(rate, d.okQty) : undefined
@@ -674,6 +682,13 @@ function DispatchSubRow({
       <td className="py-1.5 pr-3 text-right mono">{d.okQty ? intFmt(d.okQty) : '–'}</td>
       <td className={`py-1.5 pr-3 text-right mono ${d.mcRejQty ? 'font-semibold text-danger' : ''}`}>{d.mcRejQty ? intFmt(d.mcRejQty) : '–'}</td>
       <td className={`py-1.5 pr-3 text-right mono ${d.mfQty ? 'font-semibold text-danger' : ''}`}>{d.mfQty ? intFmt(d.mfQty) : '–'}</td>
+      <td className={`py-1.5 pr-3 text-right mono ${d.shinLineQty ? 'font-semibold text-danger' : ''}`}>{d.shinLineQty ? intFmt(d.shinLineQty) : '–'}</td>
+      <td className={`py-1.5 pr-3 text-right mono ${d.crackQty ? 'font-semibold text-danger' : ''}`}>{d.crackQty ? intFmt(d.crackQty) : '–'}</td>
+      <td className={`py-1.5 pr-3 text-right mono ${d.chipOffQty ? 'font-semibold text-danger' : ''}`}>{d.chipOffQty ? intFmt(d.chipOffQty) : '–'}</td>
+      <td className={`py-1.5 pr-3 text-right mono ${d.forgReturnQty ? 'font-semibold text-danger' : ''}`}>{d.forgReturnQty ? intFmt(d.forgReturnQty) : '–'}</td>
+      <td className={`py-1.5 pr-3 text-right mono ${d.raiiQty ? 'font-semibold text-danger' : ''}`}>{d.raiiQty ? intFmt(d.raiiQty) : '–'}</td>
+      <td className={`py-1.5 pr-3 text-right mono ${d.shortQty ? 'font-semibold text-danger' : ''}`}>{d.shortQty ? intFmt(d.shortQty) : '–'}</td>
+      <td className={`py-1.5 pr-3 text-right mono ${d.otherQty ? 'font-semibold text-danger' : ''}`}>{d.otherQty ? intFmt(d.otherQty) : '–'}</td>
       <td className="py-1.5 pr-3 text-right mono font-semibold">{intFmt(total)}</td>
       {isRejection ? (
         <td colSpan={3} className="py-1.5 pr-3 font-medium text-danger">rejection · stock −, no bill</td>

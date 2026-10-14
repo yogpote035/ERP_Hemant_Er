@@ -109,7 +109,7 @@ export interface StockRow {
   consumed: number
   /** Outward = OK pieces dispatched/billed. */
   outward: number
-  /** Disposed / Scrap = machine-reject + RM-fault pieces (removed, not billed). */
+  /** Disposed / Scrap = every rejection / return bucket (removed, not billed). */
   disposed: number
   available: number
   balanced: boolean
@@ -140,7 +140,7 @@ export function selectStockRows(
       received: st.received,
       consumed: st.consumed,
       outward: st.ok,
-      disposed: st.mcRej + st.mf,
+      disposed: st.mcRej + st.mf + st.otherRejection,
       available: st.available,
       balanced: led.balanced,
     })

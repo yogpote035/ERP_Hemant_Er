@@ -39,6 +39,7 @@ import {
 } from '@/selectors/billing'
 import { selectDashboardKpis } from '@/selectors/kpi'
 import { selectInwardRows, selectStockRows } from '@/selectors/register'
+import { dispatchTotalQty } from '@/selectors/stock'
 import { selectExpenseRows, type ExpenseStatus } from '@/selectors/finance'
 import { Badge, Card, EmptyState, Kpi, KpiGrid, type BadgeTone } from '@/components/ui'
 
@@ -154,7 +155,7 @@ export default function Dashboard() {
   const invoices = useStore(useShallow(selectScopedInvoices))
   const activeVendors = useStore((s) => values(s.masters.vendors).filter((v) => v.active).length)
   const dispatchRows = useStore(
-    useShallow((s) => scopedDispatches(s).map((d) => ({ date: d.dispatchDate ?? d.billDate ?? '', ok: d.okQty, qty: d.okQty + d.mcRejQty + d.mfQty })))
+    useShallow((s) => scopedDispatches(s).map((d) => ({ date: d.dispatchDate ?? d.billDate ?? '', ok: d.okQty, qty: dispatchTotalQty(d) })))
   )
 
   // FR-D06 — date-range filter (today / this week / this month / custom). Empty range

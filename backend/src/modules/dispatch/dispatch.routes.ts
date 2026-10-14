@@ -28,8 +28,6 @@ import type { Paise } from '../../lib/money.js'
 import { buildList, cursorList } from '../../lib/list.js'
 
 // ── helpers ─────────────────────────────────────────────────────────────────────
-const lineTotal = (ok: number, mc: number, mf: number): number => ok + mc + mf
-
 function parseSeq(billNo: string): number {
   const n = parseInt(billNo, 10)
   return Number.isNaN(n) ? 0 : n
@@ -96,6 +94,13 @@ interface DispatchInput {
   okQty: number
   mcRejQty: number
   mfQty: number
+  shinLineQty?: number
+  crackQty?: number
+  chipOffQty?: number
+  forgReturnQty?: number
+  raiiQty?: number
+  shortQty?: number
+  otherQty?: number
   billNo?: string
   billDate?: ISODate
   dispatchDate?: ISODate
@@ -104,6 +109,15 @@ interface DispatchInput {
   custInvoiceDate?: ISODate
   remarks?: string
 }
+
+type DispatchQuantities = Pick<DispatchInput, 'okQty' | 'mcRejQty' | 'mfQty' | 'shinLineQty' |
+  'crackQty' | 'chipOffQty' | 'forgReturnQty' | 'raiiQty' | 'shortQty' | 'otherQty'>
+const quantityValues = (line: DispatchQuantities): number[] => [
+  line.okQty || 0, line.mcRejQty || 0, line.mfQty || 0, line.shinLineQty || 0,
+  line.crackQty || 0, line.chipOffQty || 0, line.forgReturnQty || 0,
+  line.raiiQty || 0, line.shortQty || 0, line.otherQty || 0,
+]
+const lineTotal = (line: DispatchQuantities): number => quantityValues(line).reduce((sum, qty) => sum + qty, 0)
 
 /**
  * Validate one dispatch line against current state. `available` is the qty free
@@ -117,13 +131,11 @@ function validateLine(
   errors: string[],
   label: string
 ): void {
-  const ok = input.okQty || 0
-  const mc = input.mcRejQty || 0
-  const mf = input.mfQty || 0
-  if (ok < 0 || mc < 0 || mf < 0) errors.push(`${label}quantities cannot be negative`)
-  if (!Number.isInteger(ok) || !Number.isInteger(mc) || !Number.isInteger(mf))
+  const quantities = quantityValues(input)
+  if (quantities.some((qty) => qty < 0)) errors.push(`${label}quantities cannot be negative`)
+  if (quantities.some((qty) => !Number.isInteger(qty)))
     errors.push(`${label}ring quantities must be whole numbers`)
-  const total = lineTotal(ok, mc, mf)
+  const total = lineTotal(input)
   if (total <= 0) errors.push(`${label}enter at least one quantity`)
 
   // Issued invoices are immutable: block editing a dispatch already on a sent bill.
@@ -172,6 +184,13 @@ function applyLine(
     okQty: input.okQty || 0,
     mcRejQty: input.mcRejQty || 0,
     mfQty: input.mfQty || 0,
+    shinLineQty: input.shinLineQty || 0,
+    crackQty: input.crackQty || 0,
+    chipOffQty: input.chipOffQty || 0,
+    forgReturnQty: input.forgReturnQty || 0,
+    raiiQty: input.raiiQty || 0,
+    shortQty: input.shortQty || 0,
+    otherQty: input.otherQty || 0,
     billNo: input.billNo?.trim() || undefined,
     billDate: input.billDate,
     dispatchDate: input.dispatchDate,
@@ -216,6 +235,13 @@ const lineSchema = z.object({
   okQty: z.number().int().min(0).default(0),
   mcRejQty: z.number().int().min(0).default(0),
   mfQty: z.number().int().min(0).default(0),
+  shinLineQty: z.number().int().min(0).default(0),
+  crackQty: z.number().int().min(0).default(0),
+  chipOffQty: z.number().int().min(0).default(0),
+  forgReturnQty: z.number().int().min(0).default(0),
+  raiiQty: z.number().int().min(0).default(0),
+  shortQty: z.number().int().min(0).default(0),
+  otherQty: z.number().int().min(0).default(0),
   billNo: z.string().optional(),
   billDate: z.string().optional(),
   dispatchDate: z.string().optional(),
@@ -290,7 +316,7 @@ dispatchRouter.get(
 
 /**
  * POST / — save one dispatch line, or a BATCH of lines, under one inward challan.
- * Validates okQty+mcRejQty+mfQty does not exceed available (cumulative across the
+ * Validates OK plus every rejection / return bucket does not exceed available (cumulative across the
  * batch), snapshots rate + GST%, and creates/attaches the draft invoice(s).
  */
 dispatchRouter.post(
@@ -307,6 +333,13 @@ dispatchRouter.post(
       okQty: ln.okQty,
       mcRejQty: ln.mcRejQty,
       mfQty: ln.mfQty,
+      shinLineQty: ln.shinLineQty,
+      crackQty: ln.crackQty,
+      chipOffQty: ln.chipOffQty,
+      forgReturnQty: ln.forgReturnQty,
+      raiiQty: ln.raiiQty,
+      shortQty: ln.shortQty,
+      otherQty: ln.otherQty,
       billNo: ln.billNo,
       billDate: ln.billDate,
       dispatchDate: ln.dispatchDate,
@@ -327,7 +360,7 @@ dispatchRouter.post(
     lines.forEach((ln, i) => {
       const label = isBatch ? `Line ${i + 1}: ` : ''
       validateLine(s, ln, inward, errors, label)
-      batchTotal += lineTotal(ln.okQty || 0, ln.mcRejQty || 0, ln.mfQty || 0)
+      batchTotal += lineTotal(ln)
     })
     // selectAvailableForInward = received − Σ(all consumed). On a single-line edit
     // add the edited line's existing qty back so it isn't counted against itself.

@@ -186,6 +186,13 @@ export interface Dispatch {
   okQty: number
   mcRejQty: number
   mfQty: number
+  shinLineQty?: number
+  crackQty?: number
+  chipOffQty?: number
+  forgReturnQty?: number
+  raiiQty?: number
+  shortQty?: number
+  otherQty?: number
   billNo?: string
   billDate?: ISODate
   dispatchDate?: ISODate

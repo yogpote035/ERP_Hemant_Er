@@ -46,6 +46,13 @@ export interface DispatchInput {
   okQty: number
   mcRejQty: number
   mfQty: number
+  shinLineQty?: number
+  crackQty?: number
+  chipOffQty?: number
+  forgReturnQty?: number
+  raiiQty?: number
+  shortQty?: number
+  otherQty?: number
   billNo?: string
   billDate?: ISODate
   dispatchDate?: ISODate
@@ -56,13 +63,20 @@ export interface DispatchInput {
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────────
-const lineTotal = (ok: number, mc: number, mf: number): number => ok + mc + mf
+type DispatchQuantities = Pick<DispatchInput, 'okQty' | 'mcRejQty' | 'mfQty' | 'shinLineQty' |
+  'crackQty' | 'chipOffQty' | 'forgReturnQty' | 'raiiQty' | 'shortQty' | 'otherQty'>
+const quantityValues = (line: DispatchQuantities): number[] => [
+  line.okQty || 0, line.mcRejQty || 0, line.mfQty || 0, line.shinLineQty || 0,
+  line.crackQty || 0, line.chipOffQty || 0, line.forgReturnQty || 0,
+  line.raiiQty || 0, line.shortQty || 0, line.otherQty || 0,
+]
+const lineTotal = (line: DispatchQuantities): number => quantityValues(line).reduce((sum, qty) => sum + qty, 0)
 
 /** Qty already consumed against an inward, optionally excluding one dispatch (for edits). */
 function consumedForInward(s: RootState, inwardId: Id, exceptId?: Id): number {
   return values(s.inventory.dispatches)
     .filter((d) => d.inwardId === inwardId && d.id !== exceptId)
-    .reduce((a, d) => a + d.okQty + d.mcRejQty + d.mfQty, 0)
+    .reduce((a, d) => a + lineTotal(d), 0)
 }
 
 function parseSeq(billNo: string): number {
@@ -234,12 +248,10 @@ function validateDispatch(s: RootState, input: DispatchInput): { ok: true } | { 
   if (!inward) return { ok: false, errors: ['Inward challan not found'] }
   if (!writableUnitIds(s).has(inward.unitId)) errors.push("You don't have access to that unit")
 
-  const ok = input.okQty || 0
-  const mc = input.mcRejQty || 0
-  const mf = input.mfQty || 0
-  if (ok < 0 || mc < 0 || mf < 0) errors.push('Quantities cannot be negative')
-  if (!Number.isInteger(ok) || !Number.isInteger(mc) || !Number.isInteger(mf)) errors.push('Ring quantities must be whole numbers')
-  const total = lineTotal(ok, mc, mf)
+  const quantities = quantityValues(input)
+  if (quantities.some((qty) => qty < 0)) errors.push('Quantities cannot be negative')
+  if (quantities.some((qty) => !Number.isInteger(qty))) errors.push('Ring quantities must be whole numbers')
+  const total = lineTotal(input)
   if (total <= 0) errors.push('Enter at least one quantity')
 
   // I1 — never dispatch more than the challan received.
@@ -286,6 +298,13 @@ function applyDispatch(draft: RootState, input: DispatchInput, ctx: CommandConte
     okQty: input.okQty || 0,
     mcRejQty: input.mcRejQty || 0,
     mfQty: input.mfQty || 0,
+    shinLineQty: input.shinLineQty || 0,
+    crackQty: input.crackQty || 0,
+    chipOffQty: input.chipOffQty || 0,
+    forgReturnQty: input.forgReturnQty || 0,
+    raiiQty: input.raiiQty || 0,
+    shortQty: input.shortQty || 0,
+    otherQty: input.otherQty || 0,
     billNo: input.billNo?.trim() || undefined,
     billDate: input.billDate,
     dispatchDate: input.dispatchDate,
@@ -302,7 +321,7 @@ function applyDispatch(draft: RootState, input: DispatchInput, ctx: CommandConte
   putEntity(draft.inventory.dispatches, dispatch)
 
   const linkedBill = relinkInvoice(draft, dispatch, inward, ctx)
-  const total = lineTotal(dispatch.okQty, dispatch.mcRejQty, dispatch.mfQty)
+  const total = lineTotal(dispatch)
 
   // Derived closing stock for the part after this write (for the rich toast).
   const partInwardIds = new Set(
@@ -310,7 +329,7 @@ function applyDispatch(draft: RootState, input: DispatchInput, ctx: CommandConte
   )
   const consumed = values(draft.inventory.dispatches)
     .filter((d) => partInwardIds.has(d.inwardId))
-    .reduce((a, d) => a + d.okQty + d.mcRejQty + d.mfQty, 0)
+    .reduce((a, d) => a + lineTotal(d), 0)
   const received = values(draft.inventory.inwards)
     .filter((i) => partInwardIds.has(i.id))
     .reduce((a, i) => a + i.receivedQty, 0)
@@ -350,6 +369,13 @@ export interface DispatchBatchLine {
   okQty: number
   mcRejQty: number
   mfQty: number
+  shinLineQty?: number
+  crackQty?: number
+  chipOffQty?: number
+  forgReturnQty?: number
+  raiiQty?: number
+  shortQty?: number
+  otherQty?: number
   billNo?: string
   billDate?: ISODate
   dispatchDate?: ISODate
@@ -381,11 +407,10 @@ function validateDispatchBatch(s: RootState, input: DispatchBatchInput): { ok: t
   let batchTotal = 0
   input.lines.forEach((ln, i) => {
     const ok = ln.okQty || 0
-    const mc = ln.mcRejQty || 0
-    const mf = ln.mfQty || 0
-    if (ok < 0 || mc < 0 || mf < 0) errors.push(`Line ${i + 1}: quantities cannot be negative`)
-    if (!Number.isInteger(ok) || !Number.isInteger(mc) || !Number.isInteger(mf)) errors.push(`Line ${i + 1}: ring quantities must be whole numbers`)
-    const total = lineTotal(ok, mc, mf)
+    const quantities = quantityValues(ln)
+    if (quantities.some((qty) => qty < 0)) errors.push(`Line ${i + 1}: quantities cannot be negative`)
+    if (quantities.some((qty) => !Number.isInteger(qty))) errors.push(`Line ${i + 1}: ring quantities must be whole numbers`)
+    const total = lineTotal(ln)
     if (total <= 0) errors.push(`Line ${i + 1}: enter at least one quantity`)
     batchTotal += total
     if (ln.kind === 'billed') {
@@ -421,6 +446,13 @@ function applyDispatchBatch(draft: RootState, input: DispatchBatchInput, ctx: Co
       okQty: ln.okQty || 0,
       mcRejQty: ln.mcRejQty || 0,
       mfQty: ln.mfQty || 0,
+      shinLineQty: ln.shinLineQty || 0,
+      crackQty: ln.crackQty || 0,
+      chipOffQty: ln.chipOffQty || 0,
+      forgReturnQty: ln.forgReturnQty || 0,
+      raiiQty: ln.raiiQty || 0,
+      shortQty: ln.shortQty || 0,
+      otherQty: ln.otherQty || 0,
       billNo: ln.billNo,
       billDate: ln.billDate,
       dispatchDate: ln.dispatchDate,
@@ -430,7 +462,7 @@ function applyDispatchBatch(draft: RootState, input: DispatchBatchInput, ctx: Co
     }
     const out = applyDispatch(draft, lineInput, ctx)
     ids.push(out.result.id)
-    totalPcs += (ln.okQty || 0) + (ln.mcRejQty || 0) + (ln.mfQty || 0)
+    totalPcs += lineTotal(ln)
     if (ln.kind === 'billed' && ln.billNo?.trim()) bills.add(ln.billNo.trim())
   }
 

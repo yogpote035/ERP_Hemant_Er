@@ -47,6 +47,11 @@ describe('autoDetectColumns', () => {
     expect(result.issues.filter((issue) => issue.level === 'error')).toHaveLength(0)
     expect(result.inwards).toHaveLength(1)
     expect(result.inwards[0]!.dispatches).toHaveLength(2)
+    expect(result.inwards[0]!.dispatches[0]).toMatchObject({
+      mrQty: 5, mfQty: 2, shinLineQty: 3, crackQty: 4, chipOffQty: 5,
+      forgReturnQty: 6, raiiQty: 7, shortQty: 8, otherQty: 9,
+    })
+    expect(summarize(result.inwards).rejectionQty).toBe(49)
   })
 })
 

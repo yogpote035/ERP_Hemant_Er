@@ -26,6 +26,13 @@ function disp(p: Partial<ParsedDispatch>): ParsedDispatch {
     okQty: ok,
     mrQty: p.mrQty ?? 0,
     mfQty: p.mfQty ?? 0,
+    shinLineQty: p.shinLineQty ?? 0,
+    crackQty: p.crackQty ?? 0,
+    chipOffQty: p.chipOffQty ?? 0,
+    forgReturnQty: p.forgReturnQty ?? 0,
+    raiiQty: p.raiiQty ?? 0,
+    shortQty: p.shortQty ?? 0,
+    otherQty: p.otherQty ?? 0,
     billNo: p.billNo,
     ratePaise: p.ratePaise,
     kind: p.kind ?? (ok > 0 ? 'billed' : 'rejection'),
@@ -62,6 +69,26 @@ describe('runImportMio — atomic bulk ingest', () => {
     undo()
     expect(values(st().inventory.inwards).some((i) => i.challanNo === 'IMP-CH-1')).toBe(false)
     expect(values(st().billing.invoices).some((i) => i.billNo === 'IMPB-1')).toBe(false)
+  })
+
+  it('imports every rejection category and counts each one against stock', () => {
+    const part = u1Part()
+    const before = values(st().inventory.dispatches).filter((d) => d.inwardId === 'i2').length
+    const result = runImportMio({
+      unitId: 'u1',
+      inwards: [inward(part.partNo, 'IMP-REJECTION-BREAKDOWN', 100, [disp({
+        billNo: 'IMP-REJ-DC', mrQty: 1, mfQty: 2, shinLineQty: 3, crackQty: 4,
+        chipOffQty: 5, forgReturnQty: 6, raiiQty: 7, shortQty: 8, otherQty: 9,
+      })])],
+    })
+    expect(result.data.dispatches).toBe(1)
+    const importedInward = values(st().inventory.inwards).find((row) => row.challanNo === 'IMP-REJECTION-BREAKDOWN')!
+    const saved = values(st().inventory.dispatches).find((row) => row.inwardId === importedInward.id)!
+    expect(saved).toMatchObject({
+      mcRejQty: 1, mfQty: 2, shinLineQty: 3, crackQty: 4, chipOffQty: 5,
+      forgReturnQty: 6, raiiQty: 7, shortQty: 8, otherQty: 9,
+    })
+    expect(values(st().inventory.dispatches).filter((d) => d.inwardId === 'i2')).toHaveLength(before)
   })
 
   it('blocks an unknown part and an over-dispatched challan', () => {

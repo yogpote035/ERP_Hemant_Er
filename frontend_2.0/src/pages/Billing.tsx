@@ -475,6 +475,8 @@ function InvoiceBuilder({ invoice, onClose, onDone }: { invoice: Invoice; onClos
     try {
       runSaveDispatch({
         id: d.id, inwardId: d.inwardId, kind: 'billed', okQty: qty, mcRejQty: d.mcRejQty, mfQty: d.mfQty,
+        shinLineQty: d.shinLineQty, crackQty: d.crackQty, chipOffQty: d.chipOffQty,
+        forgReturnQty: d.forgReturnQty, raiiQty: d.raiiQty, shortQty: d.shortQty, otherQty: d.otherQty,
         billNo: d.billNo, billDate: d.billDate, dispatchDate: d.dispatchDate, ratePaise: toPaise(rate),
         custInvoiceNo: d.custInvoiceNo, custInvoiceDate: d.custInvoiceDate, remarks: d.remarks,
       })

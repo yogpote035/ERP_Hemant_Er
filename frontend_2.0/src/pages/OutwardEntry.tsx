@@ -24,6 +24,13 @@ interface LineState {
   ok: string
   mc: string
   mf: string
+  shinLine: string
+  crack: string
+  chipOff: string
+  forgReturn: string
+  raii: string
+  shortQty: string
+  other: string
   rate: string
   /** Set while the value is still an automatic suggestion; manual editing clears it. */
   rateSource?: ProductionRateSuggestionSource
@@ -103,7 +110,11 @@ export default function OutwardEntry({
   const lineForChallan = useCallback((challanId: string): LineState => {
     const partId = challanById.get(challanId)?.inward.partId ?? ''
     const suggestion = partId ? productionRateSuggestion(useStore.getState(), partId) : undefined
-    return { key: `ln-${_seq++}`, challanId, bill: dcNo, dcDate: todayISO(), ok: '', mc: '', mf: '', rate: suggestion ? String(fromPaise(suggestion.ratePaise)) : '', rateSource: suggestion?.source, remark: '' }
+    return {
+      key: `ln-${_seq++}`, challanId, bill: dcNo, dcDate: todayISO(), ok: '', mc: '', mf: '',
+      shinLine: '', crack: '', chipOff: '', forgReturn: '', raii: '', shortQty: '', other: '',
+      rate: suggestion ? String(fromPaise(suggestion.ratePaise)) : '', rateSource: suggestion?.source, remark: '',
+    }
   }, [challanById, dcNo])
 
   // Reconcile the line list to the multi-select: keep existing, add new, drop un-ticked.
@@ -135,20 +146,31 @@ export default function OutwardEntry({
       const ok = intOf(ln.ok)
       const mc = intOf(ln.mc)
       const mf = intOf(ln.mf)
+      const shinLine = intOf(ln.shinLine)
+      const crack = intOf(ln.crack)
+      const chipOff = intOf(ln.chipOff)
+      const forgReturn = intOf(ln.forgReturn)
+      const raii = intOf(ln.raii)
+      const shortQty = intOf(ln.shortQty)
+      const other = intOf(ln.other)
       const ratePaise = ln.rate ? toPaise(Number(ln.rate)) : ZERO
-      const total = ok + mc + mf
+      const total = ok + mc + mf + shinLine + crack + chipOff + forgReturn + raii + shortQty + other
       const sub = mulQty(ratePaise, ok)
       const igst = pctOfPaise(sub, gstOf(ln.challanId))
       const grand = addP(sub, igst)
       const avail = challanById.get(ln.challanId)?.available ?? 0
-      return { ok, mc, mf, total, sub, igst, grand, avail, over: total > avail }
+      return { ok, mc, mf, shinLine, crack, chipOff, forgReturn, raii, shortQty, other, total, sub, igst, grand, avail, over: total > avail }
     })
     const totals = rows.reduce(
       (a, r) => ({
-        ok: a.ok + r.ok, mc: a.mc + r.mc, mf: a.mf + r.mf, total: a.total + r.total,
+        ok: a.ok + r.ok, mc: a.mc + r.mc, mf: a.mf + r.mf,
+        shinLine: a.shinLine + r.shinLine, crack: a.crack + r.crack, chipOff: a.chipOff + r.chipOff,
+        forgReturn: a.forgReturn + r.forgReturn, raii: a.raii + r.raii,
+        shortQty: a.shortQty + r.shortQty, other: a.other + r.other, total: a.total + r.total,
         sub: addP(a.sub, r.sub), igst: addP(a.igst, r.igst), grand: addP(a.grand, r.grand),
       }),
-      { ok: 0, mc: 0, mf: 0, total: 0, sub: ZERO, igst: ZERO, grand: ZERO }
+      { ok: 0, mc: 0, mf: 0, shinLine: 0, crack: 0, chipOff: 0, forgReturn: 0,
+        raii: 0, shortQty: 0, other: 0, total: 0, sub: ZERO, igst: ZERO, grand: ZERO }
     )
     return { rows, totals }
   }, [lines, gstOf, challanById])
@@ -173,7 +195,8 @@ export default function OutwardEntry({
 
   async function onSave() {
     const today = todayISO()
-    const activeLines = lines.filter((ln) => intOf(ln.ok) + intOf(ln.mc) + intOf(ln.mf) > 0)
+    const activeLines = lines.filter((ln) => [ln.ok, ln.mc, ln.mf, ln.shinLine, ln.crack, ln.chipOff,
+      ln.forgReturn, ln.raii, ln.shortQty, ln.other].some((qty) => intOf(qty) > 0))
     const dcDates = new Set(activeLines.map((ln) => ln.dcDate || today))
     if (dcDates.size > 1) {
       toastCommandError(new Error('All lines on one D/C must use the same D/C date'))
@@ -212,13 +235,21 @@ export default function OutwardEntry({
       const ok = intOf(ln.ok)
       const mc = intOf(ln.mc)
       const mf = intOf(ln.mf)
-      if (ok + mc + mf <= 0) continue
+      const shinLine = intOf(ln.shinLine)
+      const crack = intOf(ln.crack)
+      const chipOff = intOf(ln.chipOff)
+      const forgReturn = intOf(ln.forgReturn)
+      const raii = intOf(ln.raii)
+      const shortQty = intOf(ln.shortQty)
+      const other = intOf(ln.other)
+      if (ok + mc + mf + shinLine + crack + chipOff + forgReturn + raii + shortQty + other <= 0) continue
       const rate = ln.rate ? Number(ln.rate) : 0
       const billed = rate > 0 && ok > 0
       const dcDate = ln.dcDate || today
       const line: DispatchBatchLine = {
         kind: billed ? 'billed' : 'rejection',
-        okQty: ok, mcRejQty: mc, mfQty: mf,
+        okQty: ok, mcRejQty: mc, mfQty: mf, shinLineQty: shinLine, crackQty: crack,
+        chipOffQty: chipOff, forgReturnQty: forgReturn, raiiQty: raii, shortQty, otherQty: other,
         billNo: allocatedDcNo,
         billDate: billed ? dcDate : undefined,
         dispatchDate: dcDate,
@@ -329,7 +360,7 @@ export default function OutwardEntry({
       ) : (
         <Card className="overflow-x-auto p-0">
           <div className="border-b border-border px-4 py-3 text-[13px] font-semibold">Dispatch lines</div>
-          <table className="w-full text-[12px]" aria-label="Dispatch lines">
+          <table className="w-full min-w-[2200px] text-[12px]" aria-label="Dispatch lines">
             <thead>
               <tr className="bg-muted text-left text-[10.5px] uppercase tracking-wide text-muted-fg">
                 <th scope="col" className="px-3 py-2 font-semibold" style={{ width: 180 }}>Ref D/C No (challan)</th>
@@ -338,6 +369,13 @@ export default function OutwardEntry({
                 <th scope="col" className="px-3 py-2 text-right font-semibold">OK qty</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">M/C rej</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">MF</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Shin Line</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Crack</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Chip Off</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Forg Return</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">RAII</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Short Qty</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Other</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">Total</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">Rate ₹</th>
                 <th scope="col" className="px-3 py-2 text-right font-semibold">Sub amt</th>
@@ -362,6 +400,13 @@ export default function OutwardEntry({
                     <td className="px-2 py-1.5"><CellNum value={ln.ok} onChange={(v) => setLine(ln.key, { ok: v })} label={`Line ${i + 1} OK qty`} /></td>
                     <td className="px-2 py-1.5"><CellNum value={ln.mc} onChange={(v) => setLine(ln.key, { mc: v })} label={`Line ${i + 1} machine reject`} /></td>
                     <td className="px-2 py-1.5"><CellNum value={ln.mf} onChange={(v) => setLine(ln.key, { mf: v })} label={`Line ${i + 1} material fault`} /></td>
+                    <td className="px-2 py-1.5"><CellNum value={ln.shinLine} onChange={(v) => setLine(ln.key, { shinLine: v })} label={`Line ${i + 1} Shin Line`} /></td>
+                    <td className="px-2 py-1.5"><CellNum value={ln.crack} onChange={(v) => setLine(ln.key, { crack: v })} label={`Line ${i + 1} Crack`} /></td>
+                    <td className="px-2 py-1.5"><CellNum value={ln.chipOff} onChange={(v) => setLine(ln.key, { chipOff: v })} label={`Line ${i + 1} Chip Off`} /></td>
+                    <td className="px-2 py-1.5"><CellNum value={ln.forgReturn} onChange={(v) => setLine(ln.key, { forgReturn: v })} label={`Line ${i + 1} Forg Return`} /></td>
+                    <td className="px-2 py-1.5"><CellNum value={ln.raii} onChange={(v) => setLine(ln.key, { raii: v })} label={`Line ${i + 1} RAII`} /></td>
+                    <td className="px-2 py-1.5"><CellNum value={ln.shortQty} onChange={(v) => setLine(ln.key, { shortQty: v })} label={`Line ${i + 1} Short Qty`} /></td>
+                    <td className="px-2 py-1.5"><CellNum value={ln.other} onChange={(v) => setLine(ln.key, { other: v })} label={`Line ${i + 1} Other`} /></td>
                     <td className="px-3 py-1.5 text-right mono font-semibold">{intFmt(c.total)}</td>
                     <td className="px-2 py-1.5">
                       <input
@@ -397,6 +442,13 @@ export default function OutwardEntry({
                 <td className="px-3 py-2.5 text-right mono">{intFmt(computed.totals.ok)}</td>
                 <td className="px-3 py-2.5 text-right mono">{intFmt(computed.totals.mc)}</td>
                 <td className="px-3 py-2.5 text-right mono">{intFmt(computed.totals.mf)}</td>
+                <td className="px-3 py-2.5 text-right mono">{intFmt(computed.totals.shinLine)}</td>
+                <td className="px-3 py-2.5 text-right mono">{intFmt(computed.totals.crack)}</td>
+                <td className="px-3 py-2.5 text-right mono">{intFmt(computed.totals.chipOff)}</td>
+                <td className="px-3 py-2.5 text-right mono">{intFmt(computed.totals.forgReturn)}</td>
+                <td className="px-3 py-2.5 text-right mono">{intFmt(computed.totals.raii)}</td>
+                <td className="px-3 py-2.5 text-right mono">{intFmt(computed.totals.shortQty)}</td>
+                <td className="px-3 py-2.5 text-right mono">{intFmt(computed.totals.other)}</td>
                 <td className="px-3 py-2.5 text-right mono">{intFmt(computed.totals.total)}</td>
                 <td />
                 <td className="px-3 py-2.5 text-right mono">{formatINRSymbol(computed.totals.sub)}</td>
@@ -453,7 +505,7 @@ function OutwardHistory({ rows }: { rows: InwardRow[] }) {
           <EmptyState icon={ArrowUpFromLine} title="No outward records" description="Imported and manually created outward records will appear here." />
         </div>
       ) : (
-        <table className="w-full min-w-[900px] text-[12px]" aria-label="Outward register">
+        <table className="w-full min-w-[1600px] text-[12px]" aria-label="Outward register">
           <thead>
             <tr className="bg-muted text-left text-[10.5px] uppercase tracking-wide text-muted-fg">
               <th className="px-3 py-2 font-semibold">Our D/C No.</th>
@@ -463,6 +515,13 @@ function OutwardHistory({ rows }: { rows: InwardRow[] }) {
               <th className="px-3 py-2 text-right font-semibold">OK</th>
               <th className="px-3 py-2 text-right font-semibold">M/C rej</th>
               <th className="px-3 py-2 text-right font-semibold">MF</th>
+              <th className="px-3 py-2 text-right font-semibold">Shin Line</th>
+              <th className="px-3 py-2 text-right font-semibold">Crack</th>
+              <th className="px-3 py-2 text-right font-semibold">Chip Off</th>
+              <th className="px-3 py-2 text-right font-semibold">Forg Return</th>
+              <th className="px-3 py-2 text-right font-semibold">RAII</th>
+              <th className="px-3 py-2 text-right font-semibold">Short Qty</th>
+              <th className="px-3 py-2 text-right font-semibold">Other</th>
               <th className="px-3 py-2 text-right font-semibold">Total</th>
               <th className="px-3 py-2 text-right font-semibold">Rate</th>
               <th className="px-3 py-2 text-right font-semibold">Amount</th>
@@ -480,6 +539,13 @@ function OutwardHistory({ rows }: { rows: InwardRow[] }) {
                   <td className="px-3 py-2 text-right mono">{intFmt(dispatch.okQty)}</td>
                   <td className="px-3 py-2 text-right mono">{intFmt(dispatch.mcRejQty)}</td>
                   <td className="px-3 py-2 text-right mono">{intFmt(dispatch.mfQty)}</td>
+                  <td className="px-3 py-2 text-right mono">{intFmt(dispatch.shinLineQty ?? 0)}</td>
+                  <td className="px-3 py-2 text-right mono">{intFmt(dispatch.crackQty ?? 0)}</td>
+                  <td className="px-3 py-2 text-right mono">{intFmt(dispatch.chipOffQty ?? 0)}</td>
+                  <td className="px-3 py-2 text-right mono">{intFmt(dispatch.forgReturnQty ?? 0)}</td>
+                  <td className="px-3 py-2 text-right mono">{intFmt(dispatch.raiiQty ?? 0)}</td>
+                  <td className="px-3 py-2 text-right mono">{intFmt(dispatch.shortQty ?? 0)}</td>
+                  <td className="px-3 py-2 text-right mono">{intFmt(dispatch.otherQty ?? 0)}</td>
                   <td className="px-3 py-2 text-right mono font-semibold">{intFmt(total)}</td>
                   <td className="px-3 py-2 text-right mono">{dispatch.rateSnapshotPaise != null ? formatINRSymbol(rate) : '—'}</td>
                   <td className="px-3 py-2 text-right mono font-semibold">{dispatch.rateSnapshotPaise != null ? formatINRSymbol(mulQty(rate, dispatch.okQty)) : '—'}</td>

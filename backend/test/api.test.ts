@@ -258,9 +258,21 @@ describe('dispatch → stock cascade', () => {
     const t = await tokenFor()
     const p6 = async () => (await request(app).get('/api/stock').set(auth(t))).body.data.find((r: { partId: string }) => r.partId === 'p6').available
     const before = await p6()
-    const d = await request(app).post('/api/dispatch').set(auth(t)).send({ inwardId: 'i4', lines: [{ kind: 'billed', okQty: 100, billNo: 'IT-DC', ratePaise: 6600 }] })
+    const d = await request(app).post('/api/dispatch').set(auth(t)).send({ inwardId: 'i4', lines: [{
+      kind: 'billed', okQty: 100, billNo: 'IT-DC', ratePaise: 6600,
+      mcRejQty: 1, mfQty: 2, shinLineQty: 3, crackQty: 4, chipOffQty: 5,
+      forgReturnQty: 6, raiiQty: 7, shortQty: 8, otherQty: 9,
+    }] })
     assert.equal(d.status, 201)
-    assert.equal(await p6(), before - 100)
+    const saved = Array.isArray(d.body.data) ? d.body.data[0] : d.body.data
+    assert.equal(saved.shinLineQty, 3)
+    assert.equal(saved.crackQty, 4)
+    assert.equal(saved.chipOffQty, 5)
+    assert.equal(saved.forgReturnQty, 6)
+    assert.equal(saved.raiiQty, 7)
+    assert.equal(saved.shortQty, 8)
+    assert.equal(saved.otherQty, 9)
+    assert.equal(await p6(), before - 145)
     const did = Array.isArray(d.body.data) ? d.body.data[0].id : d.body.data.id
     assert.equal((await request(app).delete(`/api/dispatch/${did}`).set(auth(t))).status, 200)
     assert.equal(await p6(), before)

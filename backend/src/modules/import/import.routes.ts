@@ -28,6 +28,7 @@ import { fyOf } from '../../lib/fy.js'
 import type { RootState } from '../../db/state.js'
 import type { Dispatch, Id, Inward, Invoice, Part } from '../../types/domain.js'
 import type { Paise } from '../../lib/money.js'
+import { dispatchTotalQty } from '../../domain/stock.js'
 
 // ── parsed-row shapes (mirror lib/mioImport.ts; rates already in paise) ───────────
 interface ParsedDispatch {
@@ -37,6 +38,13 @@ interface ParsedDispatch {
   okQty: number
   mrQty: number
   mfQty: number
+  shinLineQty: number
+  crackQty: number
+  chipOffQty: number
+  forgReturnQty: number
+  raiiQty: number
+  shortQty: number
+  otherQty: number
   ratePaise?: number
   dispatchDate?: string
   kind: 'billed' | 'rejection'
@@ -97,10 +105,21 @@ const dispatchSchema = z.object({
   okQty: z.number().int().default(0),
   mrQty: z.number().int().default(0),
   mfQty: z.number().int().default(0),
+  shinLineQty: z.number().int().default(0),
+  crackQty: z.number().int().default(0),
+  chipOffQty: z.number().int().default(0),
+  forgReturnQty: z.number().int().default(0),
+  raiiQty: z.number().int().default(0),
+  shortQty: z.number().int().default(0),
+  otherQty: z.number().int().default(0),
   ratePaise: z.number().int().optional(),
   dispatchDate: z.string().optional(),
   kind: z.enum(['billed', 'rejection']),
 })
+
+const parsedDispatchTotal = (d: ParsedDispatch): number =>
+  d.okQty + d.mrQty + d.mfQty + d.shinLineQty + d.crackQty + d.chipOffQty +
+  d.forgReturnQty + d.raiiQty + d.shortQty + d.otherQty
 
 const inwardSchema = z.object({
   rowIndex: z.number().int().default(0),
@@ -175,16 +194,17 @@ function inwardIssues(s: RootState, unitId: Id, inw: ParsedInward, auto: boolean
   if (!existing && !(inw.receivedQty > 0)) {
     issues.push({ level: 'error', row: sheetRow, message: `Challan ${inw.challanNo}: received qty must be greater than 0` })
   }
-  const consumed = inw.dispatches.reduce((a, d) => a + d.okQty + d.mrQty + d.mfQty, 0)
+  const consumed = inw.dispatches.reduce((a, d) => a + parsedDispatchTotal(d), 0)
   const alreadyDispatched = existing
-    ? values(s.inventory.dispatches).filter((d) => d.inwardId === existing.id).reduce((a, d) => a + d.okQty + d.mcRejQty + d.mfQty, 0)
+    ? values(s.inventory.dispatches).filter((d) => d.inwardId === existing.id).reduce((a, d) => a + dispatchTotalQty(d), 0)
     : 0
   const available = existing ? existing.receivedQty - alreadyDispatched : inw.receivedQty
   if (consumed > available) {
     issues.push({ level: 'error', row: sheetRow, message: `Challan ${inw.challanNo}: new outward quantity ${consumed.toLocaleString('en-IN')} exceeds available ${available.toLocaleString('en-IN')}` })
   }
   for (const d of inw.dispatches) {
-    if (d.okQty < 0 || d.mrQty < 0 || d.mfQty < 0) {
+    if ([d.okQty, d.mrQty, d.mfQty, d.shinLineQty, d.crackQty, d.chipOffQty,
+      d.forgReturnQty, d.raiiQty, d.shortQty, d.otherQty].some((qty) => qty < 0)) {
       issues.push({ level: 'error', row: d.rowIndex + 2, message: `Negative quantity on ${inw.challanNo} (bill ${d.billNo ?? '—'}) — check the sheet` })
     }
     if (d.kind === 'billed' && (d.ratePaise == null || d.ratePaise <= 0)) {
@@ -276,7 +296,8 @@ function summarize(inwards: ParsedInward[]): {
     for (const d of inw.dispatches) {
       dispatchCount += 1
       billedQty += d.okQty
-      rejectionQty += d.mrQty + d.mfQty
+      rejectionQty += d.mrQty + d.mfQty + d.shinLineQty + d.crackQty + d.chipOffQty +
+        d.forgReturnQty + d.raiiQty + d.shortQty + d.otherQty
     }
   }
   return { inwardCount: inwards.length, dispatchCount, receivedQty, billedQty, rejectionQty }
@@ -332,6 +353,13 @@ function applyImport(
         okQty: d.okQty,
         mcRejQty: d.mrQty,
         mfQty: d.mfQty,
+        shinLineQty: d.shinLineQty,
+        crackQty: d.crackQty,
+        chipOffQty: d.chipOffQty,
+        forgReturnQty: d.forgReturnQty,
+        raiiQty: d.raiiQty,
+        shortQty: d.shortQty,
+        otherQty: d.otherQty,
         billNo: d.billNo,
         billDate: d.billDate,
         dispatchDate: d.dispatchDate,

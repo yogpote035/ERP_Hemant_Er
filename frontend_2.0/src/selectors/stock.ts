@@ -1,14 +1,20 @@
 /**
  * Stock selectors (plan §5). Stock is tracked per `(unit, part)`. Everything
  * here is DERIVED — nothing is stored. `currentStock = opening + Σ received −
- * Σ (ok + mcRej + mf)`.
+ * Σ (OK plus every rejection / return bucket)`.
  */
 import type { Dispatch, Id, Inward } from '@/types/domain'
 import { values } from '@/store/normalized'
 import type { RootState } from '@/store/state'
 
-/** Total quantity a dispatch consumes from stock (ok + both rejection buckets). */
-export const dispatchTotalQty = (d: Dispatch): number => d.okQty + d.mcRejQty + d.mfQty
+/** Total rejected/returned quantity recorded on a dispatch. */
+export const dispatchRejectionQty = (d: Dispatch): number =>
+  d.mcRejQty + d.mfQty + (d.shinLineQty ?? 0) + (d.crackQty ?? 0) +
+  (d.chipOffQty ?? 0) + (d.forgReturnQty ?? 0) + (d.raiiQty ?? 0) +
+  (d.shortQty ?? 0) + (d.otherQty ?? 0)
+
+/** Total quantity a dispatch consumes from stock. */
+export const dispatchTotalQty = (d: Dispatch): number => d.okQty + dispatchRejectionQty(d)
 
 /** Inwards for a given (unit, part). */
 export function inwardsOfPart(s: RootState, unitId: Id, partId: Id): Inward[] {
@@ -36,6 +42,7 @@ export interface PartStock {
   ok: number
   mcRej: number
   mf: number
+  otherRejection: number
   available: number
 }
 
@@ -62,9 +69,10 @@ export function selectPartStock(s: RootState, unitId: Id, partId: Id, from?: str
   const ok = disp.reduce((a, d) => a + d.okQty, 0)
   const mcRej = disp.reduce((a, d) => a + d.mcRejQty, 0)
   const mf = disp.reduce((a, d) => a + d.mfQty, 0)
-  const consumed = ok + mcRej + mf
+  const otherRejection = disp.reduce((a, d) => a + dispatchRejectionQty(d) - d.mcRejQty - d.mfQty, 0)
+  const consumed = disp.reduce((a, d) => a + dispatchTotalQty(d), 0)
   const opening = openingOfPart(s, unitId, partId)
-  return { unitId, partId, opening, received, consumed, ok, mcRej, mf, available: opening + received - consumed }
+  return { unitId, partId, opening, received, consumed, ok, mcRej, mf, otherRejection, available: opening + received - consumed }
 }
 
 export interface LedgerEntry {

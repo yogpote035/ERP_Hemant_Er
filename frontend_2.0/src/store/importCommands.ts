@@ -13,6 +13,11 @@ import { writableUnitIds } from './scope'
 import type { RootState } from './state'
 import { runCommand, type ApplyOut, type Command, type CommandContext } from './commandBus'
 import type { CommandResult } from './commands'
+import { dispatchTotalQty } from '@/selectors/stock'
+
+const parsedDispatchTotal = (d: ParsedInward['dispatches'][number]): number =>
+  d.okQty + d.mrQty + d.mfQty + d.shinLineQty + d.crackQty + d.chipOffQty +
+  d.forgReturnQty + d.raiiQty + d.shortQty + d.otherQty
 
 export interface ImportInput {
   unitId: Id
@@ -101,16 +106,17 @@ function inwardIssues(s: RootState, unitId: Id, inw: ParsedInward, auto: boolean
   if (!existing && !(inw.receivedQty > 0)) {
     issues.push({ level: 'error', row: sheetRow, message: `Challan ${inw.challanNo}: received qty must be greater than 0` })
   }
-  const consumed = inw.dispatches.reduce((a, d) => a + d.okQty + d.mrQty + d.mfQty, 0)
+  const consumed = inw.dispatches.reduce((a, d) => a + parsedDispatchTotal(d), 0)
   const alreadyDispatched = existing
-    ? values(s.inventory.dispatches).filter((d) => d.inwardId === existing.id).reduce((a, d) => a + d.okQty + d.mcRejQty + d.mfQty, 0)
+    ? values(s.inventory.dispatches).filter((d) => d.inwardId === existing.id).reduce((a, d) => a + dispatchTotalQty(d), 0)
     : 0
   const available = existing ? existing.receivedQty - alreadyDispatched : inw.receivedQty
   if (consumed > available) {
     issues.push({ level: 'error', row: sheetRow, message: `Challan ${inw.challanNo}: new outward quantity ${consumed.toLocaleString('en-IN')} exceeds available ${available.toLocaleString('en-IN')}` })
   }
   for (const d of inw.dispatches) {
-    if (d.okQty < 0 || d.mrQty < 0 || d.mfQty < 0) {
+    if ([d.okQty, d.mrQty, d.mfQty, d.shinLineQty, d.crackQty, d.chipOffQty,
+      d.forgReturnQty, d.raiiQty, d.shortQty, d.otherQty].some((qty) => qty < 0)) {
       issues.push({ level: 'error', row: d.rowIndex + 2, message: `Negative quantity on ${inw.challanNo} (bill ${d.billNo ?? '—'}) — check the sheet` })
     }
     if (d.kind === 'billed' && (d.ratePaise == null || d.ratePaise <= 0)) {
@@ -236,6 +242,13 @@ function applyImport(draft: RootState, input: ImportInput, ctx: CommandContext):
         okQty: d.okQty,
         mcRejQty: d.mrQty,
         mfQty: d.mfQty,
+        shinLineQty: d.shinLineQty,
+        crackQty: d.crackQty,
+        chipOffQty: d.chipOffQty,
+        forgReturnQty: d.forgReturnQty,
+        raiiQty: d.raiiQty,
+        shortQty: d.shortQty,
+        otherQty: d.otherQty,
         billNo: d.billNo,
         billDate: d.billDate,
         dispatchDate: d.dispatchDate,

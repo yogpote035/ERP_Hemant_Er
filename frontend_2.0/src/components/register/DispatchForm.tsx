@@ -24,13 +24,22 @@ const schema = z
     okQty: z.number().int().min(0).optional(),
     mcRejQty: z.number().int().min(0).optional(),
     mfQty: z.number().int().min(0).optional(),
+    shinLineQty: z.number().int().min(0).optional(),
+    crackQty: z.number().int().min(0).optional(),
+    chipOffQty: z.number().int().min(0).optional(),
+    forgReturnQty: z.number().int().min(0).optional(),
+    raiiQty: z.number().int().min(0).optional(),
+    shortQty: z.number().int().min(0).optional(),
+    otherQty: z.number().int().min(0).optional(),
     billNo: z.string().optional(),
     billDate: z.string().optional(),
     dispatchDate: z.string().optional(),
     rate: z.number().nonnegative().optional(),
   })
   .superRefine((v, ctx) => {
-    const total = (v.okQty ?? 0) + (v.mcRejQty ?? 0) + (v.mfQty ?? 0)
+    const total = (v.okQty ?? 0) + (v.mcRejQty ?? 0) + (v.mfQty ?? 0) +
+      (v.shinLineQty ?? 0) + (v.crackQty ?? 0) + (v.chipOffQty ?? 0) +
+      (v.forgReturnQty ?? 0) + (v.raiiQty ?? 0) + (v.shortQty ?? 0) + (v.otherQty ?? 0)
     if (total <= 0) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Enter at least one quantity', path: ['okQty'] })
     if (v.kind === 'billed') {
       if (!v.billNo?.trim()) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Required for a billed dispatch', path: ['billNo'] })
@@ -63,6 +72,13 @@ export function DispatchForm({
           okQty: existing.okQty,
           mcRejQty: existing.mcRejQty,
           mfQty: existing.mfQty,
+          shinLineQty: existing.shinLineQty,
+          crackQty: existing.crackQty,
+          chipOffQty: existing.chipOffQty,
+          forgReturnQty: existing.forgReturnQty,
+          raiiQty: existing.raiiQty,
+          shortQty: existing.shortQty,
+          otherQty: existing.otherQty,
           billNo: existing.billNo ?? '',
           billDate: existing.billDate ?? '',
           dispatchDate: existing.dispatchDate ?? '',
@@ -73,6 +89,13 @@ export function DispatchForm({
           okQty: undefined,
           mcRejQty: undefined,
           mfQty: undefined,
+          shinLineQty: undefined,
+          crackQty: undefined,
+          chipOffQty: undefined,
+          forgReturnQty: undefined,
+          raiiQty: undefined,
+          shortQty: undefined,
+          otherQty: undefined,
           billNo: '',
           billDate: todayISO(),
           dispatchDate: todayISO(),
@@ -83,7 +106,10 @@ export function DispatchForm({
   const formId = useId()
   const kind = watch('kind')
   const { field: kindField } = useController({ name: 'kind', control })
-  const total = (num(watch('okQty')) ?? 0) + (num(watch('mcRejQty')) ?? 0) + (num(watch('mfQty')) ?? 0)
+  const total = (num(watch('okQty')) ?? 0) + (num(watch('mcRejQty')) ?? 0) + (num(watch('mfQty')) ?? 0) +
+    (num(watch('shinLineQty')) ?? 0) + (num(watch('crackQty')) ?? 0) + (num(watch('chipOffQty')) ?? 0) +
+    (num(watch('forgReturnQty')) ?? 0) + (num(watch('raiiQty')) ?? 0) + (num(watch('shortQty')) ?? 0) +
+    (num(watch('otherQty')) ?? 0)
   const over = total > available
   const err = (k: keyof DispatchFormValues) => {
     const m = formState.errors[k]?.message
@@ -101,6 +127,13 @@ export function DispatchForm({
       okQty: v.okQty ?? 0,
       mcRejQty: v.mcRejQty ?? 0,
       mfQty: v.mfQty ?? 0,
+      shinLineQty: v.shinLineQty ?? 0,
+      crackQty: v.crackQty ?? 0,
+      chipOffQty: v.chipOffQty ?? 0,
+      forgReturnQty: v.forgReturnQty ?? 0,
+      raiiQty: v.raiiQty ?? 0,
+      shortQty: v.shortQty ?? 0,
+      otherQty: v.otherQty ?? 0,
       billNo: v.billNo?.trim() || undefined,
       billDate: v.billDate || undefined,
       dispatchDate: v.dispatchDate || undefined,
@@ -162,7 +195,7 @@ export function DispatchForm({
           </Field>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="OK qty" htmlFor="okQty" error={err('okQty')}>
             <Input id="okQty" type="number" min={0} aria-invalid={err('okQty') ? true : undefined} aria-describedby={descId('okQty')} {...numReg('okQty')} />
           </Field>
@@ -171,6 +204,27 @@ export function DispatchForm({
           </Field>
           <Field label="RM-fault qty" htmlFor="mfQty" error={err('mfQty')}>
             <Input id="mfQty" type="number" min={0} {...numReg('mfQty')} />
+          </Field>
+          <Field label="Shin Line" htmlFor="shinLineQty" error={err('shinLineQty')}>
+            <Input id="shinLineQty" type="number" min={0} {...numReg('shinLineQty')} />
+          </Field>
+          <Field label="Crack" htmlFor="crackQty" error={err('crackQty')}>
+            <Input id="crackQty" type="number" min={0} {...numReg('crackQty')} />
+          </Field>
+          <Field label="Chip Off" htmlFor="chipOffQty" error={err('chipOffQty')}>
+            <Input id="chipOffQty" type="number" min={0} {...numReg('chipOffQty')} />
+          </Field>
+          <Field label="Forg Return" htmlFor="forgReturnQty" error={err('forgReturnQty')}>
+            <Input id="forgReturnQty" type="number" min={0} {...numReg('forgReturnQty')} />
+          </Field>
+          <Field label="RAII" htmlFor="raiiQty" error={err('raiiQty')}>
+            <Input id="raiiQty" type="number" min={0} {...numReg('raiiQty')} />
+          </Field>
+          <Field label="Short Qty" htmlFor="shortQty" error={err('shortQty')}>
+            <Input id="shortQty" type="number" min={0} {...numReg('shortQty')} />
+          </Field>
+          <Field label="Other" htmlFor="otherQty" error={err('otherQty')}>
+            <Input id="otherQty" type="number" min={0} {...numReg('otherQty')} />
           </Field>
         </div>
 

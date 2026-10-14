@@ -6,6 +6,7 @@ import { toPaise } from '@/lib/money'
 import { undo } from './commandBus'
 import { CommandDeniedError, CommandValidationError } from './commands'
 import type { Role } from '@/types/rbac'
+import { selectAvailableForInward } from '@/selectors/stock'
 import {
   runSaveInward,
   runSaveDispatch,
@@ -78,8 +79,17 @@ describe('saveOutwardDispatch — the make-or-break transaction', () => {
 
   it('a rejection dispatch consumes stock but is not billed', () => {
     const id = freshInward('CH-REJ', 100)
-    const d = runSaveDispatch({ inwardId: id, kind: 'rejection', okQty: 0, mcRejQty: 20, mfQty: 0, billNo: 'REJ-DC-1' }).data.id
+    const d = runSaveDispatch({
+      inwardId: id, kind: 'rejection', okQty: 0, mcRejQty: 1, mfQty: 2,
+      shinLineQty: 3, crackQty: 4, chipOffQty: 5, forgReturnQty: 6,
+      raiiQty: 7, shortQty: 8, otherQty: 9, billNo: 'REJ-DC-1',
+    }).data.id
+    expect(getById(st().inventory.dispatches, d)).toMatchObject({
+      mcRejQty: 1, mfQty: 2, shinLineQty: 3, crackQty: 4, chipOffQty: 5,
+      forgReturnQty: 6, raiiQty: 7, shortQty: 8, otherQty: 9,
+    })
     expect(getById(st().inventory.dispatches, d)!.rateSnapshotPaise).toBeUndefined()
+    expect(selectAvailableForInward(st(), id)).toBe(55)
     expect(values(st().billing.invoices).some((i) => i.dispatchIds.includes(d))).toBe(false)
   })
 

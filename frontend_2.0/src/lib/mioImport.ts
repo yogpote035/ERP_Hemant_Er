@@ -26,6 +26,13 @@ export const MIO_FIELDS = [
   { key: 'okQty', label: 'OK / SKF Dispatch Qty', required: false },
   { key: 'mrQty', label: 'MR (machine reject)', required: false },
   { key: 'mfQty', label: 'MF (material fault)', required: false },
+  { key: 'shinLineQty', label: 'Shin Line', required: false },
+  { key: 'crackQty', label: 'Crack', required: false },
+  { key: 'chipOffQty', label: 'Chip Off', required: false },
+  { key: 'forgReturnQty', label: 'Forg Return', required: false },
+  { key: 'raiiQty', label: 'RAII', required: false },
+  { key: 'shortQty', label: 'Short Qty', required: false },
+  { key: 'otherQty', label: 'Other', required: false },
   { key: 'ratePerPc', label: 'Rate / Pc', required: false },
   { key: 'dispatchDate', label: 'Dispatch Date', required: false },
 ] as const
@@ -41,6 +48,13 @@ export interface ParsedDispatch {
   okQty: number
   mrQty: number
   mfQty: number
+  shinLineQty: number
+  crackQty: number
+  chipOffQty: number
+  forgReturnQty: number
+  raiiQty: number
+  shortQty: number
+  otherQty: number
   ratePaise?: Paise
   dispatchDate?: string
   kind: 'billed' | 'rejection'
@@ -132,6 +146,13 @@ export function autoDetectColumns(header: unknown[]): MioColumnMap {
   map.okQty = find('skfdispatchqty', 'okqty', 'skfqty', 'dispatchqty')
   map.mrQty = norm.findIndex((h) => h === 'mr' || h.includes('machinerej') || h.startsWith('mr'))
   map.mfQty = norm.findIndex((h) => h === 'mf' || h.includes('materialfault') || h.startsWith('mf'))
+  map.shinLineQty = find('shinlineqty', 'shinline', 'shimlineqty', 'shimline')
+  map.crackQty = find('crackqty', 'crack')
+  map.chipOffQty = find('chipoffqty', 'chipoff')
+  map.forgReturnQty = find('forgreturnqty', 'forgreturn', 'forgingreturn')
+  map.raiiQty = find('raiiqty', 'raii', 'railqty', 'rail')
+  map.shortQty = find('shortqty', 'shortquantity')
+  map.otherQty = norm.findIndex((h) => h === 'other' || h === 'otherqty')
   map.ratePerPc = norm.findIndex((h) => h.includes('ratepc') || h.includes('rateperpc'))
   map.dispatchDate = norm.findIndex((h) => h.includes('dispatchdate'))
   return map
@@ -155,7 +176,14 @@ export function groupMioRows(rows: unknown[][], map: MioColumnMap, headerRowIdx 
     const ok = intOrZero(cell(row, map.okQty))
     const mr = intOrZero(cell(row, map.mrQty))
     const mf = intOrZero(cell(row, map.mfQty))
-    const hasDispatch = billNo !== '' || ok > 0 || mr > 0 || mf > 0
+    const shinLine = intOrZero(cell(row, map.shinLineQty))
+    const crack = intOrZero(cell(row, map.crackQty))
+    const chipOff = intOrZero(cell(row, map.chipOffQty))
+    const forgReturn = intOrZero(cell(row, map.forgReturnQty))
+    const raii = intOrZero(cell(row, map.raiiQty))
+    const shortQty = intOrZero(cell(row, map.shortQty))
+    const other = intOrZero(cell(row, map.otherQty))
+    const hasDispatch = billNo !== '' || [ok, mr, mf, shinLine, crack, chipOff, forgReturn, raii, shortQty, other].some((qty) => qty > 0)
     const isAllBlank = row.every((c) => str(c) === '')
     if (isAllBlank) return
 
@@ -212,6 +240,13 @@ export function groupMioRows(rows: unknown[][], map: MioColumnMap, headerRowIdx 
         okQty: ok,
         mrQty: mr,
         mfQty: mf,
+        shinLineQty: shinLine,
+        crackQty: crack,
+        chipOffQty: chipOff,
+        forgReturnQty: forgReturn,
+        raiiQty: raii,
+        shortQty,
+        otherQty: other,
         ratePaise: billed ? ratePaise : undefined,
         dispatchDate: parseFlexibleDate(cell(row, map.dispatchDate)) ?? undefined,
         kind: billed ? 'billed' : 'rejection',
@@ -239,7 +274,8 @@ export function summarize(inwards: ParsedInward[]): {
     for (const d of inw.dispatches) {
       dispatchCount += 1
       billedQty += d.okQty
-      rejectionQty += d.mrQty + d.mfQty
+      rejectionQty += d.mrQty + d.mfQty + d.shinLineQty + d.crackQty + d.chipOffQty +
+        d.forgReturnQty + d.raiiQty + d.shortQty + d.otherQty
     }
   }
   return { inwardCount: inwards.length, dispatchCount, receivedQty, billedQty, rejectionQty }

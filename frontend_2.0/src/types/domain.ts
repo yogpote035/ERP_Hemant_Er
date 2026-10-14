@@ -208,7 +208,14 @@ export interface Dispatch {
   mcRejQty: number
   /** RM-fault / residue rejection. */
   mfQty: number
-  // totalQty = okQty + mcRejQty + mfQty is DERIVED, never stored.
+  shinLineQty?: number
+  crackQty?: number
+  chipOffQty?: number
+  forgReturnQty?: number
+  raiiQty?: number
+  shortQty?: number
+  otherQty?: number
+  // Total quantity is DERIVED from OK plus every rejection / return bucket.
   billNo?: string
   billDate?: ISODate
   dispatchDate?: ISODate
