@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { RouterProvider } from 'react-router-dom'
 import { router } from './app/router'
-import { apiEnabled, getToken } from './api/client'
-import { restoreApiSession } from './api/session'
+import { apiEnabled, getToken, UNAUTHORIZED_EVENT } from './api/client'
+import { clearApiSessionData, restoreApiSession } from './api/session'
 
 /** Root — the data router owns auth gating, the app shell, and all pages. */
 export default function App() {
@@ -10,6 +10,12 @@ export default function App() {
   // (the in-memory session is lost on reload). Gate the first paint on that probe.
   const [restoring, setRestoring] = useState(() => apiEnabled() && !!getToken())
   const ran = useRef(false)
+
+  useEffect(() => {
+    const expireSession = () => clearApiSessionData()
+    window.addEventListener(UNAUTHORIZED_EVENT, expireSession)
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, expireSession)
+  }, [])
 
   useEffect(() => {
     if (!restoring || ran.current) return

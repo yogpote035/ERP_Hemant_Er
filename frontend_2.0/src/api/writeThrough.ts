@@ -5,7 +5,7 @@
  * - Mapped commands → their module endpoint (POST /inward, /payments, /masters/:entity, …).
  * - undo / redo, and the few unmapped commands (e.g. importMioWorkbook) → an admin-only
  *   full-state snapshot to POST /system/backup (its real role: backup/restore + the
- *   catch-all that keeps undo in sync). Non-admins get a "saved locally" notice there.
+ *   catch-all that keeps undo in sync). Unsupported non-admin changes are rolled back.
  *
  * Installed once after an API login; a no-op in local mode.
  */
@@ -18,7 +18,7 @@ import {
   mastersApi, inwardApi, dispatchApi, invoicesApi, paymentsApi,
   scrapApi, expensesApi, rejectionApi, attendanceApi, ratesApi, usersApi, rolesApi, systemApi, importApi,
 } from './modules'
-import { ApiError } from './client'
+import { ApiError, getToken } from './client'
 import { getStateVersion } from './stateVersion'
 import { hydrateViaModules } from './hydrate'
 import { refreshAllData } from './refresh'
@@ -29,7 +29,7 @@ export function installWriteThrough(): void {
   if (installed) return
   installed = true
   setWriteSyncHook((name, input, result, ctx) => {
-    void sync(name, input, result, ctx.module)
+    void sync(name, input, result, ctx.module, ctx.rollback)
   })
 }
 
@@ -56,13 +56,13 @@ async function pushFullState(): Promise<void> {
       try {
         await hydrateViaModules()
         useStore.setState({ _undo: [], _redo: [] })
+        toast.warning('Another session changed data — reloaded the latest; re-apply your change if needed.')
+        return
       } catch {
-        /* keep local state if the re-hydrate also fails */
+        throw e
       }
-      toast.warning('Another session changed data — reloaded the latest; re-apply your change if needed.')
-    } else {
-      toast.warning('Backend sync failed — changes saved locally.')
     }
+    throw e
   } finally {
     syncing = false
   }
@@ -115,7 +115,7 @@ function syncMaster(input: { existingId?: string | null; values?: unknown; id?: 
     if (input.existingId) {
       return prefix === 'rm'
         ? ratesApi.updateRm(id, { partId: r.partId, ratePaise: r.ratePaise, effectiveFrom: r.effectiveFrom })
-        : skip('Editing a production rate')
+        : ratesApi.updateProduction(id, { partId: r.partId, machineId: r.machineId, operationId: r.operationId, ratePaise: r.ratePaise, effectiveFrom: r.effectiveFrom })
     }
     return prefix === 'rm'
       ? ratesApi.createRm({ partId: r.partId, ratePaise: r.ratePaise, effectiveFrom: r.effectiveFrom })
@@ -210,18 +210,33 @@ const MODULE_SYNC: Partial<Record<CommandName, Handler>> = {
   },
 }
 
-function skip(_what: string): Promise<unknown> {
-  toast.warning('Saved locally — sign in as admin to persist this change to the server.')
-  return Promise.resolve()
+function skip(what: string): Promise<never> {
+  return Promise.reject(new Error(`${what} cannot be persisted by the API`))
 }
 
-async function sync(name: CommandName, input: unknown, result: unknown, module: Module): Promise<void> {
+async function sync(
+  name: CommandName,
+  input: unknown,
+  result: unknown,
+  module: Module,
+  rollback: () => void,
+): Promise<void> {
   const isAdmin = currentUser(useStore.getState())?.role === 'admin'
 
-  // undo/redo can't be mapped to a single endpoint; the admin snapshot reconciles
-  // the reverted full state (non-admins keep undo local-only).
+  // undo/redo can't be mapped to a single endpoint; only an admin snapshot can
+  // persist it. Revert the local operation for other users.
   if (name === 'undo' || name === 'redo') {
-    if (isAdmin) await pushFullState()
+    if (!isAdmin) {
+      rollback()
+      toast.error('Undo and redo are only available to administrators in API mode.')
+      return
+    }
+    try {
+      await pushFullState()
+    } catch {
+      if (getToken()) rollback()
+      toast.error('Backend save failed — the change was reverted.')
+    }
     return
   }
 
@@ -230,21 +245,42 @@ async function sync(name: CommandName, input: unknown, result: unknown, module: 
   if (handler) {
     try {
       await handler(input, result, module)
-      // Reload only after the server confirms the write. This prevents an edit
-      // drawer's list refresh from racing the PUT and restoring stale values.
+    } catch {
+      if (!getToken()) {
+        toast.error('Your session expired. Sign in again; the change was not saved.')
+        return
+      }
+      try {
+        await hydrateViaModules()
+        useStore.setState({ _undo: [], _redo: [] })
+      } catch {
+        rollback()
+      }
+      toast.error('Backend save failed — the change was reverted.')
+      return
+    }
+    // Reload only after the server confirms the write. A refresh failure must not
+    // roll back the local row: the server has already committed it.
+    try {
       await refreshAllData()
     } catch {
-      toast.warning('Backend sync failed — changes saved locally.')
+      toast.warning('Saved successfully, but the latest data could not be reloaded.')
     }
     return
   }
 
   // Unmapped (e.g. importMioWorkbook): only an admin can snapshot the whole book.
   if (isAdmin) {
-    await pushFullState()
+    try {
+      await pushFullState()
+    } catch {
+      if (getToken()) rollback()
+      toast.error('Backend save failed — the change was reverted.')
+    }
     return
   }
-  toast.warning('Saved locally — sign in as admin to persist this change to the server.')
+  rollback()
+  toast.error('This change is not supported by the server and was reverted.')
 }
 
 function storedInvoice(id: string): any { // eslint-disable-line @typescript-eslint/no-explicit-any

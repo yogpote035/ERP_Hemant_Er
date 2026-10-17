@@ -39,11 +39,25 @@ function disp(p: Partial<ParsedDispatch>): ParsedDispatch {
     ...p,
   }
 }
-function inward(partNo: string, challanNo: string, recv: number, dispatches: ParsedDispatch[]): ParsedInward {
-  return { rowIndex: _r++, challanNo, challanDate: '2025-04-01', partNo, batchHeatNo: 'H', receivedQty: recv, dispatches }
+function inward(partNo: string, challanNo: string, recv: number, dispatches: ParsedDispatch[], batchHeatNo = 'H'): ParsedInward {
+  return { rowIndex: _r++, challanNo, challanDate: '2025-04-01', partNo, batchHeatNo, receivedQty: recv, dispatches }
 }
 
 describe('runImportMio — atomic bulk ingest', () => {
+  it('imports the same challan number as separate inwards when heat numbers differ', () => {
+    const partNo = u1Part().partNo
+    const result = runImportMio({
+      unitId: 'u1',
+      inwards: [
+        inward(partNo, 'MULTI-HEAT-DC', 100, [], 'HEAT-A'),
+        inward(partNo, 'MULTI-HEAT-DC', 200, [], 'HEAT-B'),
+      ],
+    })
+    const rows = values(st().inventory.inwards).filter((row) => row.challanNo === 'MULTI-HEAT-DC')
+    expect(result.data.inwards).toBe(2)
+    expect(rows.map((row) => row.batchHeatNo).sort()).toEqual(['HEAT-A', 'HEAT-B'])
+  })
+
   it('inserts inwards + uniquely numbered dispatches + draft invoices, all undoable in one step', () => {
     const partNo = u1Part().partNo
     const undoBefore = st()._undo.length
@@ -89,6 +103,20 @@ describe('runImportMio — atomic bulk ingest', () => {
       forgReturnQty: 6, raiiQty: 7, shortQty: 8, otherQty: 9,
     })
     expect(values(st().inventory.dispatches).filter((d) => d.inwardId === 'i2')).toHaveLength(before)
+  })
+
+  it('allows a rejection-only row without an outward D/C number', () => {
+    const part = u1Part()
+    const input = inward(part.partNo, 'IMP-REJECTION-NO-DC', 20, [disp({ mrQty: 20, billNo: undefined })])
+    const issues = previewImportIssues(st(), { unitId: 'u1', inwards: [input] })
+    expect(issues.some((issue) => issue.level === 'error')).toBe(false)
+
+    const result = runImportMio({ unitId: 'u1', inwards: [input] })
+    expect(result.data.dispatches).toBe(1)
+    const imported = values(st().inventory.inwards).find((row) => row.challanNo === 'IMP-REJECTION-NO-DC')!
+    const rejection = values(st().inventory.dispatches).find((row) => row.inwardId === imported.id)!
+    expect(rejection.kind).toBe('rejection')
+    expect(rejection.billNo).toBeUndefined()
   })
 
   it('blocks an unknown part and an over-dispatched challan', () => {

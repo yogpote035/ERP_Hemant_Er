@@ -780,6 +780,24 @@ const prodRateMaster = defineMaster<ProductionRate, ProdRateForm>({
       }
     }
   },
+  afterSave: (draft, entity, ctx) => {
+    const keys = [
+      { partId: entity.partId, machineId: entity.machineId, operationId: entity.operationId },
+      ctx.existing && {
+        partId: ctx.existing.partId,
+        machineId: ctx.existing.machineId,
+        operationId: ctx.existing.operationId,
+      },
+    ].filter((key): key is { partId: string; machineId: string | undefined; operationId: string | undefined } => !!key)
+    for (const key of keys) {
+      const versions = values(draft.masters.productionRates)
+        .filter((rate) => rate.partId === key.partId && rate.machineId === key.machineId && rate.operationId === key.operationId)
+        .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom) || a.id.localeCompare(b.id))
+      versions.forEach((rate, index) => patchEntity(draft.masters.productionRates, rate.id, {
+        supersededAt: versions[index + 1]?.effectiveFrom,
+      }))
+    }
+  },
   displayName: (r) => r.id,
 })
 

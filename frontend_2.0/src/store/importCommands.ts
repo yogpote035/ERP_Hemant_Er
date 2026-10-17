@@ -36,12 +36,17 @@ export interface ImportSummary {
   partsCreated: number
 }
 
-function existingInwardFor(s: RootState, unitId: Id, partId: Id, challanNo: string): Inward | undefined {
+function existingInwardFor(s: RootState, unitId: Id, partId: Id, challanNo: string, batchHeatNo: string): Inward | undefined {
   const challan = challanNo.trim().toLowerCase()
+  const heat = batchHeatNo.trim().toLowerCase()
   return values(s.inventory.inwards).find(
-    (i) => i.unitId === unitId && i.partId === partId && i.challanNo.trim().toLowerCase() === challan
+    (i) => i.unitId === unitId && i.partId === partId &&
+      i.challanNo.trim().toLowerCase() === challan && i.batchHeatNo.trim().toLowerCase() === heat
   )
 }
+
+const inwardKey = (partNo: string, challanNo: string, batchHeatNo: string): string =>
+  `${partNo.trim().toLowerCase()}::${challanNo.trim().toLowerCase()}::${batchHeatNo.trim().toLowerCase()}`
 
 function usedOutwardKeys(s: RootState, unitId: Id): Set<string> {
   const inwardIds = new Set(values(s.inventory.inwards).filter((i) => i.unitId === unitId).map((i) => i.id))
@@ -52,8 +57,8 @@ function usedOutwardKeys(s: RootState, unitId: Id): Set<string> {
 
 function outwardParentKey(s: RootState, unitId: Id, inw: ParsedInward): string {
   const partId = resolvePartId(s, unitId, inw.partNo)
-  return (partId && existingInwardFor(s, unitId, partId, inw.challanNo)?.id)
-    ?? `${partId ?? inw.partNo.trim().toLowerCase()}::${inw.challanNo.trim().toLowerCase()}`
+  return (partId && existingInwardFor(s, unitId, partId, inw.challanNo, inw.batchHeatNo)?.id)
+    ?? inwardKey(partId ?? inw.partNo, inw.challanNo, inw.batchHeatNo)
 }
 
 function parseSeq(billNo: string): number {
@@ -100,7 +105,7 @@ function inwardIssues(s: RootState, unitId: Id, inw: ParsedInward, auto: boolean
     else issues.push({ level: 'error', row: sheetRow, message: `Unknown part "${inw.partNo}" — add it in Part Master first` })
   }
   if (!inw.challanNo) issues.push({ level: 'error', row: sheetRow, message: 'Missing challan no' })
-  const existing = partId ? existingInwardFor(s, unitId, partId, inw.challanNo) : undefined
+  const existing = partId ? existingInwardFor(s, unitId, partId, inw.challanNo, inw.batchHeatNo) : undefined
   if (!existing && !inw.challanDate) issues.push({ level: 'error', row: sheetRow, message: 'Missing / invalid challan date' })
   if (existing) issues.push({ level: 'warn', row: sheetRow, message: `Existing inward challan ${inw.challanNo} will be reused for new outward D/C records` })
   if (!existing && !(inw.receivedQty > 0)) {
@@ -140,17 +145,17 @@ export function previewImportIssues(s: RootState, input: ImportInput): ImportIss
   const seen = new Set<string>()
   const usedOutward = usedOutwardKeys(s, input.unitId)
   for (const inw of input.inwards) {
-    const key = `${inw.partNo.trim().toLowerCase()}::${inw.challanNo}`
-    if (seen.has(key)) issues.push({ level: 'error', row: inw.rowIndex + 2, message: `Duplicate challan ${inw.challanNo} for ${inw.partNo} within the file` })
+    const key = inwardKey(inw.partNo, inw.challanNo, inw.batchHeatNo)
+    if (seen.has(key)) issues.push({ level: 'error', row: inw.rowIndex + 2, message: `Duplicate challan ${inw.challanNo} / heat ${inw.batchHeatNo || '—'} for ${inw.partNo} within the file` })
     seen.add(key)
     const parentKey = outwardParentKey(s, input.unitId, inw)
     const newDispatches: ParsedInward['dispatches'] = []
     for (const d of inw.dispatches) {
       const dc = d.billNo?.trim()
-      if (!dc) issues.push({ level: 'error', row: d.rowIndex + 2, message: `Outward record on ${inw.challanNo} needs a unique Our D/C No.` })
-      else if (usedOutward.has(`${parentKey}::${dc.toLowerCase()}`)) issues.push({ level: 'error', row: d.rowIndex + 2, message: `Outward D/C ${dc} already exists for challan ${inw.challanNo} — skipped` })
+      if (!dc && d.kind === 'billed') issues.push({ level: 'error', row: d.rowIndex + 2, message: `Billed outward record on ${inw.challanNo} needs a unique Our D/C No.` })
+      else if (dc && usedOutward.has(`${parentKey}::${dc.toLowerCase()}`)) issues.push({ level: 'error', row: d.rowIndex + 2, message: `Outward D/C ${dc} already exists for challan ${inw.challanNo} — skipped` })
       else {
-        usedOutward.add(`${parentKey}::${dc.toLowerCase()}`)
+        if (dc) usedOutward.add(`${parentKey}::${dc.toLowerCase()}`)
         newDispatches.push(d)
       }
     }
@@ -171,21 +176,22 @@ export function partitionInwards(s: RootState, input: ImportInput): {
   const skipped: { inward: ParsedInward; reasons: string[] }[] = []
   const usedOutward = usedOutwardKeys(s, input.unitId)
   for (const inw of input.inwards) {
-    const key = `${inw.partNo.trim().toLowerCase()}::${inw.challanNo}`
+    const key = inwardKey(inw.partNo, inw.challanNo, inw.batchHeatNo)
     const parentKey = outwardParentKey(s, input.unitId, inw)
     const newDispatches = inw.dispatches.filter((d) => {
       const dc = d.billNo?.trim().toLowerCase()
+      if (!dc) return d.kind === 'rejection'
       const key = `${parentKey}::${dc}`
-      if (!dc || usedOutward.has(key)) return false
+      if (usedOutward.has(key)) return false
       usedOutward.add(key)
       return true
     })
     const candidate = { ...inw, dispatches: newDispatches }
     const reasons = inwardIssues(s, input.unitId, candidate, auto).filter((i) => i.level === 'error').map((i) => i.message)
-    if (seen.has(key)) reasons.push(`Duplicate challan ${inw.challanNo} within the file`)
+    if (seen.has(key)) reasons.push(`Duplicate challan ${inw.challanNo} / heat ${inw.batchHeatNo || '—'} within the file`)
     seen.add(key)
     const partId = resolvePartId(s, input.unitId, inw.partNo)
-    if (partId && existingInwardFor(s, input.unitId, partId, inw.challanNo) && newDispatches.length === 0) {
+    if (partId && existingInwardFor(s, input.unitId, partId, inw.challanNo, inw.batchHeatNo) && newDispatches.length === 0) {
       reasons.push(`No new outward D/C records for existing challan ${inw.challanNo}`)
     }
     if (reasons.length) skipped.push({ inward: inw, reasons })
@@ -218,7 +224,7 @@ function applyImport(draft: RootState, input: ImportInput, ctx: CommandContext):
       partCache.set(norm, partId)
     }
     const part = getById(draft.masters.parts, partId)
-    const existing = existingInwardFor(draft, input.unitId, partId, pinw.challanNo)
+    const existing = existingInwardFor(draft, input.unitId, partId, pinw.challanNo, pinw.batchHeatNo)
     const inwId = existing?.id ?? ctx.newId('inw')
     if (existing) nReused += 1
     else {

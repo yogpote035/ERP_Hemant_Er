@@ -9,6 +9,7 @@ import { setStateVersion } from './stateVersion'
 
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ?? ''
 const TOKEN_KEY = 'hew_api_token'
+export const UNAUTHORIZED_EVENT = 'hew:unauthorized'
 
 /**
  * Keep the bearer token across page reloads so App can validate it with /auth/me
@@ -86,7 +87,10 @@ async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
   if (!res.ok) {
     // 401 means the token is missing/expired/invalid (the backend uses 403 for
     // permission denials). Drop the stale token so the app falls back to /login.
-    if (res.status === 401 && !opts.anonymous) setToken(null)
+    if (res.status === 401 && !opts.anonymous) {
+      setToken(null)
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
+    }
     const err = json as { error?: string; detail?: unknown } | null
     throw new ApiError(res.status, err?.error ?? `Request failed (${res.status})`, err?.detail)
   }

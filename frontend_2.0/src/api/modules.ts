@@ -64,6 +64,7 @@ export const ratesApi = {
   createRm: (body: unknown) => api.post('/rates/rm', body),
   updateRm: (id: string, body: unknown) => api.put(`/rates/rm/${id}`, body),
   createProduction: (body: unknown) => api.post('/rates/production', body),
+  updateProduction: (id: string, body: unknown) => api.put(`/rates/production/${id}`, body),
 }
 export const usersApi = {
   create: (body: unknown) => api.post('/users', body),

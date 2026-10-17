@@ -121,6 +121,8 @@ rejectionRouter.post(
     if (part.unitId !== body.unitId) throw badRequest('Part does not belong to the selected unit')
     const inward = getById(db.inventory.inwards, body.sourceInwardId)
     if (!inward) throw badRequest('Source challan is required')
+    if (inward.unitId !== body.unitId) throw badRequest('Source challan does not belong to the selected unit')
+    if (inward.partId !== body.partId) throw badRequest('Source challan does not belong to the selected part')
 
     if (!(body.mrQty + body.frQty > 0)) throw badRequest('Enter a rejected quantity (MR or FR)')
 
@@ -198,6 +200,8 @@ rejectionRouter.put(
     if (part.unitId !== body.unitId) throw badRequest('Part does not belong to the selected unit')
     const inward = getById(db.inventory.inwards, body.sourceInwardId)
     if (!inward) throw badRequest('Source challan is required')
+    if (inward.unitId !== body.unitId) throw badRequest('Source challan does not belong to the selected unit')
+    if (inward.partId !== body.partId) throw badRequest('Source challan does not belong to the selected part')
 
     if (!(body.mrQty + body.frQty > 0)) throw badRequest('Enter a rejected quantity (MR or FR)')
 

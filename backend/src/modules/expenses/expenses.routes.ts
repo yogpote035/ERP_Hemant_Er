@@ -25,10 +25,20 @@ import type { Id, Expense, ExpenseInstalment, PaymentMode } from '../../types/do
 const PAYMENT_MODES = ['cash', 'cheque', 'rtgs', 'neft', 'upi', 'bank'] as const
 
 function dueIn45Days(date: string): string {
+  if (!date) return ''
   const value = new Date(date)
   value.setDate(value.getDate() + 45)
   return value.toISOString().slice(0, 10)
 }
+
+function isISODate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const [year, month, day] = value.split('-').map(Number)
+  const parsed = new Date(Date.UTC(year!, month! - 1, day!))
+  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month! - 1 && parsed.getUTCDate() === day
+}
+
+const optionalISODate = z.string().refine((value) => value === '' || isISODate(value), 'Use a valid YYYY-MM-DD date')
 
 // ── schemas ──────────────────────────────────────────────────────────────────
 const instalmentSchema = z.object({
@@ -45,8 +55,8 @@ const createExpenseSchema = z.object({
   vendorName: z.string().optional(),
   category: z.string(),
   description: z.string().optional(),
-  date: z.string(),
-  dueDate: z.string().optional(),
+  date: optionalISODate,
+  dueDate: optionalISODate.optional(),
   hsnSac: z.string().optional(),
   quantity: z.number().nonnegative().optional(),
   ratePaise: z.number().int().nonnegative().optional(),

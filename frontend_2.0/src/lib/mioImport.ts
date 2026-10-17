@@ -166,6 +166,7 @@ export function autoDetectColumns(header: unknown[]): MioColumnMap {
 export function groupMioRows(rows: unknown[][], map: MioColumnMap, headerRowIdx = 0): GroupResult {
   const inwards: ParsedInward[] = []
   const issues: ImportIssue[] = []
+  const inwardByKey = new Map<string, ParsedInward>()
   let current: ParsedInward | null = null
 
   rows.forEach((row, i) => {
@@ -192,21 +193,34 @@ export function groupMioRows(rows: unknown[][], map: MioColumnMap, headerRowIdx 
       const challanDate = parseFlexibleDate(cell(row, map.challanDate))
       const partNo = str(cell(row, map.partNo))
       const batchHeatNo = str(cell(row, map.batchHeatNo))
+      const key = `${partNo.trim().toLowerCase()}::${challanNo.trim().toLowerCase()}::${batchHeatNo.trim().toLowerCase()}`
       if (!partNo) issues.push({ level: 'error', row: sheetRow, message: 'Missing part no' })
       if (!challanDate) issues.push({ level: 'warn', row: sheetRow, message: `Unparseable challan date "${str(cell(row, map.challanDate))}"` })
       if (!batchHeatNo) issues.push({ level: 'warn', row: sheetRow, message: 'Missing batch / heat no' })
-      current = {
-        rowIndex: i,
-        challanNo,
-        challanDate: challanDate ?? '',
-        partNo,
-        poNo: str(cell(row, map.poNo)) || undefined,
-        batchHeatNo,
-        rmRatePaise: moneyOrUndef(cell(row, map.rmRate)),
-        receivedQty: recv,
-        dispatches: [],
+      const existing = inwardByKey.get(key)
+      if (existing) {
+        existing.receivedQty += recv
+        current = existing
+        issues.push({
+          level: 'warn',
+          row: sheetRow,
+          message: `Additional quantity for challan ${challanNo} / heat ${batchHeatNo || '—'} was merged into the same inward`,
+        })
+      } else {
+        current = {
+          rowIndex: i,
+          challanNo,
+          challanDate: challanDate ?? '',
+          partNo,
+          poNo: str(cell(row, map.poNo)) || undefined,
+          batchHeatNo,
+          rmRatePaise: moneyOrUndef(cell(row, map.rmRate)),
+          receivedQty: recv,
+          dispatches: [],
+        }
+        inwards.push(current)
+        inwardByKey.set(key, current)
       }
-      inwards.push(current)
     } else if (challanNo !== '' && recv == null && hasDispatch && (!current || challanNo.toLowerCase() !== current.challanNo.toLowerCase())) {
       // Outward-only exports often repeat the reference challan but omit Received QTY.
       // Keep that row attached to its own reference so the store-aware stage can reuse

@@ -32,14 +32,16 @@ function freshInward(challanNo = 'TEST-CH-1', qty = 1000): string {
 }
 
 describe('saveInward', () => {
-  it('creates an inward (logged + undoable) and blocks a duplicate challan', () => {
+  it('allows the same challan on a different heat and blocks the same challan/heat pair', () => {
     const id = freshInward()
     expect(getById(st().inventory.inwards, id)!.receivedQty).toBe(1000)
     expect(st().system.activityLog.at(-1)?.command).toBe('saveInward')
     expect(st()._undo.length).toBeGreaterThan(0)
 
+    const secondHeat = runSaveInward({ unitId: 'u1', partId: 'p1', challanNo: 'TEST-CH-1', challanDate: '2025-04-02', batchHeatNo: 'H-2', receivedQty: 5 })
+    expect(getById(st().inventory.inwards, secondHeat.data.id)?.batchHeatNo).toBe('H-2')
     expect(() =>
-      runSaveInward({ unitId: 'u1', partId: 'p1', challanNo: 'TEST-CH-1', challanDate: '2025-04-02', batchHeatNo: 'H-2', receivedQty: 5 })
+      runSaveInward({ unitId: 'u1', partId: 'p1', challanNo: ' test-ch-1 ', challanDate: '2025-04-03', batchHeatNo: ' h-1 ', receivedQty: 5 })
     ).toThrow(CommandValidationError)
   })
 })

@@ -33,6 +33,13 @@ function consumedForInward(s: ReturnType<typeof getDb>, inwardId: Id): number {
     .reduce((a, d) => a + dispatchTotalQty(d), 0)
 }
 
+function sameInwardIdentity(inward: Inward, unitId: Id, partId: Id, challanNo: string, batchHeatNo: string): boolean {
+  return inward.unitId === unitId &&
+    inward.partId === partId &&
+    inward.challanNo.trim().toLowerCase() === challanNo.trim().toLowerCase() &&
+    inward.batchHeatNo.trim().toLowerCase() === batchHeatNo.trim().toLowerCase()
+}
+
 // ── body schema (create) — ports validateInward's field rules ────────────────────
 const createSchema = z.object({
   id: z.string().optional(),
@@ -149,11 +156,12 @@ inwardRouter.post(
     if (body.customerId && !customer) throw badRequest('Unknown customer')
     if (customer && customer.unitId !== body.unitId) throw badRequest('Customer does not belong to the selected unit')
 
-    // Duplicate-challan guard: one (unit, challan, part) row only.
+    // The same challan can carry separate heats. Only the complete
+    // (unit, part, challan, heat) identity must be unique.
     const dup = values(db.inventory.inwards).some(
-      (i) => Boolean(body.challanNo) && i.unitId === body.unitId && i.partId === body.partId && i.challanNo === body.challanNo
+      (i) => Boolean(body.challanNo) && sameInwardIdentity(i, body.unitId, body.partId, body.challanNo, body.batchHeatNo)
     )
-    if (dup) throw conflict(`Challan ${body.challanNo} already exists for this part`)
+    if (dup) throw conflict(`Challan ${body.challanNo} with heat ${body.batchHeatNo || '—'} already exists for this part`)
 
     const inward: Inward = {
       id: resolveId(body.id, (id) => !!getById(db.inventory.inwards, id), 'inw'),
@@ -217,9 +225,9 @@ inwardRouter.put(
     if (customer && customer.unitId !== body.unitId) throw badRequest('Customer does not belong to the selected unit')
 
     const dup = values(db.inventory.inwards).some(
-      (i) => Boolean(body.challanNo) && i.id !== cur.id && i.unitId === body.unitId && i.partId === body.partId && i.challanNo === body.challanNo
+      (i) => Boolean(body.challanNo) && i.id !== cur.id && sameInwardIdentity(i, body.unitId, body.partId, body.challanNo, body.batchHeatNo)
     )
-    if (dup) throw conflict(`Challan ${body.challanNo} already exists for this part`)
+    if (dup) throw conflict(`Challan ${body.challanNo} with heat ${body.batchHeatNo || '—'} already exists for this part`)
 
     const consumed = consumedForInward(db, cur.id)
     if (body.receivedQty < consumed) {

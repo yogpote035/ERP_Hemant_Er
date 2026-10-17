@@ -37,7 +37,7 @@ export type WriteSyncHook = (
   name: CommandName,
   input: unknown,
   result: unknown,
-  ctx: { actorId: Id; module: Module }
+  ctx: { actorId: Id; module: Module; rollback: () => void }
 ) => void
 let writeSyncHook: WriteSyncHook | null = null
 export function setWriteSyncHook(fn: WriteSyncHook | null): void {
@@ -119,11 +119,20 @@ export function runCommand<I, R>(cmd: Command<I, R>, input: I): CommandResult<R>
     { ...next, _undo: [...s._undo, undoRec].slice(-UNDO_DEPTH), _redo: [] },
     true
   )
+  const rollback = () => {
+    const current = useStore.getState()
+    const reverted = applyPatches(current, inversePatches)
+    useStore.setState({
+      ...reverted,
+      _undo: current._undo.filter((entry) => entry.id !== undoRec.id),
+      _redo: [],
+    }, true)
+  }
   // Mirror to the backend (API mode only; no-op otherwise). Never let a sync
   // failure break the local command — the hook handles its own errors.
   if (writeSyncHook) {
     try {
-      writeSyncHook(cmd.name, input, out.result, { actorId: ctx.actor.id, module: cmd.module })
+      writeSyncHook(cmd.name, input, out.result, { actorId: ctx.actor.id, module: cmd.module, rollback })
     } catch {
       /* hook is fire-and-forget */
     }
@@ -141,7 +150,7 @@ export function undo(): { command: CommandName; summary: string } | null {
     { ...reverted, _undo: s._undo.slice(0, -1), _redo: [...s._redo, rec].slice(-UNDO_DEPTH) },
     true
   )
-  syncUndoRedo('undo')
+  syncUndoRedo('undo', () => useStore.setState(s, true))
   return { command: rec.command, summary: rec.summary }
 }
 
@@ -155,17 +164,17 @@ export function redo(): { command: CommandName; summary: string } | null {
     { ...reapplied, _redo: s._redo.slice(0, -1), _undo: [...s._undo, rec].slice(-UNDO_DEPTH) },
     true
   )
-  syncUndoRedo('redo')
+  syncUndoRedo('redo', () => useStore.setState(s, true))
   return { command: rec.command, summary: rec.summary }
 }
 
 /** Mirror an undo/redo to the backend. writeThrough reconciles it via an admin
  *  full-state snapshot (the local revert can't be mapped to a single endpoint). */
-function syncUndoRedo(name: 'undo' | 'redo'): void {
+function syncUndoRedo(name: 'undo' | 'redo', rollback: () => void): void {
   if (!writeSyncHook) return
   try {
     const actorId = currentUser(useStore.getState())?.id ?? ''
-    writeSyncHook(name, undefined, undefined, { actorId, module: 'system' as Module })
+    writeSyncHook(name, undefined, undefined, { actorId, module: 'system' as Module, rollback })
   } catch {
     /* fire-and-forget */
   }

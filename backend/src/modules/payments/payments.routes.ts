@@ -77,8 +77,8 @@ paymentsRouter.get(
     const allowed = allowedSet(req)
     const rows = values(s.payments.payments).filter((p) => {
       if (allowed == null) return true
-      // visible if any allocated invoice's unit is in scope
-      return p.allocations.some((a) => {
+      // A legacy mixed-unit payment is hidden unless every allocation is in scope.
+      return p.allocations.length > 0 && p.allocations.every((a) => {
         const inv = getById(s.billing.invoices, a.invoiceId)
         return inv ? allowed.has(inv.unitId) : false
       })
@@ -152,15 +152,18 @@ paymentsRouter.post(
 
     let allocated = ZERO
     const perInvoice = new Map<Id, Paise>()
+    const allocationUnits = new Set<Id>()
     for (const a of input.allocations) {
       const inv = getById(s.billing.invoices, a.invoiceId)
       if (!inv) throw badRequest('Allocation targets a missing invoice')
       if (inv.lifecycle !== 'sent') throw badRequest(`Bill ${inv.billNo} is not issued — can't receive payment`)
       if (!canAccessUnit(req, inv.unitId)) throw forbidden(`No access to bill ${inv.billNo}'s unit`)
+      allocationUnits.add(inv.unitId)
       if (!(a.amountPaise > 0)) throw badRequest(`Allocation to ${inv.billNo} must be positive`)
       perInvoice.set(a.invoiceId, addP(perInvoice.get(a.invoiceId) ?? ZERO, a.amountPaise as Paise))
       allocated = addP(allocated, a.amountPaise as Paise)
     }
+    if (allocationUnits.size !== 1) throw badRequest('A payment can only be allocated to invoices from one unit')
     // Cap the TOTAL allocated to each invoice at its outstanding — a per-allocation
     // check alone lets two lines overpay one bill.
     for (const [invId, sum] of perInvoice) {
@@ -210,8 +213,12 @@ paymentsRouter.post(
     const s = getDb()
     const p = getById(s.payments.payments, req.params.id)
     if (!p) throw notFound('Payment not found')
-    const unitId = getById(s.billing.invoices, p.allocations[0]?.invoiceId ?? '')?.unitId
-    if (unitId) assertUnit(req, unitId)
+    if (p.allocations.length === 0) throw badRequest('Payment has no invoice allocations')
+    for (const allocation of p.allocations) {
+      const invoice = getById(s.billing.invoices, allocation.invoiceId)
+      if (!invoice) throw badRequest('Payment references a missing invoice and cannot be safely reversed')
+      assertUnit(req, invoice.unitId)
+    }
 
     const bills = p.allocations
       .map((a) => getById(s.billing.invoices, a.invoiceId)?.billNo)

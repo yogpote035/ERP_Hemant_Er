@@ -20,5 +20,8 @@ export function useCan(): (module: Module, action: Action) => boolean {
     const u = currentUser(s)
     return u ? s.masters.roles.byId[u.role]?.permissions : undefined
   })
-  return useCallback((module: Module, action: Action) => can(user, module, action), [user, rolePerms])
+  return useCallback((module: Module, action: Action) => {
+    void rolePerms // dependency intentionally invalidates this callback after a live role edit
+    return can(user, module, action)
+  }, [user, rolePerms])
 }

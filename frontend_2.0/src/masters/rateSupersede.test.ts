@@ -72,6 +72,22 @@ describe('rate auto-supersede (afterUpsert)', () => {
     expect(getById(st().masters.productionRates, otherKey.data.id)!.supersededAt).toBeUndefined()
   })
 
+  it('links a backdated production rate to the next later version', () => {
+    const part = u1Part()
+    const machine = u1Machine()
+    const future = prodRate.save(
+      { partId: part.id, machineId: machine.id, operationId: '', rate: 9, effectiveFrom: '2099-01-01' },
+      null
+    )
+    const backdated = prodRate.save(
+      { partId: part.id, machineId: machine.id, operationId: '', rate: 8, effectiveFrom: '2050-01-01' },
+      null
+    )
+
+    expect(getById(st().masters.productionRates, backdated.data.id)!.supersededAt).toBe('2099-01-01')
+    expect(getById(st().masters.productionRates, future.data.id)!.supersededAt).toBeUndefined()
+  })
+
   it('latestProductionRate is POINT-IN-TIME: a superseded rate still applies to back-dated work', () => {
     const part = u1Part()
     // ₹5 from Jan, ₹7 from Jun (which supersedes the Jan rate at 2025-06-01).

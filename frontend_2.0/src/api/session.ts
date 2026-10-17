@@ -10,15 +10,16 @@ import { apiLogin, apiLogout, apiMe, type ApiUser } from './auth'
 import { apiEnabled, getToken, setToken } from './client'
 import { hydrateViaModules } from './hydrate'
 import { installWriteThrough } from './writeThrough'
-import { login, logout } from '@/store'
+import { currentUser, login, useStore } from '@/store'
+import { createEmptyState } from '@/store/state'
+
+export function clearApiSessionData(): void {
+  useStore.setState(createEmptyState(), true)
+}
 
 /** Hydrate the store from the per-module GET endpoints (every role, scoped server-side). */
 async function hydrateFor(_user: ApiUser): Promise<void> {
-  try {
-    await hydrateViaModules()
-  } catch {
-    /* keep going with whatever is loaded */
-  }
+  await hydrateViaModules(_user)
 }
 
 export async function loginViaApi(loginId: string, password: string): Promise<ApiUser> {
@@ -26,10 +27,17 @@ export async function loginViaApi(loginId: string, password: string): Promise<Ap
   // Hydrate the store from the backend so every page shows real data. Admin gets the
   // whole book in one snapshot (includes the system slice); other roles assemble it
   // from the scoped module GET endpoints.
-  await hydrateFor(user)
-  installWriteThrough() // mirror subsequent local commands to the backend
-  login(user.id)
-  return user
+  try {
+    await hydrateFor(user)
+    installWriteThrough() // mirror subsequent local commands to the backend
+    login(user.id)
+    if (!currentUser(useStore.getState())) throw new Error('Authenticated user was not loaded')
+    return user
+  } catch (error) {
+    setToken(null)
+    clearApiSessionData()
+    throw error
+  }
 }
 
 /**
@@ -46,11 +54,12 @@ export async function restoreApiSession(): Promise<boolean> {
     return true
   } catch {
     setToken(null)
+    clearApiSessionData()
     return false
   }
 }
 
 export function logoutViaApi(): void {
   apiLogout()
-  logout()
+  clearApiSessionData()
 }

@@ -13,7 +13,7 @@ vi.mock('./modules', () => {
     expensesApi: { create: f(), update: f(), pay: f(), remove: f() },
     rejectionApi: { create: f(), update: f(), remove: f() },
     attendanceApi: { createProduction: f(), removeProduction: f(), createShift: f(), removeShift: f() },
-    ratesApi: { createRm: f(), createProduction: f() },
+    ratesApi: { createRm: f(), updateRm: f(), createProduction: f(), updateProduction: f() },
     usersApi: { create: f(), update: f(), setActive: f() },
     systemApi: { backup: f(), restore: f(), resetDemo: f() },
   }
@@ -28,8 +28,9 @@ import { runSaveInward, runDeleteInward, runSaveDispatch, runDeleteDispatch } fr
 import { runSaveScrapBill, runSaveRejectionAdvice } from '@/store/scrapCommands'
 import { runSaveExpense } from '@/store/expenseCommands'
 import { runSaveProductionAttendance } from '@/store/attendanceCommands'
-import { MASTER_SPECS } from '@/masters/registry'
+import { MASTER_SPECS, RATE_SPECS } from '@/masters/registry'
 import { installWriteThrough } from './writeThrough'
+import { setToken } from './client'
 import * as M from './modules'
 
 const st = () => useStore.getState()
@@ -41,11 +42,23 @@ beforeAll(() => {
 })
 beforeEach(() => {
   useStore.setState(seedState(), true)
+  setToken('test-token')
   login(roleId('manager')) // non-admin with broad perms → exercises the module-endpoint path
   vi.clearAllMocks()
 })
 
 describe('write-through routing (non-admin → module endpoints)', () => {
+  it('rolls back an optimistic local command when the backend rejects it', async () => {
+    vi.mocked(M.inwardApi.create).mockRejectedValueOnce(new Error('backend rejected'))
+    const id = runSaveInward({
+      unitId: 'u1', partId: 'p1', challanNo: 'WT-ROLLBACK', challanDate: '2025-04-01',
+      batchHeatNo: 'H', receivedQty: 100,
+    }).data.id
+    expect(st().inventory.inwards.byId[id]).toBeDefined()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(st().inventory.inwards.byId[id]).toBeUndefined()
+  })
+
   it('routes inward create / edit / delete to the inward endpoints', async () => {
     const id = runSaveInward({ unitId: 'u1', partId: 'p1', challanNo: 'WT-1', challanDate: '2025-04-01', batchHeatNo: 'H', receivedQty: 100 }).data.id
     await flush()
@@ -100,6 +113,20 @@ describe('write-through routing (non-admin → module endpoints)', () => {
     part.save({ partNo: 'WT-PART', materialCode: 'WT-RM', unitId: 'u1', uom: 'NOS', hsnSac: '7318', gstPct: '18', finishWtG: 1, scrapWtG: 0.1, avgQtyPerBox: 10 }, null)
     await flush()
     expect(M.mastersApi.create).toHaveBeenCalledWith('parts', expect.objectContaining({ unitId: 'u1' }))
+  })
+
+  it('persists production-rate edits through the production PUT endpoint', async () => {
+    const spec = RATE_SPECS.find((s) => s.key === 'prodRate')!
+    const created = spec.save({
+      partId: 'p1', machineId: '', operationId: 'op-1f', rate: 5, effectiveFrom: '2026-01-01',
+    }, null)
+    await flush()
+    spec.save({
+      partId: 'p1', machineId: '', operationId: 'op-1f', rate: 7, effectiveFrom: '2026-02-01',
+    }, st().masters.productionRates.byId[created.data.id]!)
+    await flush()
+
+    expect(M.ratesApi.updateProduction).toHaveBeenCalledWith(created.data.id, expect.objectContaining({ ratePaise: toPaise(7) }))
   })
 
   it('routes attendance + expense-edit + rejection-edit (previously local-only)', async () => {

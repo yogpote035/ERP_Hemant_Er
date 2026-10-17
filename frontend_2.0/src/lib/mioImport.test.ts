@@ -87,6 +87,19 @@ describe('groupMioRows — the blank-received grouping', () => {
     expect(s.dispatchCount).toBe(2)
   })
 
+  it('merges repeated rows for the same challan, part, and heat', () => {
+    const rows = [
+      mk({ 1: 'IM-539', 2: 'U12627JDC01152', 3: '20.06.2026', 5: '62607', 7: 37, 9: 'DC-1', 11: 37, 15: 4.08 }),
+      mk({ 1: 'IM-539', 2: 'U12627JDC01152', 3: '20.06.2026', 5: '62607', 7: 345, 9: 'DC-2', 11: 175, 15: 4.08 }),
+      mk({ 9: 'DC-3', 11: 170, 15: 4.08 }),
+    ]
+    const { inwards, issues } = groupMioRows(rows, map)
+    expect(inwards).toHaveLength(1)
+    expect(inwards[0]!.receivedQty).toBe(382)
+    expect(inwards[0]!.dispatches).toHaveLength(3)
+    expect(issues.some((issue) => /was merged into the same inward/.test(issue.message))).toBe(true)
+  })
+
   it('flags a dispatch row that appears before any inward challan', () => {
     const rows = [mk({ 9: 'ORPHAN', 11: 50 })]
     const { inwards, issues } = groupMioRows(rows, map)

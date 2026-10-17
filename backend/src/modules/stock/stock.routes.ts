@@ -100,13 +100,15 @@ stockRouter.get(
     const { from, to } = windowSchema.parse(req.query)
     if (from && to && from > to) throw badRequest('`from` must be on or before `to`')
     const s = getDb()
+    const part = getById(s.masters.parts, partId)
+    if (part && part.unitId !== unitId) throw notFound(`No stock for part '${partId}' in unit '${unitId}'`)
     const row = selectPartStock(s, unitId, partId, from, to)
     // Nothing known about this (unit, part) at all ⇒ 404 rather than a zero row.
     const known =
       row.opening !== 0 ||
       row.received !== 0 ||
       row.consumed !== 0 ||
-      s.masters.parts.byId[partId] != null
+      part != null
     if (!known) throw notFound(`No stock for part '${partId}' in unit '${unitId}'`)
     res.json({ data: row })
   })

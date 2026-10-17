@@ -16,7 +16,8 @@ process.env.JWT_SECRET = 'test-secret'
 process.env.AUTH_RATE_MAX = '1000' // don't throttle the test suite's many logins
 
 const { createApp } = await import('../src/app.js')
-const { initRepository, replaceState } = await import('../src/db/repository.js')
+const { initRepository, replaceState, mutate } = await import('../src/db/repository.js')
+const { putEntity } = await import('../src/db/normalized.js')
 const { seedState } = await import('../src/db/seed.js')
 const { assertProdConfig } = await import('../src/config.js')
 
@@ -77,6 +78,32 @@ describe('RBAC + unit scope', () => {
     })
     assert.equal(created.status, 201)
     assert.equal(created.body.data.unitId, 'u1')
+  })
+
+  it('scopes rate reads and writes to assigned units', async () => {
+    const operator = await tokenFor('opa@hew.in')
+    const visibleParts = await request(app).get('/api/masters/parts').set(auth(operator))
+    const visibleIds = new Set(visibleParts.body.data.map((p: { id: string }) => p.id))
+    const rates = await request(app).get('/api/rates/rm').set(auth(operator))
+    assert.equal(rates.status, 200)
+    assert.ok(rates.body.data.every((rate: { partId: string }) => visibleIds.has(rate.partId)))
+
+    const forbiddenRate = await request(app).post('/api/rates/rm').set(auth(operator)).send({
+      partId: 'p12', ratePaise: 100, effectiveFrom: '2026-01-01',
+    })
+    assert.equal(forbiddenRate.status, 403)
+  })
+
+  it('rejects production-rate dimensions from a different unit', async () => {
+    const admin = await tokenFor()
+    const machine = await request(app).post('/api/masters/machines').set(auth(admin)).send({
+      unitId: 'u2', machineNo: 'U2-RATE-MACHINE',
+    })
+    assert.equal(machine.status, 201)
+    const rate = await request(app).post('/api/rates/production').set(auth(admin)).send({
+      partId: 'p1', machineId: machine.body.data.id, ratePaise: 100, effectiveFrom: '2026-01-01',
+    })
+    assert.equal(rate.status, 400)
   })
 })
 
@@ -290,6 +317,96 @@ describe('payments → outstanding cascade', () => {
   })
 })
 
+describe('cross-unit integrity guards', () => {
+  it('rejects a payment allocated across invoices from different units', async () => {
+    await mutate((s) => {
+      const source = s.billing.invoices.byId['inv-255']!
+      putEntity(s.billing.invoices, { ...source, id: 'inv-u2', unitId: 'u2', billNo: 'U2/1/24-25' })
+    })
+    const t = await tokenFor()
+    const r = await request(app).post('/api/payments').set(auth(t)).send({
+      mode: 'neft', ref: 'MIXED', date: '2025-04-12', amountPaise: 200,
+      allocations: [
+        { invoiceId: 'inv-255', amountPaise: 100 },
+        { invoiceId: 'inv-u2', amountPaise: 100 },
+      ],
+    })
+    assert.equal(r.status, 400)
+  })
+
+  it('hides and refuses to reverse a legacy mixed-unit payment', async () => {
+    await mutate((s) => {
+      const source = s.billing.invoices.byId['inv-255']!
+      putEntity(s.billing.invoices, { ...source, id: 'inv-u2', unitId: 'u2', billNo: 'U2/1/24-25' })
+      putEntity(s.payments.payments, {
+        id: 'pay-mixed', mode: 'neft', ref: 'LEGACY-MIXED', date: '2025-04-12', amountPaise: 200,
+        allocations: [
+          { invoiceId: 'inv-255', amountPaise: 100 },
+          { invoiceId: 'inv-u2', amountPaise: 100 },
+        ],
+      })
+      const manager = s.masters.users.byId['u-mgr']!
+      putEntity(s.masters.users, {
+        ...manager,
+        assignedUnitIds: ['u1'],
+        overrides: { add: { payments: ['delete'] } },
+      })
+    })
+    const operator = await tokenFor('opa@hew.in')
+    const list = await request(app).get('/api/payments').set(auth(operator))
+    assert.equal(list.status, 200)
+    assert.ok(!list.body.data.some((p: { id: string }) => p.id === 'pay-mixed'))
+
+    const manager = await tokenFor('manager@hew.in')
+    const reverse = await request(app).post('/api/payments/pay-mixed/reverse').set(auth(manager))
+    assert.equal(reverse.status, 403)
+  })
+
+  it('rejects a rejection advice whose source challan belongs to another part', async () => {
+    const t = await tokenFor()
+    const r = await request(app).post('/api/rejection').set(auth(t)).send({
+      unitId: 'u1', customerId: 'c1', partId: 'p1', sourceInwardId: 'i1',
+      rejDcNo: 'WRONG-PART', rejDate: '2025-04-01', mrQty: 1, frQty: 0,
+      weightBasis: 'scrap', weightPerRingMg: 1000,
+    })
+    assert.equal(r.status, 400)
+  })
+
+  it('rejects a part from another unit in the single-stock endpoint', async () => {
+    const t = await tokenFor('opa@hew.in')
+    const r = await request(app).get('/api/stock/u1/p12').set(auth(t))
+    assert.equal(r.status, 404)
+  })
+})
+
+describe('rate timeline integrity', () => {
+  it('links a backdated RM rate to the next later version', async () => {
+    const t = await tokenFor()
+    const later = await request(app).post('/api/rates/rm').set(auth(t)).send({
+      partId: 'p1', ratePaise: 9900, effectiveFrom: '2099-01-01',
+    })
+    const backdated = await request(app).post('/api/rates/rm').set(auth(t)).send({
+      partId: 'p1', ratePaise: 8800, effectiveFrom: '2050-01-01',
+    })
+    assert.equal(later.status, 201)
+    assert.equal(backdated.status, 201)
+    assert.equal(backdated.body.data.supersededAt, '2099-01-01')
+  })
+
+  it('updates a production-rate version through the API', async () => {
+    const t = await tokenFor()
+    const created = await request(app).post('/api/rates/production').set(auth(t)).send({
+      partId: 'p1', operationId: 'op-1f', ratePaise: 500, effectiveFrom: '2026-01-01',
+    })
+    const updated = await request(app).put(`/api/rates/production/${created.body.data.id}`).set(auth(t)).send({
+      partId: 'p1', operationId: 'op-1f', ratePaise: 700, effectiveFrom: '2026-02-01',
+    })
+    assert.equal(updated.status, 200)
+    assert.equal(updated.body.data.ratePaise, 700)
+    assert.equal(updated.body.data.effectiveFrom, '2026-02-01')
+  })
+})
+
 const idOf = (b: { data?: { id?: string; expense?: { id?: string } } }) => b.data?.id ?? b.data?.expense?.id
 
 describe('pagination + search (server-side)', () => {
@@ -396,16 +513,59 @@ describe('validation + business-rule guards (sad paths)', () => {
     assert.ok(Array.isArray(r.body.detail) || typeof r.body.error === 'string')
   })
 
+  it('returns 400 for an invalid expense date instead of throwing a server error', async () => {
+    const t = await tokenFor()
+    const r = await request(app).post('/api/expenses').set(auth(t)).send({
+      unitId: 'u1', category: 'Tooling', date: '2026-02-31', totalPaise: 100,
+    })
+    assert.equal(r.status, 400)
+  })
+
   it('404s an unknown master and a missing row', async () => {
     const t = await tokenFor()
     assert.equal((await request(app).get('/api/masters/widgets').set(auth(t))).status, 404)
     assert.equal((await request(app).get('/api/masters/customers/nope').set(auth(t))).status, 404)
   })
 
-  it('blocks a duplicate inward challan (409)', async () => {
+  it('allows the same inward challan on a different heat and blocks the same challan/heat pair', async () => {
     const t = await tokenFor()
-    const dup = await request(app).post('/api/inward').set(auth(t)).send({ unitId: 'u1', partId: 'p3', challanNo: '8202421273', challanDate: '2025-04-01', batchHeatNo: 'H', receivedQty: 10 })
+    const differentHeat = await request(app).post('/api/inward').set(auth(t)).send({ unitId: 'u1', partId: 'p3', challanNo: '8202421273', challanDate: '2025-04-01', batchHeatNo: 'H', receivedQty: 10 })
+    assert.equal(differentHeat.status, 201)
+    const dup = await request(app).post('/api/inward').set(auth(t)).send({ unitId: 'u1', partId: 'p3', challanNo: ' 8202421273 ', challanDate: '2025-04-01', batchHeatNo: ' h ', receivedQty: 10 })
     assert.equal(dup.status, 409)
+  })
+
+  it('imports two rows with the same challan when their heat numbers differ', async () => {
+    const t = await tokenFor()
+    const row = (heat: string, rowIndex: number) => ({
+      rowIndex, challanNo: 'IMPORT-MULTI-HEAT', challanDate: '2026-01-01',
+      partNo: 'OM-6308-A-2RS', batchHeatNo: heat, receivedQty: 10, dispatches: [],
+    })
+    const applied = await request(app).post('/api/import/apply').set(auth(t)).send({
+      targetUnitId: 'u1', inwards: [row('HEAT-A', 0), row('HEAT-B', 1)],
+    })
+    assert.equal(applied.status, 201)
+    assert.equal(applied.body.data.inwards, 2)
+  })
+
+  it('imports a rejection-only outward row without a D/C number', async () => {
+    const t = await tokenFor()
+    const applied = await request(app).post('/api/import/apply').set(auth(t)).send({
+      targetUnitId: 'u1',
+      inwards: [{
+        rowIndex: 0, challanNo: 'IMPORT-REJECTION-NO-DC', challanDate: '2026-01-01',
+        partNo: 'OM-6308-A-2RS', batchHeatNo: 'HEAT-R', receivedQty: 10,
+        dispatches: [{
+          rowIndex: 0, kind: 'rejection', okQty: 0, mrQty: 10, mfQty: 0,
+          shinLineQty: 0, crackQty: 0, chipOffQty: 0, forgReturnQty: 0,
+          raiiQty: 0, shortQty: 0, otherQty: 0,
+        }],
+      }],
+    })
+    assert.equal(applied.status, 201)
+    assert.equal(applied.body.data.inwards, 1)
+    assert.equal(applied.body.data.dispatches, 1)
+    assert.equal(applied.body.data.invoices, 0)
   })
 
   it('rejects over-dispatch beyond available stock (invariant I1)', async () => {

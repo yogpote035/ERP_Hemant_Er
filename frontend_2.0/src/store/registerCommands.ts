@@ -142,11 +142,15 @@ function validateInward(s: RootState, input: InwardInput): { ok: true } | { ok: 
   if (input.vendorId && (!vendor || !vendor.active)) errors.push('RM supplier is unknown or inactive')
   else if (vendor?.unitId && vendor.unitId !== input.unitId) errors.push('RM supplier does not belong to the selected unit')
   if (input.customerId && !getById(s.masters.customers, input.customerId)) errors.push('Customer / owner is unknown')
-  // Duplicate-challan guard: one (unit, challan, part) row only.
+  const challan = input.challanNo.trim().toLowerCase()
+  const heat = input.batchHeatNo.trim().toLowerCase()
+  // One row per (unit, part, challan, heat). The same challan may be received
+  // against multiple heat numbers.
   const dup = values(s.inventory.inwards).some(
-    (i) => Boolean(input.challanNo.trim()) && i.id !== input.id && i.unitId === input.unitId && i.partId === input.partId && i.challanNo === input.challanNo.trim()
+    (i) => Boolean(challan) && i.id !== input.id && i.unitId === input.unitId && i.partId === input.partId &&
+      i.challanNo.trim().toLowerCase() === challan && i.batchHeatNo.trim().toLowerCase() === heat
   )
-  if (dup) errors.push(`Challan ${input.challanNo} already exists for this part`)
+  if (dup) errors.push(`Challan ${input.challanNo} with heat ${input.batchHeatNo || '—'} already exists for this part`)
   // On edit, can't shrink received below what's already dispatched, and the row
   // can't be moved out of a unit the actor can't write (defensive: read scope ⊆
   // write scope today, but don't rely on that staying true).
