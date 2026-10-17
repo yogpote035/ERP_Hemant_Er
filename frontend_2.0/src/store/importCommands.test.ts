@@ -7,7 +7,7 @@ import { undo } from './commandBus'
 import { CommandValidationError } from './commands'
 import type { Role } from '@/types/rbac'
 import type { ParsedInward, ParsedDispatch } from '@/lib/mioImport'
-import { runImportMio, previewImportIssues } from './importCommands'
+import { runImportMio, previewImportIssues, partitionInwards } from './importCommands'
 
 const st = () => useStore.getState()
 const roleId = (role: Role) => values(st().masters.users).find((u) => u.role === role)!.id
@@ -117,6 +117,12 @@ describe('runImportMio — atomic bulk ingest', () => {
     const rejection = values(st().inventory.dispatches).find((row) => row.inwardId === imported.id)!
     expect(rejection.kind).toBe('rejection')
     expect(rejection.billNo).toBeUndefined()
+
+    const repeatIssues = previewImportIssues(st(), { unitId: 'u1', inwards: [input] })
+    expect(repeatIssues.some((issue) => /Matching rejection record already exists/.test(issue.message))).toBe(true)
+    const repeatPartition = partitionInwards(st(), { unitId: 'u1', inwards: [input] })
+    expect(repeatPartition.valid).toHaveLength(0)
+    expect(repeatPartition.skipped).toHaveLength(1)
   })
 
   it('blocks an unknown part and an over-dispatched challan', () => {

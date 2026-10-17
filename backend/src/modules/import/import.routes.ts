@@ -89,11 +89,34 @@ function existingInwardFor(s: RootState, unitId: Id, partId: Id, challanNo: stri
 const inwardKey = (partNo: string, challanNo: string, batchHeatNo: string): string =>
   `${partNo.trim().toLowerCase()}::${challanNo.trim().toLowerCase()}::${batchHeatNo.trim().toLowerCase()}`
 
+function parsedOutwardKey(d: ParsedDispatch): string | undefined {
+  const dc = d.billNo?.trim().toLowerCase()
+  if (dc) return `dc::${dc}`
+  if (d.kind !== 'rejection') return undefined
+  return [
+    'rejection', d.dispatchDate ?? d.billDate ?? '', d.mrQty, d.mfQty, d.shinLineQty,
+    d.crackQty, d.chipOffQty, d.forgReturnQty, d.raiiQty, d.shortQty, d.otherQty,
+  ].join('::')
+}
+
+function storedOutwardKey(d: Dispatch): string | undefined {
+  const dc = d.billNo?.trim().toLowerCase()
+  if (dc) return `dc::${dc}`
+  if (d.kind !== 'rejection') return undefined
+  return [
+    'rejection', d.dispatchDate ?? d.billDate ?? '', d.mcRejQty, d.mfQty,
+    d.shinLineQty ?? 0, d.crackQty ?? 0, d.chipOffQty ?? 0, d.forgReturnQty ?? 0,
+    d.raiiQty ?? 0, d.shortQty ?? 0, d.otherQty ?? 0,
+  ].join('::')
+}
+
 function usedOutwardKeys(s: RootState, unitId: Id): Set<string> {
   const inwardIds = new Set(values(s.inventory.inwards).filter((i) => i.unitId === unitId).map((i) => i.id))
-  return new Set(values(s.inventory.dispatches)
-    .filter((d) => inwardIds.has(d.inwardId) && d.billNo?.trim())
-    .map((d) => `${d.inwardId}::${d.billNo!.trim().toLowerCase()}`))
+  return new Set(values(s.inventory.dispatches).flatMap((d) => {
+    if (!inwardIds.has(d.inwardId)) return []
+    const key = storedOutwardKey(d)
+    return key ? [`${d.inwardId}::${key}`] : []
+  }))
 }
 
 function outwardParentKey(s: RootState, unitId: Id, inw: ParsedInward): string {
@@ -236,10 +259,17 @@ function previewImportIssues(s: RootState, unitId: Id, inwards: ParsedInward[], 
     const newDispatches: ParsedDispatch[] = []
     for (const d of inw.dispatches) {
       const dc = d.billNo?.trim()
-      if (!dc && d.kind === 'billed') issues.push({ level: 'error', row: d.rowIndex + 2, message: `Billed outward record on ${inw.challanNo} needs a unique Our D/C No.` })
-      else if (dc && usedOutward.has(`${parentKey}::${dc.toLowerCase()}`)) issues.push({ level: 'error', row: d.rowIndex + 2, message: `Outward D/C ${dc} already exists for challan ${inw.challanNo} — skipped` })
+      const outwardKey = parsedOutwardKey(d)
+      const fullKey = outwardKey ? `${parentKey}::${outwardKey}` : undefined
+      if (!outwardKey) issues.push({ level: 'error', row: d.rowIndex + 2, message: `Billed outward record on ${inw.challanNo} needs a unique Our D/C No.` })
+      else if (fullKey && usedOutward.has(fullKey)) issues.push({
+        level: 'error', row: d.rowIndex + 2,
+        message: dc
+          ? `Outward D/C ${dc} already exists for challan ${inw.challanNo} — skipped`
+          : `Matching rejection record already exists for challan ${inw.challanNo} — skipped`,
+      })
       else {
-        if (dc) usedOutward.add(`${parentKey}::${dc.toLowerCase()}`)
+        if (fullKey) usedOutward.add(fullKey)
         newDispatches.push(d)
       }
     }
@@ -264,9 +294,9 @@ function partitionInwards(
     const key = inwardKey(inw.partNo, inw.challanNo, inw.batchHeatNo)
     const parentKey = outwardParentKey(s, unitId, inw)
     const newDispatches = inw.dispatches.filter((d) => {
-      const dc = d.billNo?.trim().toLowerCase()
-      if (!dc) return d.kind === 'rejection'
-      const key = `${parentKey}::${dc}`
+      const outwardKey = parsedOutwardKey(d)
+      if (!outwardKey) return false
+      const key = `${parentKey}::${outwardKey}`
       if (usedOutward.has(key)) return false
       usedOutward.add(key)
       return true

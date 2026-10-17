@@ -566,6 +566,21 @@ describe('validation + business-rule guards (sad paths)', () => {
     assert.equal(applied.body.data.inwards, 1)
     assert.equal(applied.body.data.dispatches, 1)
     assert.equal(applied.body.data.invoices, 0)
+
+    const repeated = await request(app).post('/api/import/apply').set(auth(t)).send({
+      targetUnitId: 'u1',
+      inwards: [{
+        rowIndex: 0, challanNo: 'IMPORT-REJECTION-NO-DC', challanDate: '2026-01-01',
+        partNo: 'OM-6308-A-2RS', batchHeatNo: 'HEAT-R', receivedQty: 10,
+        dispatches: [{
+          rowIndex: 0, kind: 'rejection', okQty: 0, mrQty: 10, mfQty: 0,
+          shinLineQty: 0, crackQty: 0, chipOffQty: 0, forgReturnQty: 0,
+          raiiQty: 0, shortQty: 0, otherQty: 0,
+        }],
+      }],
+    })
+    assert.equal(repeated.status, 400)
+    assert.ok(repeated.body.detail.some((message: string) => message.includes('Matching rejection record already exists')))
   })
 
   it('rejects over-dispatch beyond available stock (invariant I1)', async () => {
