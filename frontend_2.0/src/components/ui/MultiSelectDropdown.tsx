@@ -48,6 +48,13 @@ export function MultiSelectDropdown({
 
   const selectedSet = useMemo(() => new Set(values), [values])
   const showSearch = options.length > 7 || options.some((o) => o.subtitle != null)
+  const hintToneClass = (tone: DropdownOption['hintTone']) => ({
+    muted: 'text-faint',
+    primary: 'text-primary',
+    accent: 'text-accent',
+    success: 'text-success',
+    warning: 'text-warning',
+  })[tone ?? 'muted']
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -193,7 +200,7 @@ export function MultiSelectDropdown({
                       <span className={cn('block truncate', i === active ? 'text-primary' : 'text-fg')}>{o.label}</span>
                       {o.subtitle ? <span className="block truncate text-[11px] text-faint">{o.subtitle}</span> : null}
                     </span>
-                    {o.hint ? <span className="shrink-0 text-[11px] text-faint">{o.hint}</span> : null}
+                    {o.hint ? <span className={cn('shrink-0 text-[11px] font-medium tabular-nums', hintToneClass(o.hintTone))}>{o.hint}</span> : null}
                   </li>
                 )
               })

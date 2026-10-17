@@ -12,6 +12,8 @@ export interface DropdownOption {
   subtitle?: string
   /** Secondary text shown right-aligned / dimmed (e.g. a short code). */
   hint?: string
+  /** Optional semantic colour for the right-aligned hint. */
+  hintTone?: 'muted' | 'primary' | 'accent' | 'success' | 'warning'
   /** Compact visible status for an option that needs differentiation. */
   badge?: string
   disabled?: boolean
@@ -70,6 +72,13 @@ export function SearchableDropdown({
   // enum lists only when long. `searchable` overrides either way.
   const showSearch = searchable ?? (options.length > 7 || options.some((o) => o.subtitle != null))
   const selected = options.find((o) => o.value === value)
+  const hintToneClass = (tone: DropdownOption['hintTone']) => ({
+    muted: 'text-faint',
+    primary: 'text-primary',
+    accent: 'text-accent',
+    success: 'text-success',
+    warning: 'text-warning',
+  })[tone ?? 'muted']
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -195,7 +204,7 @@ export function SearchableDropdown({
         )}
       >
         <span className="min-w-0 flex-1 truncate">{selected ? selected.label : placeholder}</span>
-        {selected?.hint ? <span className="shrink-0 text-[11px] text-faint">{selected.hint}</span> : null}
+        {selected?.hint ? <span className={cn('shrink-0 text-[11px] font-medium tabular-nums', hintToneClass(selected.hintTone))}>{selected.hint}</span> : null}
         {selected?.badge ? <span className="shrink-0 whitespace-nowrap rounded-full bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold text-warning">{selected.badge}</span> : null}
       </button>
 
@@ -269,7 +278,7 @@ export function SearchableDropdown({
                       <span className={cn('block truncate', i === active ? 'text-primary' : 'text-fg')}>{o.label}</span>
                       {o.subtitle ? <span className="block truncate text-[11px] text-faint">{o.subtitle}</span> : null}
                     </span>
-                    {o.hint ? <span className="shrink-0 text-[11px] text-faint">{o.hint}</span> : null}
+                    {o.hint ? <span className={cn('shrink-0 text-[11px] font-medium tabular-nums', hintToneClass(o.hintTone))}>{o.hint}</span> : null}
                     {o.badge ? <span className="shrink-0 whitespace-nowrap rounded-full bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold text-warning">{o.badge}</span> : null}
                     {isSelected ? <Check size={14} className="shrink-0 text-primary" /> : null}
                   </li>

@@ -3,7 +3,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowUpFromLine, ReceiptText, X, Download, FileSpreadsheet } from 'lucide-react'
 import { addP, formatINRSymbol, mulQty, pctOfPaise, toPaise, fromPaise, type Paise } from '@/lib/money'
-import { todayISO } from '@/lib/date'
+import { formatDMY, todayISO } from '@/lib/date'
 import { useStore } from '@/store'
 import { productionRateSuggestion, selectInwardRows, selectOpenInwardRows, type InwardRow, type ProductionRateSuggestionSource } from '@/selectors/register'
 import { runSaveDispatchBatch, type DispatchBatchLine } from '@/store/registerCommands'
@@ -137,7 +137,13 @@ export default function OutwardEntry({
   }, [initialChallanId, challanById, setSelected])
 
   const challanOptions = useMemo(
-    () => openRows.map((r) => ({ value: r.inward.id, label: r.inward.challanNo, subtitle: `${r.partNo} · heat ${r.inward.batchHeatNo} · avail ${intFmt(r.available)}` })),
+    () => openRows.map((r) => ({
+      value: r.inward.id,
+      label: r.inward.challanNo,
+      subtitle: `${r.partNo} · heat ${r.inward.batchHeatNo} · avail ${intFmt(r.available)}`,
+      hint: formatDMY(r.inward.challanDate),
+      hintTone: 'accent' as const,
+    })),
     [openRows]
   )
 
