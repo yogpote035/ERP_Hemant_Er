@@ -127,7 +127,8 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
 
   function parseImportRow(row: ImportedRow, rowNumber: number): FieldValues {
     const formValues = { ...spec.emptyForm() } as Record<string, unknown>
-    if (spec.fields.some((field) => field.name === 'unitId') && entryUnit.preferredUnitId) formValues.unitId = entryUnit.preferredUnitId
+    const hasUnitField = spec.fields.some((field) => field.name === 'unitId')
+    if (hasUnitField && entryUnit.preferredUnitId) formValues.unitId = entryUnit.preferredUnitId
     for (const field of spec.fields) {
       const raw = excelValue(row, field.label, field.name)
       if (raw === undefined) continue
@@ -135,6 +136,10 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
       else if (field.kind === 'checkbox') formValues[field.name] = excelBoolean(raw)
       else formValues[field.name] = excelText(raw)
     }
+    // A single-unit user's assigned unit is authoritative. A stale or malicious
+    // workbook must not move imported employees (or another scoped master) into
+    // a different unit.
+    if (hasUnitField && entryUnit.isSingleUnit && entryUnit.preferredUnitId) formValues.unitId = entryUnit.preferredUnitId
     const result = spec.schema.safeParse(formValues)
     if (!result.success) {
       const issue = result.error.issues.find((candidate) => {
@@ -148,7 +153,18 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
     return result.data
   }
 
-  const importColumns: ExcelImportColumn[] = spec.fields.map((field) => ({ key: field.name, label: field.label, required: 'required' in field ? field.required : false }))
+  // Employee unit ownership is selected by the system UI, never mapped from an
+  // arbitrary workbook column. Other masters keep their existing import shape.
+  const importFields = spec.key === 'employee' ? spec.fields.filter((field) => field.name !== 'unitId') : spec.fields
+  const importColumns: ExcelImportColumn[] = importFields.map((field) => ({ key: field.name, label: field.label, required: 'required' in field ? field.required : false }))
+  const employeeUnitContext = spec.key === 'employee' ? [{
+    key: 'unitId', label: 'Unit', value: entryUnit.preferredUnitId,
+    options: entryUnit.assignedUnits.map((unit) => ({ value: unit.id, label: unit.code, subtitle: unit.name })),
+    disabled: entryUnit.isSingleUnit, required: true,
+    hint: entryUnit.isSingleUnit
+      ? 'Assigned automatically from your account.'
+      : 'Choose one of your assigned units for every employee in this workbook.',
+  }] : undefined
   const sampleRows = spec.key === 'machine' ? [{
     machineNo: 'MC-01', unitId: '', description: 'CNC turning machine',
     manufacturer: 'Ace Micromatic', modelNo: 'Jobber XL', manufacturerIdNo: 'AM-2026-001',
@@ -174,7 +190,7 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
   const existingKeys = new Set(scopedRows.map((row) => duplicateKey(spec.toForm(row) as Record<string, unknown>)))
   const rowDuplicateKey = (row: ImportedRow) => {
     const values = Object.fromEntries(spec.fields.map((field) => [field.name, excelValue(row, field.label, field.name)]))
-    if (!values.unitId && entryUnit.preferredUnitId) values.unitId = entryUnit.preferredUnitId
+    if ((!values.unitId || entryUnit.isSingleUnit) && entryUnit.preferredUnitId) values.unitId = entryUnit.preferredUnitId
     return duplicateKey(values)
   }
   const validateImportRow = (row: ImportedRow, rowNumber: number) => {
@@ -222,7 +238,7 @@ export function EntityManager({ spec, actions }: { spec: MasterView; actions?: R
           {canExport && !actions ? (
             <Button className="w-24 shrink-0 justify-center" variant="secondary" size="sm" leftIcon={<Download size={15} />} onClick={exportMaster}>Export</Button>
           ) : null}
-          {canCreate ? <ExcelImportButton size="sm" title={`Import ${spec.labelPlural}`} columns={importColumns} existingKeys={existingKeys} rowKey={rowDuplicateKey} validateRow={validateImportRow} onRows={importMaster} prefill={entryUnit.preferredUnitId ? { unitId: entryUnit.preferredUnitId } : undefined} contextMessage={spec.fields.some((field) => field.name === 'unitId') ? entryUnit.message : undefined} sampleRows={sampleRows} sampleFilename={spec.key === 'machine' ? 'machine-import-sample.xlsx' : undefined} /> : null}
+          {canCreate ? <ExcelImportButton size="sm" title={`Import ${spec.labelPlural}`} columns={importColumns} existingKeys={existingKeys} rowKey={rowDuplicateKey} validateRow={validateImportRow} onRows={importMaster} prefill={entryUnit.preferredUnitId ? { unitId: entryUnit.preferredUnitId } : undefined} lockedPrefillKeys={entryUnit.isSingleUnit ? ['unitId'] : undefined} contextFields={employeeUnitContext} contextMessage={spec.key === 'employee' ? undefined : spec.fields.some((field) => field.name === 'unitId') ? entryUnit.message : undefined} sampleRows={sampleRows} sampleFilename={spec.key === 'machine' ? 'machine-import-sample.xlsx' : undefined} /> : null}
           {canCreate && scopedRows.length > 0 ? (
             <Button size="sm" leftIcon={<Plus size={15} />} onClick={() => setEditing({ row: null })}>
               New {spec.label}

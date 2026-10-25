@@ -80,6 +80,47 @@ describe('RBAC + unit scope', () => {
     assert.equal(created.body.data.unitId, 'u1')
   })
 
+  it('isolates employee list and CRUD to the user assigned unit', async () => {
+    await mutate((s) => {
+      const manager = s.masters.users.byId['u-mgr']!
+      manager.assignedUnitIds = ['u1']
+      manager.overrides = { add: { masters: ['delete'] } }
+    })
+    const admin = await tokenFor()
+    const foreign = await request(app).post('/api/masters/employees').set(auth(admin)).send({
+      unitId: 'u2', name: 'Foreign Unit Employee', empCode: 'U2-EMP-001', labourType: 'operator', standardShiftRatePaise: 50000,
+    })
+    assert.equal(foreign.status, 201)
+
+    const manager = await tokenFor('manager@hew.in')
+    const list = await request(app).get('/api/masters/employees').set(auth(manager))
+    assert.equal(list.status, 200)
+    assert.ok(list.body.data.length > 0)
+    assert.ok(list.body.data.every((employee: { unitId: string }) => employee.unitId === 'u1'))
+    assert.equal(list.body.data.some((employee: { id: string }) => employee.id === foreign.body.data.id), false)
+
+    const own = await request(app).post('/api/masters/employees').set(auth(manager)).send({
+      unitId: 'u1', name: 'Assigned Unit Employee', empCode: 'U1-EMP-001', labourType: 'operator', standardShiftRatePaise: 50000,
+    })
+    assert.equal(own.status, 201)
+    assert.equal(own.body.data.unitId, 'u1')
+    assert.equal((await request(app).post('/api/masters/employees').set(auth(manager)).send({
+      unitId: 'u2', name: 'Blocked Employee', empCode: 'U2-BLOCKED', labourType: 'operator', standardShiftRatePaise: 50000,
+    })).status, 403)
+
+    const updated = await request(app).put(`/api/masters/employees/${own.body.data.id}`).set(auth(manager)).send({
+      unitId: 'u1', name: 'Updated Assigned Employee', empCode: 'U1-EMP-001', labourType: 'operator', standardShiftRatePaise: 55000,
+    })
+    assert.equal(updated.status, 200)
+    assert.equal(updated.body.data.name, 'Updated Assigned Employee')
+    assert.equal((await request(app).get(`/api/masters/employees/${foreign.body.data.id}`).set(auth(manager))).status, 403)
+    assert.equal((await request(app).put(`/api/masters/employees/${foreign.body.data.id}`).set(auth(manager)).send({
+      unitId: 'u2', name: 'Forbidden Update', empCode: 'U2-EMP-001', labourType: 'operator', standardShiftRatePaise: 50000,
+    })).status, 403)
+    assert.equal((await request(app).delete(`/api/masters/employees/${foreign.body.data.id}`).set(auth(manager))).status, 403)
+    assert.equal((await request(app).delete(`/api/masters/employees/${own.body.data.id}`).set(auth(manager))).status, 200)
+  })
+
   it('scopes rate reads and writes to assigned units', async () => {
     const operator = await tokenFor('opa@hew.in')
     const visibleParts = await request(app).get('/api/masters/parts').set(auth(operator))

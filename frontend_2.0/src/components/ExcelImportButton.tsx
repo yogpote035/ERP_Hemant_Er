@@ -1,22 +1,37 @@
 import { useMemo, useRef, useState } from 'react'
-import { ArrowLeft, FileSpreadsheet, Upload } from 'lucide-react'
+import { ArrowLeft, Building2, FileSpreadsheet, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { readRowsFromXlsx, type ImportedRow } from '@/lib/importXlsx'
 import { exportRowsToXlsx } from '@/lib/exportXlsx'
-import { Button, Card, Drawer } from '@/components/ui'
+import { Button, Card, Drawer, SearchableDropdown } from '@/components/ui'
+import type { DropdownOption } from '@/components/ui/SearchableDropdown'
 
 export interface ExcelImportColumn { key: string; label: string; required?: boolean }
+export interface ExcelImportContextField {
+  key: string
+  label: string
+  value?: string
+  options: DropdownOption[]
+  placeholder?: string
+  hint?: string
+  disabled?: boolean
+  required?: boolean
+}
 interface PreviewIssue { row: number; kind: 'error' | 'existing' | 'duplicate'; message: string }
 const norm = (value: unknown) => String(value ?? '').trim().toLowerCase()
 
 /** Shared three-step import used outside the specialist inward-register importer. */
-export function ExcelImportButton({ onRows, columns, existingKeys, rowKey, validateRow, prefill, contextMessage, sampleRows, sampleFilename = 'import-sample.xlsx', label = 'Import', title = 'Import Excel workbook', size = 'md' }: {
+export function ExcelImportButton({ onRows, columns, existingKeys, rowKey, validateRow, prefill, lockedPrefillKeys, contextFields, contextMessage, sampleRows, sampleFilename = 'import-sample.xlsx', label = 'Import', title = 'Import Excel workbook', size = 'md' }: {
   onRows: (rows: ImportedRow[], file: File) => void | Promise<void>
   columns: ExcelImportColumn[]
   existingKeys?: ReadonlySet<string>
   rowKey?: (row: ImportedRow) => string
   validateRow?: (row: ImportedRow, rowNumber: number) => string | undefined
   prefill?: Record<string, unknown>
+  /** Columns whose contextual value must win even when the workbook supplies one. */
+  lockedPrefillKeys?: readonly string[]
+  /** System-owned values selected outside the workbook column mapping. */
+  contextFields?: readonly ExcelImportContextField[]
   contextMessage?: string
   sampleRows?: Record<string, unknown>[]
   sampleFilename?: string
@@ -29,13 +44,23 @@ export function ExcelImportButton({ onRows, columns, existingKeys, rowKey, valid
   const [sourceRows, setSourceRows] = useState<ImportedRow[]>([])
   const [mapping, setMapping] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
+  const contextDefaults = useMemo(
+    () => Object.fromEntries((contextFields ?? []).map((field) => [field.key, field.value ?? ''])),
+    [contextFields]
+  )
+  const [contextValues, setContextValues] = useState<Record<string, string>>(contextDefaults)
   const headers = useMemo(() => Object.keys(sourceRows[0] ?? {}), [sourceRows])
-  const mappedRows = useMemo(() => sourceRows.map((source) => Object.fromEntries(columns.map((column) => {
-    const sourceKey = mapping[column.key]
-    const sourceValue = sourceKey ? source[sourceKey] : undefined
-    const isBlank = sourceValue == null || (typeof sourceValue === 'string' && sourceValue.trim() === '')
-    return [column.label, isBlank ? (prefill?.[column.key] ?? prefill?.[column.label] ?? '') : sourceValue]
-  }))), [columns, mapping, prefill, sourceRows])
+  const mappedRows = useMemo(() => sourceRows.map((source) => Object.fromEntries([
+    ...columns.map((column) => {
+      const sourceKey = mapping[column.key]
+      const sourceValue = sourceKey ? source[sourceKey] : undefined
+      const isBlank = sourceValue == null || (typeof sourceValue === 'string' && sourceValue.trim() === '')
+      const contextualValue = prefill?.[column.key] ?? prefill?.[column.label]
+      const locked = lockedPrefillKeys?.includes(column.key) ?? false
+      return [column.label, locked && contextualValue != null ? contextualValue : isBlank ? (contextualValue ?? '') : sourceValue]
+    }),
+    ...(contextFields ?? []).map((field) => [field.label, contextValues[field.key] ?? '']),
+  ])), [columns, contextFields, contextValues, lockedPrefillKeys, mapping, prefill, sourceRows])
   const preview = useMemo(() => {
     const issues: PreviewIssue[] = []; const accepted: ImportedRow[] = []; const seen = new Set<string>()
     mappedRows.forEach((row, index) => {
@@ -50,7 +75,8 @@ export function ExcelImportButton({ onRows, columns, existingKeys, rowKey, valid
     })
     return { issues, accepted }
   }, [existingKeys, mappedRows, rowKey, validateRow])
-  function reset() { setStep(1); setFile(null); setSourceRows([]); setMapping({}); setLoading(false) }
+  const missingContext = (contextFields ?? []).some((field) => field.required && !contextValues[field.key]?.trim())
+  function reset() { setStep(1); setFile(null); setSourceRows([]); setMapping({}); setContextValues(contextDefaults); setLoading(false) }
   function close() { setOpen(false); reset() }
   async function selected(selectedFile?: File) {
     if (!selectedFile) return
@@ -75,14 +101,26 @@ export function ExcelImportButton({ onRows, columns, existingKeys, rowKey, valid
   }
   const errors = preview.issues.filter((issue) => issue.kind === 'error'); const skipped = preview.issues.filter((issue) => issue.kind !== 'error')
   return <>
-    <Button className="w-24 shrink-0 justify-center" variant="secondary" size={size} leftIcon={<FileSpreadsheet size={15} />} onClick={() => setOpen(true)}>{label}</Button>
+    <Button className="w-24 shrink-0 justify-center" variant="secondary" size={size} leftIcon={<FileSpreadsheet size={15} />} onClick={() => { setContextValues(contextDefaults); setOpen(true) }}>{label}</Button>
     <Drawer open={open} onClose={close} size="xl" title={title} description="Map columns, validate records, and import only new rows." defaultMaximized>
       <div className="space-y-4 p-4">
         {contextMessage ? <div className="rounded-md border border-info/30 bg-info/10 px-3 py-2 text-[12px] text-fg">{contextMessage}</div> : null}
         {sampleRows ? <Button variant="secondary" size="sm" leftIcon={<FileSpreadsheet size={14} />} onClick={() => void exportRowsToXlsx(sampleFilename, 'Sample', columns, sampleRows)}>Download sample workbook</Button> : null}
         <div className="flex flex-wrap items-center gap-2 text-[12px] text-muted-fg">{[['1','File'],['2','Map columns'],['3','Preview & import']].map(([number, text], index) => <span key={number} className={step === index + 1 ? 'font-semibold text-primary' : ''}><b className="mr-1 rounded-full bg-muted px-2 py-1">{number}</b>{text}{index < 2 ? <span className="ml-2">/</span> : null}</span>)}</div>
         {step === 1 ? <Card className="flex min-h-64 flex-col items-center justify-center gap-3 border-dashed"><FileSpreadsheet size={36} className="text-muted-fg"/><div className="font-semibold">Choose an .xlsx or .xls workbook</div><input ref={ref} type="file" accept=".xlsx,.xls" className="hidden" onChange={(event) => { const picked=event.target.files?.[0]; event.target.value=''; void selected(picked) }}/><Button leftIcon={<Upload size={15}/>} loading={loading} onClick={() => ref.current?.click()}>Choose workbook</Button></Card> : null}
-        {step === 2 ? <Card className="space-y-4"><p className="text-[13px] text-muted-fg">Headers are auto-detected. Map only the columns you want to import; unmapped columns stay empty.</p><div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">{columns.map((column) => <label key={column.key} className="space-y-1.5 text-[12px]"><span className="font-medium">{column.label}</span><select className="input h-9" value={mapping[column.key] ?? ''} onChange={(event) => setMapping((current) => ({...current,[column.key]:event.target.value}))}><option value="">Not mapped</option>{headers.map((header) => <option key={header} value={header}>{header}</option>)}</select></label>)}</div><div className="flex justify-between"><Button variant="secondary" leftIcon={<ArrowLeft size={14}/>} onClick={() => setStep(1)}>Back</Button><Button onClick={() => setStep(3)}>Preview & validate</Button></div></Card> : null}
+        {step === 2 ? <div className="space-y-4">
+          {contextFields?.length ? <Card className="border-primary/25 bg-primary/5">
+            <div className="mb-3 flex items-start gap-2.5">
+              <Building2 size={17} className="mt-0.5 shrink-0 text-primary" aria-hidden />
+              <div><div className="text-[13px] font-semibold text-fg">Import destination</div><div className="text-[12px] text-muted-fg">This value comes from the system and is not mapped from the workbook.</div></div>
+            </div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">{contextFields.map((field) => {
+              const missing = field.required && !contextValues[field.key]?.trim()
+              return <label key={field.key} className="space-y-1.5 text-[12px]"><span className="font-medium">{field.label}</span><SearchableDropdown value={contextValues[field.key] ?? ''} onChange={(value) => setContextValues((current) => ({ ...current, [field.key]: value }))} options={field.options} placeholder={field.placeholder ?? `Select ${field.label.toLowerCase()}…`} disabled={field.disabled} clearable={!field.disabled} aria-label={field.label} aria-required={field.required} aria-invalid={missing || undefined} /><span className={missing ? 'text-danger' : 'text-muted-fg'}>{missing ? `${field.label} is required before previewing.` : field.hint}</span></label>
+            })}</div>
+          </Card> : null}
+          <Card className="space-y-4"><p className="text-[13px] text-muted-fg">Headers are auto-detected. Map only the columns you want to import; unmapped columns stay empty.</p><div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">{columns.map((column) => <label key={column.key} className="space-y-1.5 text-[12px]"><span className="font-medium">{column.label}</span><select className="input h-9" value={mapping[column.key] ?? ''} onChange={(event) => setMapping((current) => ({...current,[column.key]:event.target.value}))}><option value="">Not mapped</option>{headers.map((header) => <option key={header} value={header}>{header}</option>)}</select></label>)}</div><div className="flex justify-between"><Button variant="secondary" leftIcon={<ArrowLeft size={14}/>} onClick={() => setStep(1)}>Back</Button><Button disabled={missingContext} onClick={() => setStep(3)}>Preview & validate</Button></div></Card>
+        </div> : null}
         {step === 3 ? <div className="space-y-4"><div className="grid grid-cols-3 gap-3"><Card><div className="text-xs text-muted-fg">Ready</div><div className="text-2xl font-bold text-success">{preview.accepted.length}</div></Card><Card><div className="text-xs text-muted-fg">Existing / duplicate</div><div className="text-2xl font-bold text-warning">{skipped.length}</div></Card><Card><div className="text-xs text-muted-fg">Errors</div><div className="text-2xl font-bold text-danger">{errors.length}</div></Card></div>{preview.issues.length ? <Card className="max-h-72 overflow-auto p-0"><div className="border-b border-border px-4 py-3 text-sm font-semibold">Validation results</div>{preview.issues.map((issue) => <div key={`${issue.row}-${issue.kind}`} className="border-b border-border/60 px-4 py-2 text-[12px]"><b className={issue.kind === 'error' ? 'text-danger' : 'text-warning'}>{issue.kind}</b> · row {issue.row} · {issue.message}</div>)}</Card> : <Card className="border-success/30 bg-success/10 text-sm text-success">All rows are valid and new.</Card>}<div className="flex justify-between"><Button variant="secondary" leftIcon={<ArrowLeft size={14}/>} onClick={() => setStep(2)}>Back</Button><Button loading={loading} disabled={errors.length > 0 || preview.accepted.length === 0} onClick={commit}>Import {preview.accepted.length} new record{preview.accepted.length === 1 ? '' : 's'}</Button></div></div> : null}
       </div>
     </Drawer>
