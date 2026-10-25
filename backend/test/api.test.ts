@@ -287,6 +287,19 @@ describe('masters CRUD', () => {
   })
 })
 
+describe('invoice numbering', () => {
+  it('autogenerates the HEW FY invoice number as HEW/26-27/001', async () => {
+    const t = await tokenFor()
+    const issued = await request(app).post('/api/invoices/finalize').set(auth(t)).send({
+      invoiceId: 'inv-270', customerId: 'c1', issuerKind: 'unit', invoiceDate: '2026-04-01',
+    })
+    assert.equal(issued.status, 201)
+    assert.equal(issued.body.data.billNo, 'HEW/26-27/001')
+    assert.equal(issued.body.data.fy, '26-27')
+    assert.equal(issued.body.data.seq, 1)
+  })
+})
+
 describe('inward lifecycle', () => {
   it('creates, edits, and enforces delete guards', async () => {
     const t = await tokenFor()

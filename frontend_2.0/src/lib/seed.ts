@@ -54,7 +54,7 @@ const UNITS: Unit[] = [
   {
     id: 'u1', name: 'Hemant Engineering Works', code: 'HEW', gstin: '27ADGPV9846A1Z6', stateCode: '27',
     addressLines: ['GAT NO. 44, CHIMBALI PHATA', 'TAL KHED, PUNE 412105', 'Maharashtra'],
-    invoiceFormat: '{seq}/{FY}', seqPad: 0,
+    invoiceFormat: 'HEW/{FY}/{seq}', seqPad: 3,
     bankName: 'HDFC Bank', accountNo: '50200012345678', ifsc: 'HDFC0000123', active: true,
   },
   { id: 'u2', name: 'Hemant Forge Unit-2', code: 'HFU2', gstin: '27ADGPV9846A2Z5', stateCode: '27', addressLines: ['Plot 12, Chakan MIDC', 'Pune 410501', 'Maharashtra'], invoiceFormat: 'HFU2/{FY}/{seq}', seqPad: 3, bankName: 'HDFC Bank', accountNo: '50200012345679', ifsc: 'HDFC0000123', active: true },

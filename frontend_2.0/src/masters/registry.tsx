@@ -113,7 +113,7 @@ const unitMaster = defineMaster<Unit, UnitForm>({
     { kind: 'text', name: 'gstin', label: 'GSTIN' },
     { kind: 'text', name: 'stateCode', label: 'State code', hint: STATE_HINT },
     { kind: 'number', name: 'seqPad', label: 'Invoice seq padding', min: 1, max: 8, hint: 'Example: padding 3 turns invoice sequence 7 into 007' },
-    { kind: 'text', name: 'invoiceFormat', label: 'Invoice format', lockable: true, hint: 'Default: {seq}/{FY}. Unlock only if you need a custom format, e.g. HEW/{FY}/{seq} becomes HEW/2026-27/007', colSpan: 2 },
+    { kind: 'text', name: 'invoiceFormat', label: 'Invoice format', lockable: true, hint: 'HEW default: HEW/{FY}/{seq}. For FY 26-27 with padding 3, sequence 7 becomes HEW/26-27/007', colSpan: 2 },
     { kind: 'textarea', name: 'addressLines', label: 'Address (one line each)', colSpan: 2 },
     { kind: 'text', name: 'bankName', label: 'Bank name' },
     { kind: 'text', name: 'bankBranch', label: 'Bank branch' },

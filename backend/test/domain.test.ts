@@ -8,6 +8,7 @@ import assert from 'node:assert/strict'
 import { seedState } from '../src/db/seed.js'
 import { getById, putEntity, values } from '../src/db/normalized.js'
 import { migrateLegacyUnitOwnership } from '../src/db/migrateUnitOwnership.js'
+import { migrateLegacyHewInvoiceNumbering } from '../src/db/migrateInvoiceNumbering.js'
 import { deriveTaxKind, computeInvoice } from '../src/domain/invoiceCompute.js'
 import { selectPartStock } from '../src/domain/stock.js'
 import { outstandingForInvoice } from '../src/domain/billing.js'
@@ -30,6 +31,43 @@ describe('legacy unit ownership migration', () => {
     assert.deepEqual(new Set(customers.map((row) => row.unitId)), new Set(['u1', 'u2']))
     const u2Invoice = getById(legacy.billing.invoices, 'inv-u2-legacy')!
     assert.equal(getById(legacy.masters.customers, u2Invoice.customerId)?.unitId, 'u2')
+  })
+})
+
+describe('HEW invoice numbering migration', () => {
+  it('upgrades only the legacy HEW format and padding', () => {
+    const legacy = structuredClone(seedState())
+    const hew = getById(legacy.masters.units, 'u1')!
+    hew.invoiceFormat = '{seq}/{FY}'
+    hew.seqPad = 0
+
+    assert.equal(migrateLegacyHewInvoiceNumbering(legacy), true)
+    assert.equal(hew.invoiceFormat, 'HEW/{FY}/{seq}')
+    assert.equal(hew.seqPad, 3)
+    assert.equal(migrateLegacyHewInvoiceNumbering(legacy), false)
+  })
+
+  it('preserves an administrator-customized HEW format', () => {
+    const customized = structuredClone(seedState())
+    const hew = getById(customized.masters.units, 'u1')!
+    hew.invoiceFormat = 'CUSTOM/{FY}/{seq}'
+    hew.seqPad = 5
+
+    assert.equal(migrateLegacyHewInvoiceNumbering(customized), false)
+    assert.equal(hew.invoiceFormat, 'CUSTOM/{FY}/{seq}')
+    assert.equal(hew.seqPad, 5)
+  })
+
+  it('upgrades the legacy live HEW-BW unit configuration', () => {
+    const legacy = structuredClone(seedState())
+    const hewBw = getById(legacy.masters.units, 'u2')!
+    hewBw.code = 'HEW-BW'
+    hewBw.invoiceFormat = '{seq}/{FY}'
+    hewBw.seqPad = 3
+
+    assert.equal(migrateLegacyHewInvoiceNumbering(legacy), true)
+    assert.equal(hewBw.invoiceFormat, 'HEW/{FY}/{seq}')
+    assert.equal(hewBw.seqPad, 3)
   })
 })
 

@@ -17,6 +17,7 @@ import { genericSearchText } from '../lib/list.js'
 import { log } from '../lib/logging.js'
 import { todayISO } from '../lib/id.js'
 import { migrateLegacyUnitOwnership } from './migrateUnitOwnership.js'
+import { migrateLegacyHewInvoiceNumbering } from './migrateInvoiceNumbering.js'
 
 let state: RootState = createEmptyState()
 let driver: PersistenceDriver | null = null
@@ -76,6 +77,7 @@ export async function initRepository(): Promise<void> {
     await driver.resetState(state)
   }
   const ownershipChanged = migrateLegacyUnitOwnership(state)
+  const invoiceNumberingChanged = migrateLegacyHewInvoiceNumbering(state)
   // Repair legacy mismatches: versioned Rate Masters is the canonical history,
   // while Part.rmRatePaise is its current-value mirror for fast form prefills.
   const asOf = todayISO()
@@ -89,7 +91,7 @@ export async function initRepository(): Promise<void> {
       rateMirrorChanged = true
     }
   }
-  if (ownershipChanged || rateMirrorChanged) await driver.saveState(state)
+  if (ownershipChanged || invoiceNumberingChanged || rateMirrorChanged) await driver.saveState(state)
   wireRoleResolver()
 }
 
