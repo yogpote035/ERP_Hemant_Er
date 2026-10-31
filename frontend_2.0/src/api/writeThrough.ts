@@ -204,7 +204,11 @@ const MODULE_SYNC: Partial<Record<CommandName, Handler>> = {
   // the old admin-only snapshot, then re-hydrate so the locally-created entities
   // (minted with client ids) converge to the server's. Closes the manager data-loss gap.
   importMioWorkbook: async (i) => {
-    await importApi.apply({ targetUnitId: i.unitId, inwards: i.inwards, autoCreateParts: i.autoCreateParts })
+    // The browser preview can be based on a slightly stale cache (for example
+    // after an earlier import or another session).  Ask the API to apply the
+    // same skip-duplicates policy as the wizard, so already-persisted outward
+    // rows are reported as skipped instead of rejecting the whole workbook.
+    await importApi.apply({ targetUnitId: i.unitId, inwards: i.inwards, autoCreateParts: i.autoCreateParts, skipInvalid: true })
     await hydrateViaModules()
     useStore.setState({ _undo: [], _redo: [] })
   },

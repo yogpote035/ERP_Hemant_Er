@@ -125,6 +125,18 @@ describe('runImportMio — atomic bulk ingest', () => {
     expect(repeatPartition.skipped).toHaveLength(1)
   })
 
+  it('allows multiple rejection rows sharing a reference D/C number', () => {
+    const part = u1Part()
+    const input = inward(part.partNo, 'IMP-REJECTION-SPLIT', 40, [
+      disp({ billNo: 'HEW/26-27/278', mrQty: 10 }),
+      disp({ billNo: 'HEW/26-27/278', mfQty: 8 }),
+    ])
+    const issues = previewImportIssues(st(), { unitId: 'u1', inwards: [input] })
+    expect(issues.some((issue) => issue.level === 'error')).toBe(false)
+    const result = runImportMio({ unitId: 'u1', inwards: [input] })
+    expect(result.data.dispatches).toBe(2)
+  })
+
   it('blocks an unknown part and an over-dispatched challan', () => {
     const partNo = u1Part().partNo
     expect(() => runImportMio({ unitId: 'u1', inwards: [inward('NOPE-PART', 'X1', 100, [])] })).toThrow(CommandValidationError)

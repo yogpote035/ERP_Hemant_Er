@@ -539,11 +539,22 @@ importRouter.post(
       const errors = previewImportIssues(s, body.targetUnitId, inwards, auto)
         .filter((i) => i.level === 'error')
         .map((i) => (i.row ? `Row ${i.row}: ${i.message}` : i.message))
-      if (errors.length) {
+      // Duplicate outward rows are idempotent: they are safe to skip even
+      // when an older client omitted skipInvalid from the request. Keep all
+      // other validation errors blocking the transaction.
+      const duplicateOnly = errors.length > 0 && errors.every((message) =>
+        message.includes('already exists') || message.includes('Matching rejection record already exists'))
+      if (errors.length && !duplicateOnly) {
         res.status(400).json({ error: 'Import rejected', detail: errors.slice(0, 40) })
         return
       }
-      toImport = inwards
+      if (duplicateOnly) {
+        const partitioned = partitionInwards(s, body.targetUnitId, inwards, auto)
+        toImport = partitioned.valid
+        skippedOut = partitioned.skipped.map((sk) => ({ row: sk.inward.rowIndex + 2, challanNo: sk.inward.challanNo, reasons: sk.reasons }))
+      } else {
+        toImport = inwards
+      }
     }
 
     const actorId = req.auth!.user.id

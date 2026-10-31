@@ -117,6 +117,13 @@ export default function ImportWizard({
   const errorCount = issues.filter((i) => i.level === 'error').length
   const warnCount = issues.filter((i) => i.level === 'warn').length
   const errorIssues = issues.filter((i) => i.level === 'error')
+  // Duplicate outward D/C lines are filtered out of their parent group before
+  // partitioning, so they do not increase partition.skipped. Count them from
+  // the validation issues as well, otherwise the preview can incorrectly say
+  // "0 skipped" while listing duplicate outward rows below.
+  const skippedOutwardCount = issues.filter((i) => i.level === 'error' && (
+    i.message.startsWith('Outward D/C ') || i.message.startsWith('Matching rejection record')
+  )).length
 
   // When skipping invalid rows, import only the importable challans (real
   // workbooks carry footer/total junk that would otherwise block everything).
@@ -125,6 +132,7 @@ export default function ImportWizard({
     [step, unitId, grouped, autoCreateParts]
   )
   const importable = skipInvalid ? partition.valid : grouped.inwards
+  const skippedCount = partition.skipped.length + skippedOutwardCount
   const importDisabled = importable.length === 0 || (!skipInvalid && errorCount > 0)
   const duplicateOnly =
     skipInvalid &&
@@ -351,7 +359,7 @@ export default function ImportWizard({
             {importable.length ? (
               <>
                 <b>{intFmt(importable.length)} inward/outward group{importable.length === 1 ? '' : 's'} will import.</b>
-                {skipInvalid && partition.skipped.length ? ` ${intFmt(partition.skipped.length)} skipped (footer totals / duplicates / over-dispatch).` : ''}
+                {skipInvalid && skippedCount ? ` ${intFmt(skippedCount)} skipped (footer totals / duplicates / over-dispatch).` : ''}
                 {warnCount ? ` ${intFmt(warnCount)} notices below are informational — safe to ignore.` : ''}
               </>
             ) : duplicateOnly ? (
@@ -370,7 +378,7 @@ export default function ImportWizard({
               <div className="flex items-center gap-2 border-b border-border px-4 py-3 text-[13px] font-semibold">
                 <AlertTriangle size={15} className={!skipInvalid && errorCount ? 'text-danger' : 'text-warning'} />
                 {skipInvalid
-                  ? `${intFmt(partition.skipped.length)} skipped · ${intFmt(warnCount)} informational notice${warnCount === 1 ? '' : 's'}`
+                  ? `${intFmt(skippedCount)} skipped · ${intFmt(warnCount)} informational notice${warnCount === 1 ? '' : 's'}`
                   : `${intFmt(errorCount)} error${errorCount === 1 ? '' : 's'} · ${intFmt(warnCount)} warning${warnCount === 1 ? '' : 's'}`}
               </div>
               <ul className="max-h-52 divide-y divide-border overflow-y-auto text-[12px]">

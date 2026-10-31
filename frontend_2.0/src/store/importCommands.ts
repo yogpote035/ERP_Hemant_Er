@@ -49,24 +49,28 @@ const inwardKey = (partNo: string, challanNo: string, batchHeatNo: string): stri
   `${partNo.trim().toLowerCase()}::${challanNo.trim().toLowerCase()}::${batchHeatNo.trim().toLowerCase()}`
 
 function parsedOutwardKey(d: ParsedDispatch): string | undefined {
-  const dc = d.billNo?.trim().toLowerCase()
-  if (dc) return `dc::${dc}`
-  if (d.kind !== 'rejection') return undefined
-  return [
+  // Rejection rows may carry the reference/our D/C number in the workbook,
+  // but one D/C can contain several rejection categories or split rows. Do
+  // not treat that number as a billed-line identity; use the rejection
+  // breakdown instead so each distinct rejection row is imported.
+  if (d.kind === 'rejection') return [
     'rejection', d.dispatchDate ?? d.billDate ?? '', d.mrQty, d.mfQty, d.shinLineQty,
     d.crackQty, d.chipOffQty, d.forgReturnQty, d.raiiQty, d.shortQty, d.otherQty,
   ].join('::')
+  const dc = d.billNo?.trim().toLowerCase()
+  if (dc) return `dc::${dc}`
+  return undefined
 }
 
 function storedOutwardKey(d: Dispatch): string | undefined {
-  const dc = d.billNo?.trim().toLowerCase()
-  if (dc) return `dc::${dc}`
-  if (d.kind !== 'rejection') return undefined
-  return [
+  if (d.kind === 'rejection') return [
     'rejection', d.dispatchDate ?? d.billDate ?? '', d.mcRejQty, d.mfQty,
     d.shinLineQty ?? 0, d.crackQty ?? 0, d.chipOffQty ?? 0, d.forgReturnQty ?? 0,
     d.raiiQty ?? 0, d.shortQty ?? 0, d.otherQty ?? 0,
   ].join('::')
+  const dc = d.billNo?.trim().toLowerCase()
+  if (dc) return `dc::${dc}`
+  return undefined
 }
 
 function usedOutwardKeys(s: RootState, unitId: Id): Set<string> {
