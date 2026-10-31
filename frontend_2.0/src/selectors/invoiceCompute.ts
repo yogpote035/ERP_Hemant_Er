@@ -344,7 +344,9 @@ export function selectInvoiceDocModel(s: RootState, invoiceId: Id): InvoiceDocMo
     pl.rmSupplier ??= rmSupplier
     if (inw?.batchHeatNo && !pl.heatNos.includes(inw.batchHeatNo)) pl.heatNos.push(inw.batchHeatNo)
     pl.dcs.push({
-      dcNo: d?.billNo || d?.custInvoiceNo || inw?.challanNo || '—',
+      // The printed column is the customer's D.C. reference (normally the
+      // inward challan), not our generated outward D.C. number.
+      dcNo: d?.custInvoiceNo || inw?.challanNo || d?.billNo || '—',
       dcDate: d?.billDate ? formatDMY(d.billDate) : d?.dispatchDate ? formatDMY(d.dispatchDate) : undefined,
       qty: l.qty,
       ratePaise: l.ratePaise,
