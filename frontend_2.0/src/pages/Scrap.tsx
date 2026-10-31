@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { Recycle, Pencil, Trash2, Download } from 'lucide-react'
 import { formatINRSymbol, fromPaise, toPaise } from '@/lib/money'
 import { formatDMY, todayISO } from '@/lib/date'
+import { fyOf } from '@/lib/fy'
 import { computeScrap } from '@/lib/scrapMath'
 import type { ScrapBill } from '@/types/domain'
 import { useStore } from '@/store'
@@ -62,6 +63,20 @@ export default function Scrap() {
     if (entryUnit.preferredUnitId && ((!editingId && !unitId) || entryUnit.isSingleUnit)) setUnitId(entryUnit.preferredUnitId)
   }, [editingId, entryUnit.isSingleUnit, entryUnit.preferredUnitId, unitId])
 
+  // Scrap bills use the same HEW financial-year number format as tax invoices.
+  // Preserve existing numbers, while starting the first new scrap bill at 350.
+  useEffect(() => {
+    if (editingId || !unitId || !invoiceDate) return
+    const fy = fyOf(invoiceDate)
+    const prefix = `HEW/${fy}/`
+    const max = rows.reduce((highest, row) => {
+      if (row.bill.unitId !== unitId || !row.bill.scrapInvoiceNo.startsWith(prefix)) return highest
+      const n = Number(row.bill.scrapInvoiceNo.slice(prefix.length))
+      return Number.isFinite(n) ? Math.max(highest, n) : highest
+    }, 349)
+    setInvoiceNo(`${prefix}${String(max + 1).padStart(3, '0')}`)
+  }, [editingId, invoiceDate, rows, unitId])
+
   const calc = useMemo(
     () => computeScrap(Math.round(numOf(kg) * 1000), toPaise(numOf(rate)), numOf(gst), numOf(tcs)),
     [kg, rate, gst, tcs]
@@ -89,7 +104,6 @@ export default function Scrap() {
   // After a fresh CREATE we keep unit/customer/period so several bills for the same
   // customer-period can be entered quickly — only the per-bill fields clear.
   function clearLineFields() {
-    setInvoiceNo('')
     setKg('')
     setRate('')
   }

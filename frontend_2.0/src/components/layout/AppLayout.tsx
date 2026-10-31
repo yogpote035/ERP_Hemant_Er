@@ -39,7 +39,7 @@ export function AppLayout() {
   }, [mobileOpen])
 
   return (
-    <div className="flex h-full w-full overflow-hidden">
+    <div className="flex h-full min-h-0 w-full overflow-hidden">
       {mobileOpen ? (
         <div
           className="fixed inset-0 z-30 bg-black/40 lg:hidden"
@@ -50,9 +50,9 @@ export function AppLayout() {
 
       <Sidebar mobileOpen={mobileOpen} onNavigate={() => setMobileOpen(false)} />
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <Topbar onMenu={() => setMobileOpen(true)} />
-        <main className="scrollbar-thin flex-1 overflow-y-auto">
+        <main className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto max-w-[1600px] p-4 sm:p-5 lg:p-6">
             {/* keyed on path so a crash on one screen clears when you navigate away */}
             <ErrorBoundary routeName={pageTitle(pathname)} compact key={pathname}>
