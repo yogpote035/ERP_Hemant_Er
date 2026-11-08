@@ -575,6 +575,7 @@ function RegisterRow({
         <td className="px-3 py-2.5">
           <Badge tone="accent">{row.partNo}</Badge>
           {row.inward.remarks ? <span className="ml-1.5 text-[10px] text-warning">{row.inward.remarks}</span> : null}
+          {row.rejectionDcs.length ? <div className="mt-1 text-[10px] font-medium text-danger">Rejection DC: {row.rejectionDcs.join(', ')}</div> : null}
         </td>
         <td className="px-3 py-2.5 mono text-muted-fg">{formatDMY(row.inward.challanDate)}</td>
         <td className="px-3 py-2.5 mono text-[11px] text-faint">{row.inward.poNo ?? '—'}</td>

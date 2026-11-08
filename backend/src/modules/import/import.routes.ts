@@ -125,6 +125,41 @@ function outwardParentKey(s: RootState, unitId: Id, inw: ParsedInward): string {
     ?? inwardKey(partId ?? inw.partNo, inw.challanNo, inw.batchHeatNo)
 }
 
+// Rejection rows without an Our D/C number are identified by part + heat,
+// because the source challan can differ between workbook rows while the
+// physical rejection is the same record.
+function rejectionParentKey(s: RootState, unitId: Id, inw: ParsedInward): string {
+  const partId = resolvePartId(s, unitId, inw.partNo)
+  const existing = partId ? values(s.inventory.inwards).find((i) =>
+    i.unitId === unitId && i.partId === partId && i.batchHeatNo.trim().toLowerCase() === inw.batchHeatNo.trim().toLowerCase())
+    : undefined
+  return existing?.id ?? outwardParentKey(s, unitId, inw)
+}
+
+function matchingStoredRejection(s: RootState, unitId: Id, inw: ParsedInward, d: ParsedDispatch): boolean {
+  const partId = resolvePartId(s, unitId, inw.partNo)
+  const parsedKey = parsedOutwardKey(d)
+  if (!parsedKey || d.kind !== 'rejection' || d.billNo?.trim()) return false
+  const inwardIds = new Set(values(s.inventory.inwards)
+    .filter((i) => i.unitId === unitId && (!partId || i.partId === partId) &&
+      i.batchHeatNo.trim().toLowerCase() === inw.batchHeatNo.trim().toLowerCase())
+    .map((i) => i.id))
+  const exact = values(s.inventory.dispatches).some((stored) =>
+    stored.kind === 'rejection' && inwardIds.has(stored.inwardId) && storedOutwardKey(stored) === parsedKey)
+  if (exact) return true
+  // Also match by the source challan/heat pair. This covers imports where the
+  // part was auto-created during the first transaction and the second preview
+  // has not yet resolved the normalized part id.
+  const sourceIds = new Set(values(s.inventory.inwards)
+    .filter((i) => i.unitId === unitId &&
+      i.challanNo.trim().toLowerCase() === inw.challanNo.trim().toLowerCase() &&
+      i.batchHeatNo.trim().toLowerCase() === inw.batchHeatNo.trim().toLowerCase())
+    .map((i) => i.id))
+  return values(s.inventory.dispatches).some((stored) =>
+    stored.kind === 'rejection' && sourceIds.has(stored.inwardId) &&
+    (!storedOutwardKey(stored) || storedOutwardKey(stored) === parsedKey))
+}
+
 // ── request schemas ──────────────────────────────────────────────────────────────
 const dispatchSchema = z.object({
   rowIndex: z.number().int().default(0),
@@ -255,14 +290,15 @@ function previewImportIssues(s: RootState, unitId: Id, inwards: ParsedInward[], 
     const key = inwardKey(inw.partNo, inw.challanNo, inw.batchHeatNo)
     if (seen.has(key)) issues.push({ level: 'error', row: inw.rowIndex + 2, message: `Duplicate challan ${inw.challanNo} / heat ${inw.batchHeatNo || '—'} for ${inw.partNo} within the file` })
     seen.add(key)
-    const parentKey = outwardParentKey(s, unitId, inw)
+    const hasAnonymousRejection = inw.dispatches.some((d) => d.kind === 'rejection' && !d.billNo?.trim())
+    const parentKey = hasAnonymousRejection ? rejectionParentKey(s, unitId, inw) : outwardParentKey(s, unitId, inw)
     const newDispatches: ParsedDispatch[] = []
     for (const d of inw.dispatches) {
       const dc = d.billNo?.trim()
       const outwardKey = parsedOutwardKey(d)
       const fullKey = outwardKey ? `${parentKey}::${outwardKey}` : undefined
       if (!outwardKey) issues.push({ level: 'error', row: d.rowIndex + 2, message: `Billed outward record on ${inw.challanNo} needs a unique Our D/C No.` })
-      else if (fullKey && usedOutward.has(fullKey)) issues.push({
+      else if (fullKey && (usedOutward.has(fullKey) || matchingStoredRejection(s, unitId, inw, d))) issues.push({
         level: 'error', row: d.rowIndex + 2,
         message: dc
           ? `Outward D/C ${dc} already exists for challan ${inw.challanNo} — skipped`
@@ -292,17 +328,20 @@ function partitionInwards(
   const usedOutward = usedOutwardKeys(s, unitId)
   for (const inw of inwards) {
     const key = inwardKey(inw.partNo, inw.challanNo, inw.batchHeatNo)
-    const parentKey = outwardParentKey(s, unitId, inw)
+    const hasAnonymousRejection = inw.dispatches.some((d) => d.kind === 'rejection' && !d.billNo?.trim())
+    const parentKey = hasAnonymousRejection ? rejectionParentKey(s, unitId, inw) : outwardParentKey(s, unitId, inw)
+    const missingDc = inw.dispatches.some((d) => !parsedOutwardKey(d))
     const newDispatches = inw.dispatches.filter((d) => {
       const outwardKey = parsedOutwardKey(d)
       if (!outwardKey) return false
       const key = `${parentKey}::${outwardKey}`
-      if (usedOutward.has(key)) return false
+      if (usedOutward.has(key) || matchingStoredRejection(s, unitId, inw, d)) return false
       usedOutward.add(key)
       return true
     })
     const candidate = { ...inw, dispatches: newDispatches }
     const reasons = inwardIssues(s, unitId, candidate, auto).filter((i) => i.level === 'error').map((i) => i.message)
+    if (missingDc) reasons.push(`Billed outward record on ${inw.challanNo} needs a unique Our D/C No.`)
     if (seen.has(key)) reasons.push(`Duplicate challan ${inw.challanNo} / heat ${inw.batchHeatNo || '—'} within the file`)
     seen.add(key)
     const partId = resolvePartId(s, unitId, inw.partNo)
@@ -522,6 +561,22 @@ importRouter.post(
     if (inwards.length === 0) {
       res.status(400).json({ error: 'Nothing to import', detail: ['Nothing to import'] })
       return
+    }
+
+    // A rejection-only row without an Our D/C number is uniquely identified by
+    // its source challan + heat. Never create a second rejection for that pair.
+    for (const inw of inwards) {
+      const hasAnonymousRejection = inw.dispatches.some((d) => d.kind === 'rejection' && !d.billNo?.trim())
+      if (!hasAnonymousRejection) continue
+      const partId = resolvePartId(s, body.targetUnitId, inw.partNo)
+      const existing = values(s.inventory.inwards).find((i) =>
+        i.unitId === body.targetUnitId && (!partId || i.partId === partId) &&
+        i.challanNo.trim().toLowerCase() === inw.challanNo.trim().toLowerCase() &&
+        i.batchHeatNo.trim().toLowerCase() === inw.batchHeatNo.trim().toLowerCase())
+      if (existing && values(s.inventory.dispatches).some((d) => d.inwardId === existing.id && d.kind === 'rejection' && !d.billNo?.trim())) {
+        res.status(400).json({ error: 'Import rejected', detail: [`Matching rejection record already exists for challan ${inw.challanNo} — skipped`] })
+        return
+      }
     }
 
     // Decide what to write: skip-invalid keeps the valid rows; otherwise all-or-nothing.

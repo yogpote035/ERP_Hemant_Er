@@ -33,6 +33,7 @@ export interface InwardRow {
   available: number
   balance: InwardBalance
   children: DispatchChild[]
+  rejectionDcs: string[]
 }
 
 /** Scoped inward rows, each with its child dispatches + derived balance. */
@@ -51,6 +52,9 @@ export function selectInwardRows(s: RootState): InwardRow[] {
       const dispatched = children.reduce((a, c) => a + c.total, 0)
       const part = getById(s.masters.parts, inward.partId)
       const vendor = getById(s.masters.vendors, inward.vendorId)
+      const rejectionDcs = values(s.rejection.rejectionAdvices)
+        .filter((r) => r.sourceInwardId === inward.id)
+        .map((r) => `${r.rejDcNo} · ${r.mrQty + r.frQty} pcs · ${r.rejDate}`)
       return {
         inward,
         partNo: part?.partNo ?? '—',
@@ -60,6 +64,7 @@ export function selectInwardRows(s: RootState): InwardRow[] {
         available: selectAvailableForInward(s, inward.id),
         balance: selectInwardBalance(s, inward.id),
         children,
+        rejectionDcs,
       }
     })
     .sort((a, b) => b.inward.challanDate.localeCompare(a.inward.challanDate))

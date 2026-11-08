@@ -35,12 +35,19 @@ function jsonValue<T>(value: unknown): T {
 /** MySQL-compatible persistence driver (also works with TiDB Cloud). */
 export class MysqlDriver implements PersistenceDriver {
   private pool: Pool
+  private readonly config: MysqlConfig
   private docShadow = new Map<string, string>()
   private actShadow = new Set<string>()
   private metaShadow = ''
 
   constructor(config: MysqlConfig) {
-    this.pool = mysql.createPool({
+    this.config = config
+    this.pool = this.createPool()
+  }
+
+  private createPool(): Pool {
+    const config = this.config
+    return mysql.createPool({
       host: config.host,
       port: config.port,
       user: config.user,
@@ -121,7 +128,7 @@ export class MysqlDriver implements PersistenceDriver {
     return state
   }
 
-  async saveState(state: RootState): Promise<void> {
+  async saveState(state: RootState, retry = true): Promise<void> {
     const connection = await this.pool.getConnection()
     try {
       await connection.beginTransaction()
@@ -171,11 +178,30 @@ export class MysqlDriver implements PersistenceDriver {
       }
       await connection.commit()
     } catch (error) {
-      await connection.rollback()
+      await connection.rollback().catch(() => {})
+      const message = error instanceof Error ? error.message : String(error)
+      if (retry && /connection is in closed state|pool is closed|closed connection/i.test(message)) {
+        // A dev watcher restart or an idle TiDB connection can leave the pool
+        // object alive while its underlying connection is unusable. Recreate
+        // the pool, resync shadows, and retry the complete transaction once.
+        await this.reconnect()
+        await this.saveState(state, false)
+        return
+      }
       throw error
     } finally {
       connection.release()
     }
+  }
+
+  private async reconnect(): Promise<void> {
+    await this.pool.end().catch(() => {})
+    this.pool = this.createPool()
+    this.docShadow.clear()
+    this.actShadow.clear()
+    this.metaShadow = ''
+    await this.createSchema()
+    await this.loadState()
   }
 
   async resetState(state: RootState): Promise<void> {

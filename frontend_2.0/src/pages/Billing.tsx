@@ -943,6 +943,7 @@ function InvoicePreview({ invoiceId, onClose, onPdf }: { invoiceId: Id; onClose:
                   {p.rmSupplier ? <Spec k="RM Supplier" v={p.rmSupplier} /> : null}
                   {p.finishWeightG != null ? <Spec k="Finish Weight" v={`${p.finishWeightG} GM`} /> : null}
                   {p.packingMode ? <Spec k="Packing Mode" v={p.packingMode} /> : null}
+                  {p.rejectionDetails.length ? <Spec k="Rejection DC" v={p.rejectionDetails.join('; ')} /> : null}
                 </Td>
                 <Td className="font-mono">{p.dcs.map((d, j) => <div key={j}>{d.dcNo}</div>)}</Td>
                 <Td className="font-mono">{p.dcs.map((d, j) => <div key={j}>{d.dcDate || '—'}</div>)}</Td>

@@ -32,6 +32,7 @@ export interface ExpenseInput {
   sgstPct?: number
   tcsPct?: number
   supplierInvoiceNo?: string
+  transactionId?: string
   totalPaise: Paise
   /** Optional payment captured together with a newly-created supplier invoice. */
   instalments?: ExpenseInstalment[]
@@ -88,6 +89,7 @@ function applyExpense(draft: RootState, input: ExpenseInput, ctx: CommandContext
     sgstPct: input.sgstPct,
     tcsPct: input.tcsPct,
     supplierInvoiceNo: input.supplierInvoiceNo,
+    transactionId: input.transactionId,
     totalPaise: input.totalPaise,
     instalments: existing?.instalments ?? input.instalments ?? [],
     createdBy: existing?.createdBy ?? ctx.actor.id,

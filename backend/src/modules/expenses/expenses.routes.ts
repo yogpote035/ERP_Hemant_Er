@@ -66,6 +66,7 @@ const createExpenseSchema = z.object({
   sgstPct: z.number().min(0).max(100).optional(),
   tcsPct: z.number().min(0).max(100).optional(),
   supplierInvoiceNo: z.string().optional(),
+  transactionId: z.string().optional(),
   totalPaise: z.number().int(),
   instalments: z.array(instalmentSchema).optional(),
 })
@@ -82,6 +83,7 @@ function lineItemFields(input: z.infer<typeof createExpenseSchema>) {
     sgstPct: input.sgstPct,
     tcsPct: input.tcsPct,
     supplierInvoiceNo: input.supplierInvoiceNo,
+    transactionId: input.transactionId,
   }
 }
 

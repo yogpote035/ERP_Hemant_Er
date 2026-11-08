@@ -237,6 +237,8 @@ export interface InvoiceDocPartLine {
   rmSupplier?: string
   finishWeightG?: number
   packingMode?: string
+  rejectionDetails: string[]
+  sourceInwardIds: string[]
   hsnSac: string
   gstPct: number
   dcs: InvoiceDocDc[]
@@ -330,6 +332,8 @@ export function selectInvoiceDocModel(s: RootState, invoiceId: Id): InvoiceDocMo
         rmSupplier,
         finishWeightG: part ? part.finishWtMg / 1000 : undefined,
         packingMode: part?.packingMode, // Part-master "Packing Mode" (e.g. GSP-2)
+        rejectionDetails: [],
+        sourceInwardIds: [],
         hsnSac: l.hsnSac || part?.hsnSac || '',
         gstPct: l.gstPct,
         dcs: [],
@@ -340,6 +344,7 @@ export function selectInvoiceDocModel(s: RootState, invoiceId: Id): InvoiceDocMo
     }
     // Fill representative traceability from whichever dispatch first has it.
     pl.dieNo ??= inw?.dieNo
+    if (inw && !pl.sourceInwardIds.includes(inw.id)) pl.sourceInwardIds.push(inw.id)
     pl.ircBinNo ??= inw?.binGrcNo ?? inw?.binNo
     pl.rmSupplier ??= rmSupplier
     if (inw?.batchHeatNo && !pl.heatNos.includes(inw.batchHeatNo)) pl.heatNos.push(inw.batchHeatNo)
@@ -354,6 +359,20 @@ export function selectInvoiceDocModel(s: RootState, invoiceId: Id): InvoiceDocMo
     })
     pl.totalQty += l.qty
     pl.totalAmountPaise = addP(pl.totalAmountPaise, l.amountPaise)
+  }
+
+  // Rejection DCs are linked to the source inward challan, not to billed
+  // dispatch lines. Include them on the invoice so the customer can reconcile
+  // every challan-wise rejection against the material billed.
+  for (const pl of byPart.values()) {
+    const sourceIds = new Set(pl.sourceInwardIds)
+    values(s.rejection.rejectionAdvices)
+      .filter((r) => sourceIds.has(r.sourceInwardId) && r.unitId === inv.unitId)
+      .forEach((r) => pl.rejectionDetails.push(`${r.rejDcNo} · ${r.mrQty + r.frQty} pcs · ${formatDMY(r.rejDate)}`))
+    values(s.inventory.dispatches)
+      .filter((d) => d.kind === 'rejection' && sourceIds.has(d.inwardId) && d.billNo)
+      .forEach((d) => pl.rejectionDetails.push(`${d.billNo} · ${d.okQty + d.mcRejQty + d.mfQty} pcs · ${formatDMY(d.dispatchDate ?? d.billDate ?? '')}`))
+    pl.rejectionDetails = [...new Set(pl.rejectionDetails)]
   }
 
   const parts = [...byPart.values()]

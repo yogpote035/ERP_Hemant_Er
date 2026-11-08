@@ -383,6 +383,8 @@ export interface Expense {
   sgstPct?: number
   tcsPct?: number
   supplierInvoiceNo?: string
+  /** Bank/UPI/transfer transaction reference for the expense payment. */
+  transactionId?: string
   /** Sub total + IGST + CGST + SGST + TCS. */
   totalPaise: Paise
   instalments: ExpenseInstalment[]

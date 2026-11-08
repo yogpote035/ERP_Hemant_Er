@@ -30,6 +30,7 @@ const EXPENSE_COLUMNS = [
   { key: 'unit', label: 'Unit' }, { key: 'supplierName', label: 'Supplier Name' },
   { key: 'supplierGstin', label: 'Supplier GST Number' }, { key: 'hsnSac', label: 'SAC/HSN Code' },
   { key: 'supplierInvoiceNo', label: 'Supplier Invoice Number' }, { key: 'invoiceDate', label: 'Invoice Date' },
+  { key: 'transactionId', label: 'Transaction ID' },
   { key: 'quantity', label: 'Quantity' }, { key: 'ratePerPc', label: 'Rate/Pc' },
   { key: 'subtotal', label: 'Subtotal' }, { key: 'cgstAmount', label: 'CGST' },
   { key: 'sgstAmount', label: 'SGST' }, { key: 'igstAmount', label: 'IGST' },
@@ -45,6 +46,7 @@ const EXPENSE_SAMPLE = [{
   subtotal: 1000, cgstAmount: 90, sgstAmount: 90, igstAmount: 0, tcsAmount: 10,
   grandTotal: 1190, cgstPct: 9, sgstPct: 9, igstPct: 0, tcsPct: 1,
   paymentMode: 'NEFT', paymentDate: '2026-09-07', paidAmount: 500, balance: 690,
+  transactionId: 'UTR123456789',
 }]
 const amount = (row: ImportedRow, label: string) => excelNumber(excelValue(row, label)) ?? 0
 const expenseImportMath = (row: ImportedRow) => {
@@ -115,6 +117,7 @@ export default function Expenses() {
       unit: state.masters.units.byId[expense.unitId]?.code ?? expense.unitId,
       supplierName: vendorName, supplierGstin: state.masters.vendors.byId[expense.vendorId ?? '']?.gstin ?? '',
       hsnSac: expense.hsnSac ?? '', supplierInvoiceNo: expense.supplierInvoiceNo ?? '', invoiceDate: expense.date,
+      transactionId: expense.transactionId ?? '',
       quantity: expense.quantity ?? '', ratePerPc: expense.ratePaise != null ? fromPaise(expense.ratePaise) : '', subtotal: expense.subTotalPaise != null ? fromPaise(expense.subTotalPaise) : '',
       cgstAmount: expense.subTotalPaise != null ? fromPaise(Math.round(expense.subTotalPaise*(expense.cgstPct??0)/100) as Paise) : '', sgstAmount: expense.subTotalPaise != null ? fromPaise(Math.round(expense.subTotalPaise*(expense.sgstPct??0)/100) as Paise) : '',
       igstAmount: expense.subTotalPaise != null ? fromPaise(Math.round(expense.subTotalPaise*(expense.igstPct??0)/100) as Paise) : '', tcsAmount: expense.subTotalPaise != null ? fromPaise(Math.round(expense.subTotalPaise*(expense.tcsPct??0)/100) as Paise) : '',
@@ -138,6 +141,7 @@ export default function Expenses() {
       return {
         unitId: unit.id, vendorId: vendor.id, category: excelText(excelValue(row,'SAC/HSN Code')) || 'Expense', date, totalPaise: toPaise(math.total),
         supplierInvoiceNo: excelText(excelValue(row, 'Supplier Invoice Number')) || undefined, hsnSac: excelText(excelValue(row, 'SAC/HSN Code')) || undefined,
+        transactionId: excelText(excelValue(row, 'Transaction ID')) || undefined,
         quantity: math.quantity || undefined, ratePaise: math.rate ? toPaise(math.rate) : undefined, subTotalPaise: math.subtotal ? toPaise(math.subtotal) : undefined,
         igstPct: math.igstPct || undefined, cgstPct: math.cgstPct || undefined, sgstPct: math.sgstPct || undefined, tcsPct: math.tcsPct || undefined,
         instalments: paid > 0 ? [{ date: excelText(excelValue(row,'Payment Date')) || date, amountPaise: toPaise(paid), mode: MODES.includes(mode) ? mode : 'bank' }] : undefined,
@@ -296,6 +300,7 @@ function ExpenseForm({
   const [sgstPct, setSgstPct] = useState(existing?.sgstPct != null ? String(existing.sgstPct) : '')
   const [tcsPct, setTcsPct] = useState(existing?.tcsPct != null ? String(existing.tcsPct) : '')
   const [supplierInvoiceNo, setSupplierInvoiceNo] = useState(existing?.supplierInvoiceNo ?? '')
+  const [transactionId, setTransactionId] = useState(existing?.transactionId ?? '')
   const [date, setDate] = useState(existing?.date ?? todayISO())
   const [dueDate, setDueDate] = useState(existing?.dueDate ?? addDaysISO(existing?.date ?? todayISO(), 45))
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('bank')
@@ -339,6 +344,7 @@ function ExpenseForm({
         sgstPct: numOf(sgstPct) || undefined,
         tcsPct: numOf(tcsPct) || undefined,
         supplierInvoiceNo: supplierInvoiceNo.trim() || undefined,
+        transactionId: transactionId.trim() || undefined,
         totalPaise,
         instalments: !existing && paymentPaise > 0 ? [{ date: paymentDate, amountPaise: paymentPaise, mode: paymentMode }] : undefined,
       })
@@ -376,6 +382,7 @@ function ExpenseForm({
           </Fld>
           <Fld label="Supplier GSTIN"><input readOnly className="input h-9 bg-muted mono text-muted-fg" value={supplier?.gstin ?? ''} placeholder="Loaded from supplier" /></Fld>
           <Fld label="Supplier invoice number"><input className="input h-9 mono" value={supplierInvoiceNo} onChange={(e) => setSupplierInvoiceNo(e.target.value)} placeholder="Supplier's bill no." /></Fld>
+          <Fld label="Transaction ID"><input className="input h-9 mono" value={transactionId} onChange={(e) => setTransactionId(e.target.value)} placeholder="Bank / UPI / transfer reference (optional)" /></Fld>
           <Fld label="Invoice date"><input type="date" className="input h-9" value={date} onChange={(e) => { const next = e.target.value; setDate(next); setDueDate(addDaysISO(next, 45)) }} /></Fld>
           <Fld label="SAC / HSN code"><input className="input h-9 mono" value={hsnSac} onChange={(e) => setHsnSac(e.target.value)} placeholder="e.g. 27101990" /></Fld>
           <Fld label="Quantity"><input type="number" min={0} step="any" className="input h-9" value={quantity} onChange={(e) => setQuantity(e.target.value)} /></Fld>

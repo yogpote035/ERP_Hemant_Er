@@ -163,6 +163,7 @@ function InvoicePage({ m, copyLabel }: { m: InvoiceDocModel; copyLabel: typeof C
               {p.rmSupplier ? <Text style={s.spec}><Text style={s.specK}>RM Supplier:</Text> {p.rmSupplier}</Text> : null}
               {p.finishWeightG != null ? <Text style={s.spec}><Text style={s.specK}>Finish Weight:</Text> {p.finishWeightG} GM</Text> : null}
               {p.packingMode ? <Text style={s.spec}><Text style={s.specK}>Packing Mode:</Text> {p.packingMode}</Text> : null}
+              {p.rejectionDetails.length ? <Text style={s.spec}><Text style={s.specK}>Rejection DC:</Text> {p.rejectionDetails.join('; ')}</Text> : null}
             </View>
             <View style={[s.cell, { width: COLS.dcno }]}>{p.dcs.map((d, j) => <Text key={j}>{d.dcNo}</Text>)}</View>
             <View style={[s.cell, { width: COLS.dcdt }]}>{p.dcs.map((d, j) => <Text key={j}>{d.dcDate || '—'}</Text>)}</View>
