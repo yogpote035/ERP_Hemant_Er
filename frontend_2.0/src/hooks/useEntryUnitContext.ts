@@ -10,8 +10,12 @@ export function useEntryUnitContext() {
 
   return useMemo(() => {
     const allUnits = values(unitsCollection)
+    // Older locally cached users and partially-hydrated API sessions may not
+    // have the assignment field yet. Treat that as no assigned units instead
+    // of crashing the first entry screen while reading `.length`/`.includes`.
+    const assignedUnitIds = user?.assignedUnitIds ?? []
     const assigned = user
-      ? (user.role === 'admin' ? allUnits : allUnits.filter((unit) => user.assignedUnitIds.includes(unit.id)))
+      ? (user.role === 'admin' ? allUnits : allUnits.filter((unit) => assignedUnitIds.includes(unit.id)))
       : []
     const selected = currentUnitId && currentUnitId !== 'ALL'
       ? assigned.find((unit) => unit.id === currentUnitId)

@@ -63,7 +63,7 @@ function apiUserAsStoreUser(user: ApiUser): User {
     name: user.name,
     email: user.email,
     role: user.role,
-    assignedUnitIds: user.assignedUnitIds,
+    assignedUnitIds: user.assignedUnitIds ?? [],
     active: user.active,
     createdAt: user.createdAt,
   }

@@ -368,7 +368,7 @@ export function selectInvoiceDocModel(s: RootState, invoiceId: Id): InvoiceDocMo
     const sourceIds = new Set(pl.sourceInwardIds)
     values(s.rejection.rejectionAdvices)
       .filter((r) => sourceIds.has(r.sourceInwardId) && r.unitId === inv.unitId)
-      .forEach((r) => pl.rejectionDetails.push(`${r.rejDcNo} · ${r.mrQty + r.frQty} pcs · ${formatDMY(r.rejDate)}`))
+      .forEach((r) => pl.rejectionDetails.push(`${r.rejDcNo} · MR ${r.mrQty} + FR ${r.frQty} = ${r.mrQty + r.frQty} pcs · ${formatDMY(r.rejDate)}`))
     values(s.inventory.dispatches)
       .filter((d) => d.kind === 'rejection' && sourceIds.has(d.inwardId) && d.billNo)
       .forEach((d) => pl.rejectionDetails.push(`${d.billNo} · ${d.okQty + d.mcRejQty + d.mfQty} pcs · ${formatDMY(d.dispatchDate ?? d.billDate ?? '')}`))
