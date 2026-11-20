@@ -16,6 +16,9 @@ export const dispatchRejectionQty = (d: Dispatch): number =>
 /** Total quantity a dispatch consumes from stock. */
 export const dispatchTotalQty = (d: Dispatch): number => d.okQty + dispatchRejectionQty(d)
 
+/** Total quantity closed by a rejection advice against its source inward. */
+export const rejectionAdviceQty = (r: { mrQty: number; frQty: number }): number => r.mrQty + r.frQty
+
 /** Inwards for a given (unit, part). */
 export function inwardsOfPart(s: RootState, unitId: Id, partId: Id): Inward[] {
   return values(s.inventory.inwards).filter((i) => i.unitId === unitId && i.partId === partId)
@@ -70,7 +73,10 @@ export function selectPartStock(s: RootState, unitId: Id, partId: Id, from?: str
   const mcRej = disp.reduce((a, d) => a + d.mcRejQty, 0)
   const mf = disp.reduce((a, d) => a + d.mfQty, 0)
   const otherRejection = disp.reduce((a, d) => a + dispatchRejectionQty(d) - d.mcRejQty - d.mfQty, 0)
-  const consumed = disp.reduce((a, d) => a + dispatchTotalQty(d), 0)
+  const adviceQty = values(s.rejection.rejectionAdvices)
+    .filter((r) => inwardIds.has(r.sourceInwardId))
+    .reduce((a, r) => a + rejectionAdviceQty(r), 0)
+  const consumed = disp.reduce((a, d) => a + dispatchTotalQty(d), adviceQty)
   const opening = openingOfPart(s, unitId, partId)
   return { unitId, partId, opening, received, consumed, ok, mcRej, mf, otherRejection, available: opening + received - consumed }
 }
@@ -79,10 +85,13 @@ export function selectPartStock(s: RootState, unitId: Id, partId: Id, from?: str
 export function selectAvailableForInward(s: RootState, inwardId: Id): number {
   const inw = s.inventory.inwards.byId[inwardId]
   if (!inw) return 0
-  const consumed = values(s.inventory.dispatches)
+  const dispatchConsumed = values(s.inventory.dispatches)
     .filter((d) => d.inwardId === inwardId)
     .reduce((a, d) => a + dispatchTotalQty(d), 0)
-  return inw.receivedQty - consumed
+  const adviceConsumed = values(s.rejection.rejectionAdvices)
+    .filter((r) => r.sourceInwardId === inwardId)
+    .reduce((a, r) => a + rejectionAdviceQty(r), 0)
+  return inw.receivedQty - dispatchConsumed - adviceConsumed
 }
 
 export type InwardBalance = 'In-house' | 'Partial' | 'Dispatched'

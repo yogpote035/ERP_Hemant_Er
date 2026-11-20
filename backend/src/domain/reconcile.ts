@@ -21,6 +21,7 @@ import { values } from '../db/normalized.js'
 import type { RootState } from '../db/state.js'
 import {
   dispatchTotalQty,
+  rejectionAdviceQty,
   inwardsOfPart,
   openingOfPart,
   selectAvailableForInward,
@@ -77,7 +78,9 @@ export function selectPartLedger(s: RootState, unitId: Id, partId: Id): PartLedg
 
   const opening = openingOfPart(s, unitId, partId)
   const received = inwards.reduce((a, i) => a + i.receivedQty, 0)
-  const consumed = disp.reduce((a, d) => a + dispatchTotalQty(d), 0)
+  const consumed = disp.reduce((a, d) => a + dispatchTotalQty(d), 0) + values(s.rejection.rejectionAdvices)
+    .filter((r) => inwardIds.has(r.sourceInwardId))
+    .reduce((a, r) => a + rejectionAdviceQty(r), 0)
   const closing = opening + received - consumed
 
   const issues: ReconcileIssue[] = []
