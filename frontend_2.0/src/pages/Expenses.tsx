@@ -346,7 +346,7 @@ function ExpenseForm({
         supplierInvoiceNo: supplierInvoiceNo.trim() || undefined,
         transactionId: transactionId.trim() || undefined,
         totalPaise,
-        instalments: !existing && paymentPaise > 0 ? [{ date: paymentDate, amountPaise: paymentPaise, mode: paymentMode }] : undefined,
+        instalments: !existing && paymentPaise > 0 ? [{ date: paymentDate, amountPaise: paymentPaise, mode: paymentMode, ref: transactionId.trim() || undefined }] : undefined,
       })
       toastCommandSuccess(existing ? 'Expense updated' : 'Expense saved', res.cascade)
       onClose()
@@ -382,7 +382,6 @@ function ExpenseForm({
           </Fld>
           <Fld label="Supplier GSTIN"><input readOnly className="input h-9 bg-muted mono text-muted-fg" value={supplier?.gstin ?? ''} placeholder="Loaded from supplier" /></Fld>
           <Fld label="Supplier invoice number"><input className="input h-9 mono" value={supplierInvoiceNo} onChange={(e) => setSupplierInvoiceNo(e.target.value)} placeholder="Supplier's bill no." /></Fld>
-          <Fld label="Transaction ID"><input className="input h-9 mono" value={transactionId} onChange={(e) => setTransactionId(e.target.value)} placeholder="Bank / UPI / transfer reference (optional)" /></Fld>
           <Fld label="Invoice date"><input type="date" className="input h-9" value={date} onChange={(e) => { const next = e.target.value; setDate(next); setDueDate(addDaysISO(next, 45)) }} /></Fld>
           <Fld label="SAC / HSN code"><input className="input h-9 mono" value={hsnSac} onChange={(e) => setHsnSac(e.target.value)} placeholder="e.g. 27101990" /></Fld>
           <Fld label="Quantity"><input type="number" min={0} step="any" className="input h-9" value={quantity} onChange={(e) => setQuantity(e.target.value)} /></Fld>
@@ -422,6 +421,9 @@ function ExpenseForm({
               searchable={false}
               disabled={Boolean(existing)}
             />
+          </Fld>
+          <Fld label="Transaction ID">
+            <input className="input h-9 mono" value={transactionId} onChange={(e) => setTransactionId(e.target.value)} placeholder="Bank / UPI / transfer reference (optional)" disabled={Boolean(existing)} />
           </Fld>
           <Fld label="Payment date"><input type="date" className="input h-9" value={existing?.instalments.at(-1)?.date ?? paymentDate} onChange={(e) => setPaymentDate(e.target.value)} disabled={Boolean(existing)} /></Fld>
           <Fld label="Payment amount"><input type="number" min={0} max={fromPaise(totalPaise)} step="0.01" className="input h-9" value={existing ? fromPaise(existingPaidPaise) : paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} disabled={Boolean(existing)} /></Fld>
@@ -496,7 +498,7 @@ function PayModal({ row, onClose }: { row: ExpenseRow; onClose: () => void }) {
             searchable={false}
           />
         </Fld>
-        <Fld label="Ref"><input className="input h-9" value={ref} onChange={(e) => setRef(e.target.value)} /></Fld>
+        <Fld label="Transaction ID"><input className="input h-9 mono" value={ref} onChange={(e) => setRef(e.target.value)} placeholder="Bank / UPI / transfer reference (optional)" /></Fld>
         <Fld label="Date"><input type="date" className="input h-9" value={date} onChange={(e) => setDate(e.target.value)} /></Fld>
       </div>
     </Drawer>

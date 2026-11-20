@@ -5,7 +5,7 @@
  * round-off + grand, and the packing-box breakdown. `finalizeInvoice`
  * snapshots the result onto the invoice for legal immutability.
  */
-import type { Id, Invoice, InvoiceTotals, PackingBox, TaxKind } from '@/types/domain'
+import type { Dispatch, Id, Invoice, InvoiceTotals, PackingBox, TaxKind } from '@/types/domain'
 import {
   addP,
   mulQty,
@@ -369,9 +369,28 @@ export function selectInvoiceDocModel(s: RootState, invoiceId: Id): InvoiceDocMo
     values(s.rejection.rejectionAdvices)
       .filter((r) => sourceIds.has(r.sourceInwardId) && r.unitId === inv.unitId)
       .forEach((r) => pl.rejectionDetails.push(`${r.rejDcNo} · MR ${r.mrQty} + FR ${r.frQty} = ${r.mrQty + r.frQty} pcs · ${formatDMY(r.rejDate)}`))
+    const rejectionBuckets: Array<[string, (d: Dispatch) => number | undefined]> = [
+      ['M/C Rej', (d) => d?.mcRejQty],
+      ['MF', (d) => d?.mfQty],
+      ['Shin Line', (d) => d?.shinLineQty],
+      ['Crack', (d) => d?.crackQty],
+      ['Chip Off', (d) => d?.chipOffQty],
+      ['Forg Return', (d) => d?.forgReturnQty],
+      ['Rail', (d) => d?.raiiQty],
+      ['Short', (d) => d?.shortQty],
+      ['Other', (d) => d?.otherQty],
+    ]
     values(s.inventory.dispatches)
       .filter((d) => d.kind === 'rejection' && sourceIds.has(d.inwardId) && d.billNo)
-      .forEach((d) => pl.rejectionDetails.push(`${d.billNo} · ${d.okQty + d.mcRejQty + d.mfQty} pcs · ${formatDMY(d.dispatchDate ?? d.billDate ?? '')}`))
+      .forEach((d) => {
+        const buckets = rejectionBuckets
+          .map(([label, read]) => [label, read(d) ?? 0] as const)
+          .filter(([, qty]) => qty > 0)
+          .map(([label, qty]) => `${label} ${qty}`)
+        const total = d.okQty + d.mcRejQty + d.mfQty + (d.shinLineQty ?? 0) + (d.crackQty ?? 0) +
+          (d.chipOffQty ?? 0) + (d.forgReturnQty ?? 0) + (d.raiiQty ?? 0) + (d.shortQty ?? 0) + (d.otherQty ?? 0)
+        pl.rejectionDetails.push(`${d.billNo} · ${buckets.join(' · ')} · Total ${total} pcs · ${formatDMY(d.dispatchDate ?? d.billDate ?? '')}`)
+      })
     pl.rejectionDetails = [...new Set(pl.rejectionDetails)]
   }
 
